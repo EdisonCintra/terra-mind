@@ -8,7 +8,7 @@
 
 ## 1. O TerraMind em um parágrafo
 
-Uma fazenda tem **ordens de serviço** (OS) agendadas, por exemplo "aplicar adubo no talhão 3 amanhã às 7h". Se vier uma chuva forte, esse adubo vai embora com a água e o dinheiro é perdido. O TerraMind vigia a previsão do tempo; quando vê chuva forte chegando, **suspende a OS sozinho** (é reversível, então pode fazer sem perguntar), monta um plano para remarcá-la e **pede aprovação ao gerente no Telegram**. Se o gerente responder SIM, o sistema remarca a OS, aloca a máquina e avisa o operador.
+Uma fazenda tem **ordens de serviço** (OS) agendadas, por exemplo "pulverizar fungicida no talhão 3 amanhã às 7h". O defensivo precisa de algumas horas sem chuva para agir; se chover antes, a chuva lava o produto da planta e o dinheiro é perdido. O TerraMind vigia a previsão do tempo; quando vê chuva forte chegando, **suspende a OS sozinho** (é reversível, então pode fazer sem perguntar), monta um plano para remarcá-la e **pede aprovação ao gerente no Telegram**. Se o gerente responder SIM, o sistema remarca a OS, aloca a máquina e avisa o operador.
 
 ## 2. O seu pedaço
 
@@ -64,7 +64,7 @@ Usamos **SQL puro com psycopg** (sem ORM). Você escreve `SELECT`/`UPDATE` como 
 
 | # | Assunto | Proposta | Com quem |
 |---|---|---|---|
-| 1 | Nome do produto | `erp.insumos.produto` tem o mesmo texto que `conhecimento.regras_aplicacao.produto` (ex.: `"Ureia 46%"`) | Edison |
+| 1 | Nome do produto | `erp.insumos.produto` tem o mesmo texto que o `produto` dos trechos no Qdrant (o Avaliador filtra por ele). O defensivo da demo ainda vai ser escolhido no Agrofit com o Edison | Edison |
 | 2 | Migrations | Arquivos SQL numerados em `db/migrations/`: os seus são `001_erp.sql`, `002_agente.sql` e `900_seed.sql`; o do Edison é `010_conhecimento.sql` | Edison, Gustavo |
 | 3 | Schema `agente` | Você cria as tabelas `incidentes`, `planos` e `auditoria` (seção 6.2); o Gustavo confere os campos | Gustavo |
 | 4 | Endereço do MCP | `http://erp-mcp:8030/mcp`, transporte **streamable HTTP** | Gustavo |
@@ -139,7 +139,7 @@ CREATE TABLE erp.talhoes (
 CREATE TABLE erp.insumos (
     id              serial PRIMARY KEY,
     produto         text NOT NULL UNIQUE,           -- contrato 1: igual ao do Edison
-    tipo            text NOT NULL,                  -- 'fertilizante' | 'herbicida' | 'fungicida' ...
+    tipo            text NOT NULL,                  -- 'fungicida' | 'herbicida' | 'inseticida' (docs/contratos.md, contrato 15)
     unidade         text NOT NULL,                  -- 'kg' | 'L'
     preco_unitario  numeric(12,2) NOT NULL,         -- R$ por unidade
     estoque         numeric(12,2) NOT NULL CHECK (estoque >= 0),
@@ -229,7 +229,7 @@ Regras para o seed:
 1. **Datas relativas a `now()`**, nunca fixas. Uma OS marcada para "2026-10-30 07:00" vira passado no dia da demo e nada dispara. Use `now() + interval '20 hours'`.
 2. Coordenadas reais de Goiás, porque o monitor do Edison consulta o Open-Meteo com elas. Rio Verde fica em torno de `-17.79, -50.92`.
 3. Os nomes de produto saem do contrato 1, combinados com o Edison.
-4. O cenário principal precisa de **uma OS de adubação nas próximas 24 h**, com máquina e operador. Crie também 2 ou 3 OS fora da janela de risco, para mostrar que o sistema só mexe na OS certa, e uma segunda máquina livre, para o plano ter para onde remarcar.
+4. O cenário principal precisa de **uma OS de pulverização de defensivo nas próximas 24 h**, com máquina e operador. Crie também 2 ou 3 OS fora da janela de risco, para mostrar que o sistema só mexe na OS certa, e uma segunda máquina livre, para o plano ter para onde remarcar.
 
 ```sql
 INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, estagio_fenologico, lat, lon, tipo_solo) VALUES
@@ -237,18 +237,18 @@ INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, estagio_fenologic
   ('Talhão 2 - Baixada', 85.5, 'soja',  current_date - 45, 'V8', -17.810, -50.900, 'latossolo');
 
 INSERT INTO erp.insumos (produto, tipo, unidade, preco_unitario, estoque, bula_id) VALUES
-  ('Ureia 46%', 'fertilizante', 'kg', 3.20, 30000, NULL);   -- produto: confirmar com o Edison
+  ('Fungicida X', 'fungicida', 'L', 120.00, 500, NULL);   -- nome, preço e bula_id: trocar pelo defensivo escolhido com o Edison (contrato 1)
 
 INSERT INTO erp.maquinas (nome, tipo) VALUES
-  ('Distribuidor A', 'distribuidor'),
-  ('Distribuidor B', 'distribuidor');
+  ('Pulverizador A', 'pulverizador'),
+  ('Pulverizador B', 'pulverizador');
 
 INSERT INTO erp.operadores (nome, telegram_chat_id) VALUES
   ('João', NULL);   -- preencha com o seu chat_id para receber as mensagens de teste
 
 INSERT INTO erp.ordens_servico (talhao_id, tipo_operacao, insumo_id, dose_por_ha, inicio_previsto, maquina_id, operador_id) VALUES
-  (1, 'adubacao', 1, 200, now() + interval '20 hours', 1, 1),   -- a OS do cenário
-  (2, 'adubacao', 1, 150, now() + interval '6 days',  1, 1);    -- fora da janela de risco
+  (1, 'pulverizacao', 1, 0.5, now() + interval '20 hours', 1, 1),   -- a OS do cenário (0,5 L/ha)
+  (2, 'pulverizacao', 1, 0.5, now() + interval '6 days',  1, 1);    -- fora da janela de risco
 
 INSERT INTO erp.leituras_solo (talhao_id, ts, umidade_pct)
 SELECT 1, now() - (h || ' hours')::interval, 28 + random() * 4
