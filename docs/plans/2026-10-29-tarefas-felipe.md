@@ -73,7 +73,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 
 ## 8. Canal de notificação
 - [ ] T8.1 (P) BotFather: `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`; `chat_id` do operador no seed. Token só no `.env`.
-- [ ] T8.2 (M) `base.py`: `Resposta`, `AoResponder`, `NotificationChannel`, `criar_canal`. Entregar de modo que o `agents` do Gustavo importe.
+- [x] T8.2 (M) `channels/base.py`: `Resposta` (valida SIM/NAO/OPCOES), `AoResponder`, `NotificationChannel` (com `iniciar()` e `parar()` padrão, que o `agents` chama) e `criar_canal` (import tardio de `channels.telegram` e `channels.painel`). 6 testes em `tests/test_channels_base.py`. `criar_canal("painel")` só funciona depois da T8.8 e o `"telegram"` depois da T8.3.
 - [ ] T8.3 (G) `telegram.py`: botões, `callback_data` curto, `query.answer()`, remoção dos botões, `iniciar()`, `enviar_alerta`, `notificar_operador`.
 - [ ] T8.4 (P) `teste_bot.py` com `ao_responder` falso.
 - [ ] T8.5 (G) **Dia 2, com o Gustavo:** SIM no Telegram retoma a sessão num processo reiniciado (maior risco técnico).
