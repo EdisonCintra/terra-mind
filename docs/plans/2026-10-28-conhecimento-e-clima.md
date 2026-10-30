@@ -19,7 +19,7 @@
 - O Avaliador de Risco (LLM, frente do Gustavo) decide a partir dos trechos do Qdrant e cita `fonte_doc` + `pagina`. Por isso todo trecho precisa de `produto` (quando o documento é de um produto), `secao` e `pagina` corretos: um metadado errado vira uma decisão errada.
 - Unidades fixas: vento em km/h, temperatura em °C, umidade em %, chuva em mm, tempo em horas.
 - Fuso: `America/Sao_Paulo`. Todo `datetime` é *timezone-aware*.
-- Variáveis: `MODEL_EXTRACAO` (só do `ingest`, formato OpenRouter `openrouter/<org>/<modelo>` com `OPENROUTER_API_KEY`; usada apenas se a Fase 3 for feita), `MONITOR_MODE` (`live` | `replay`), `DATABASE_URL`, `QDRANT_URL`, `EMBEDDING_MODEL`, `AGENTS_URL`, `CONHECIMENTO_URL`.
+- Variáveis: `MODEL_EXTRACAO` (só do `ingest`, formato OpenAI `openai/<modelo>` com `OPENAI_API_KEY`; usada apenas se a Fase 3 for feita), `MONITOR_MODE` (`live` | `replay`), `DATABASE_URL`, `QDRANT_URL`, `EMBEDDING_MODEL`, `AGENTS_URL`, `CONHECIMENTO_URL`.
 - Fator de perda: tem fonte citada ou é declarado como estimativa.
 - Um trecho (chunk) nunca atravessa páginas, para a citação de página ser exata.
 - `tipo_insumo` ∈ {`defensivo`, `fertilizante`}, com os mesmos valores em `erp.insumos.tipo`, `conhecimento.regras_aplicacao.tipo_insumo` e `conhecimento.fatores_perda.tipo_insumo`.
@@ -501,7 +501,7 @@ def test_sem_resultado_retorna_lista_vazia(client_busca):
 **Interfaces:**
 - Produces:
   - `class LlmJson(Protocol)`: `gerar(prompt: str, schema: type[T]) -> T`.
-  - `LiteLlmJson(modelo: str)`: chama `litellm.completion(model=modelo, response_format=schema, ...)` e depois `schema.model_validate_json`. O modelo vem de `MODEL_EXTRACAO` (OpenRouter).
+  - `LiteLlmJson(modelo: str)`: chama `litellm.completion(model=modelo, response_format=schema, ...)` e depois `schema.model_validate_json`. O modelo vem de `MODEL_EXTRACAO` (OpenAI).
   - `RegraExtraida(BaseModel)`, com todos os campos opcionais e restritos:
     - `vento_max_kmh: float | None = Field(None, ge=0, le=60)`;
     - `horas_sem_chuva_min: float | None = Field(None, ge=0, le=72)`;

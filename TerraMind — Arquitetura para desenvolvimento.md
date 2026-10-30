@@ -20,7 +20,7 @@ O TerraMind será entregue como um protótipo funcional de ponta a ponta para um
 | Sessões | `DatabaseSessionService` em Postgres | Incidente sobrevive a restart e à espera do gerente |
 | Canal | Telegram com botões inline e long polling; painel web como fallback; interface `NotificationChannel` | Sem burocracia, sem URL pública, troca fácil para WhatsApp |
 | Infra | `docker-compose` em VM pequena no GCP + cópia local idêntica | Monitor e polling são processos contínuos |
-| Modelo | OpenRouter via `LiteLlm`, uma variável por agente (`MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR`) | Troca de modelo sem mudar código |
+| Modelo | OpenAI direto via `LiteLlm` (padrão `openai/gpt-4o-mini`, o mais barato), uma variável por agente (`MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR`) | Troca de modelo sem mudar código |
 | Plano por incidente | Um incidente gera um plano com uma opção por OS suspensa: uma mensagem e um SIM para todas | Mais simples para o gerente e para a demo |
 | Respostas do gerente | SIM executa; "Ver opções" re-planeja com a próxima janela (até 2 vezes); NÃO encerra com a OS suspensa e pede decisão manual | Evita laço infinito na demo |
 | Timeout | Sem resposta em `APPROVAL_TIMEOUT_MIN`, o alerta é escalonado uma vez e a sessão segue pausada; um SIM tardio vale se a janela for revalidada | O gerente pode responder depois sem perder o plano |
@@ -54,17 +54,22 @@ São quatro agentes LLM (Avaliador, Agronômico, Operacional e Supervisor) cerca
 A composição no ADK (`google.adk.workflow.Workflow`):
 
 ```
-START → contexto ─┬─ sem_os ──────────────────────────────→ encerrar
-                  └─ com_os → avaliador ─┬─ falhou ────────→ decisao_manual
-                                         ├─ sem_violacao ──→ encerrar
-                                         └─ violacao → acao_preventiva
-acao_preventiva → agronomico  ─┐
-acao_preventiva → operacional ─┴→ join → planejar (Supervisor ↔ Validador, até 2 voltas)
-planejar ─┬─ reprovado → decisao_manual
-          └─ valido → aprovacao (RequestInput "aprovacao:{plano_id}") → rota_resposta
+Nós `Agent` em [colchetes]; o resto são funções. Todo roteador tem `DEFAULT_ROUTE` → decisao_manual.
+
+START → contexto ─┬─ sem_os ───────────────────────────────────→ encerrar
+                  ├─ (default: ERP fora) ──────────────────────→ decisao_manual
+                  └─ com_os → [avaliador_risco] → rota_avaliacao ─┬─ sem_violacao → encerrar
+                                                                  ├─ falhou ──────→ decisao_manual (OS segue agendada)
+                                                                  └─ violacao → acao_preventiva
+acao_preventiva ─┬─ suspensas → [agronomico]  ─┐
+                 └─ suspensas → [operacional] ─┴→ analises (join) → preparar_plano
+preparar_plano → [supervisor] → validador ─┬─ valido → aprovacao (pausa) → rota_resposta
+                      ↑____ revisar (≤2) ___┤
+                                            └─ reprovado → decisao_manual
 rota_resposta ─┬─ SIM → executor ─┬─ ok → encerrar
-               │                  └─ revalidar → planejar
-               ├─ OPCOES (até 2x) → planejar
+               │                  ├─ revalidar → preparar_plano
+               │                  └─ falhou → decisao_manual
+               ├─ OPCOES (≤2) → preparar_plano
                └─ NAO → decisao_manual
 ```
 
@@ -143,7 +148,8 @@ Um monorepo com um serviço por pasta, todos subindo com `docker compose up` a p
 ```
 terramind/
 ├── agents/              # ADK: Workflow, nós, agentes LLM, tools (ver plano do Gustavo)
-│   ├── nodes/           # contexto, avaliador, acao_preventiva, especialistas, planejar, aprovacao, executor
+│   ├── agentes/         # uma pasta por agente (avaliador_risco, agronomico, operacional, supervisor, terramind)
+│   ├── nodes/           # nós em código: contexto, rota_avaliacao, acao_preventiva, preparar_plano, validador, aprovacao, executor
 │   ├── rules/           # janelas_validas e calculadora de impacto
 │   ├── workflow.py      # grafo do incidente
 │   └── runner.py        # abre sessão por incidente e retoma após aprovação
@@ -172,7 +178,7 @@ terramind/
 
 Integrações entre containers: o Monitor faz INSERT em `agente.incidentes` e chama `POST {AGENTS_URL}/incidentes/{id}/iniciar`; o painel chama `POST {AGENTS_URL}/incidentes/{id}/resposta` com `{plano_id, resposta, respondido_por}`; o Telegram chama `ao_responder` dentro do processo `agents`. Resposta repetida para o mesmo plano não tem efeito (409).
 
-Variáveis principais: `DATABASE_URL`, `ERP_MCP_URL`, `CONHECIMENTO_URL`, `AGENTS_URL`, `MONITOR_URL`, `OPENROUTER_API_KEY`, `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR`, `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`, `CHANNEL` (`telegram` ou `painel`), `MONITOR_MODE` (`live` ou `replay`), `APPROVAL_TIMEOUT_MIN`, `PYTHONUTF8=1`.
+Variáveis principais: `DATABASE_URL`, `ERP_MCP_URL`, `CONHECIMENTO_URL`, `AGENTS_URL`, `MONITOR_URL`, `OPENAI_API_KEY`, `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR`, `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`, `CHANNEL` (`telegram` ou `painel`), `MONITOR_MODE` (`live` ou `replay`), `APPROVAL_TIMEOUT_MIN`, `PYTHONUTF8=1`.
 
 ## Plano de 7 dias
 
@@ -182,7 +188,7 @@ O fluxo de ponta a ponta precisa rodar com dados fake no fim do dia 3; os dias 6
 | --- | --- | --- | --- |
 | 1 | Contratos; esqueleto ADK com nós vazios no `Workflow` até a pausa | Schema, seed da fazenda, servidor MCP de leitura | Bot no BotFather, `NotificationChannel`, envio com botões inline |
 | 2 | Retomada da sessão após restart (teste com Postgres); API `/iniciar` e `/resposta`; Contexto, Avaliador e Ação Preventiva | Coleta das bulas e chunking no Qdrant | Long polling, callback → retomada de sessão |
-| 3 | `calcular_impacto`, `janelas_validas`, Agronômico e Operacional em paralelo, Supervisor e aprovação, com fakes; validar modelos do OpenRouter | Metadados e qualidade dos trechos por produto e seção (extração de regras despriorizada) | Painel: lista de ordens de serviço com status ao vivo |
+| 3 | `calcular_impacto`, `janelas_validas`, Agronômico e Operacional em paralelo, Supervisor e aprovação, com fakes; validar o `gpt-4o-mini` com tools + `output_schema` | Metadados e qualidade dos trechos por produto e seção (extração de regras despriorizada) | Painel: lista de ordens de serviço com status ao vivo |
 | 4 | Supervisor ↔ Validador; quatro LLMs de ponta a ponta com o replay | Fatores de perda com fonte | Monitor com Open-Meteo e modo replay |
 | 5 | Estabilizar prompts; Executor, timeout e escalonamento | `buscar_trechos` ajustado às consultas do Avaliador e do Agronômico | BMC e roteiro do pitch |
 | 6 | Testes do cenário e casos de borda (NAO, sem resposta) | Deploy na VM e cópia local | README com diagramas; ensaio do pitch |
@@ -206,7 +212,7 @@ Os maiores riscos são de demo, não de código: rede do evento e um número sem
 | Bula sem parâmetro explícito | O Avaliador devolve "sem violação" sem citação válida → a OS não é suspensa e o gerente é alertado |
 | Avaliador (LLM) erra o limite | Citação obrigatória (trecho, fonte, página) na auditoria e no painel; cenário da demo revisado no ensaio |
 | Avaliador (LLM) falha e a OS não é suspensa | Alerta imediato ao gerente; incidente em `aguardando_decisao_manual` bloqueia duplicatas |
-| Modelo do OpenRouter sem suporte a tools + `output_schema` | Validar no dia 3; trocar só a variável de ambiente do agente |
+| Modelo da OpenAI sem suporte a tools + `output_schema` | Validar no dia 3; trocar só a variável de ambiente do agente |
 | API do ADK 2.x muda durante a semana | Versão fixada no `uv.lock` no dia 1 |
 | Fator de perda sem fonte | Declarar como estimativa parametrizada no pitch |
 
@@ -219,7 +225,7 @@ Os maiores riscos são de demo, não de código: rede do evento e um número sem
 | E se o Avaliador falhar? | Sem evidência, o sistema não age sozinho: a OS segue agendada e o gerente é alertado para decidir |
 | Isso escala para outras fazendas? | ERP real entra como outro servidor MCP; produção em Cloud Run ou Agent Engine |
 
-**Em aberto:** quais modelos do OpenRouter preencher em cada variável (validar suporte a tools + `output_schema` no dia 3).
+**Em aberto:** se o `gpt-4o-mini` for fraco em algum agente (o Avaliador é o mais crítico), trocar só a variável `MODEL_*` dele.
 
 ## Divisão do time
 

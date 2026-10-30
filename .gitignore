@@ -13,3 +13,6 @@ __pycache__/
 .superpowers/
 .idea/
 .vscode/
+
+# Sessões locais do adk web / adk run
+.adk/

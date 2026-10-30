@@ -4,11 +4,33 @@
 
 **Goal:** Entregar o serviço `agents`, que recebe o incidente aberto pelo Monitor, avalia o risco das OS na janela, suspende o que viola, monta e valida um plano de reagendamento, pede aprovação ao gerente, retoma a sessão quando o callback chega (mesmo horas depois ou após um restart) e executa o plano no ERP.
 
-**Architecture:** Um processo FastAPI (`agents`, porta 8000) que hospeda o `Runner` do ADK, o bot do Telegram em long polling e uma tarefa de timeout. O fluxo é um `Workflow` do ADK 2.x: nós em código para Contexto, Ação Preventiva, Validador, Aprovação e Executor; quatro `LlmAgent` (Avaliador, Agronômico, Operacional, Supervisor) via OpenRouter. A aprovação pausa com `RequestInput` e retoma com uma `FunctionResponse` na mesma sessão do `DatabaseSessionService` (Postgres, schema `agente`). O ERP é acessado pelo MCP do Felipe; o conhecimento, pela API do Edison.
+**Architecture:** Um processo FastAPI (`agents`, porta 8000) que hospeda o `Runner` do ADK, o bot do Telegram em long polling e uma tarefa de timeout. O fluxo é um `Workflow` do ADK 2.x: nós em código para Contexto, Ação Preventiva, Validador, Aprovação e Executor; quatro `LlmAgent` (Avaliador, Agronômico, Operacional, Supervisor) na API da OpenAI (`openai/gpt-4o-mini`). A aprovação pausa com `RequestInput` e retoma com uma `FunctionResponse` na mesma sessão do `DatabaseSessionService` (Postgres, schema `agente`). O ERP é acessado pelo MCP do Felipe; o conhecimento, pela API do Edison.
 
-**Tech Stack:** Python 3.12, uv, `google-adk[db]` 2.13+, `litellm>=1.84` (OpenRouter), `mcp` (cliente streamable HTTP), FastAPI, Pydantic v2 + pydantic-settings, SQLAlchemy 2 async + asyncpg, httpx, pytest + pytest-asyncio, respx, testcontainers, ruff.
+**Tech Stack:** Python 3.12, uv, `google-adk[db]` 2.13+, `litellm>=1.84` (OpenAI), `mcp` (cliente streamable HTTP), FastAPI, Pydantic v2 + pydantic-settings, SQLAlchemy 2 async + asyncpg, httpx, pytest + pytest-asyncio, respx, testcontainers, ruff.
 
 **Spec:** "Arquitetura para desenvolvimento" (27/10/2026) com as decisões A1–A7 de [docs/contratos.md](../contratos.md). Seções usadas: Agentes e nós, Fluxo do agente, Modelo de dados (schema `agente`), Riscos.
+
+## Estado da implementação (29/10)
+
+Conferido contra https://adk.dev/workflows/ e as páginas de grafos (rotas, dados, dinâmico, entrada humana, colaboração): imports pelo caminho da doc (`from google.adk import Workflow, Event, Context`; `JoinNode`/`node` de `google.adk.workflow`; `RequestInput` de `google.adk.events`), rotas por `Event(route=...)` com dicionário nas arestas, `JoinNode` com todos os predecessores emitindo output, laços limitados em código e agentes em `single_turn`.
+
+Todas as tarefas (1 a 17) estão implementadas em `agents/`, na branch `feat/agents`. São 67 testes; os 4 com Postgres usam testcontainers. Também rodou um teste de fumaça com containers: imagem do `agents` + Postgres, `/iniciar` levando o incidente a `aguardando_decisao_manual` quando o ERP está fora. Onde o código difere do texto abaixo:
+
+| Ponto | Plano | Implementado | Por quê |
+| --- | --- | --- | --- |
+| LLMs no grafo | `LlmAgent` como nó direto | Os quatro `Agent` são nós do grafo (`mode="single_turn"`), cada um seguido de um nó em código que roteia (`rota_avaliacao`, `validador`). `on_model_error_callback` e `after_model_callback` (`agentes/_comum.protecoes`) transformam erro do modelo ou saída fora do schema numa marca `falha_<agente>` no estado; timeout e novas tentativas ficam no cliente LiteLLM. Todo roteador tem `DEFAULT_ROUTE` → `decisao_manual` | Uma exceção num nó `Agent` derrubaria o workflow inteiro; assim a falha vira rota (`falhou`, decisão A5) e os agentes aparecem no grafo do `adk web` |
+| `interrupt_id` da aprovação | — | Explícito: `aprovacao:{plano_id}` | Os exemplos Python da doc usam o id implícito; o campo existe em `RequestInput` e o callback do Telegram precisa de um id previsível |
+| Ferramentas de ERP dos LLMs | `McpToolset` com `tool_filter` | Funções em `agents/ferramentas.py` sobre o mesmo `ErpCliente` dos nós | Mesmo dado e mesma conexão MCP; os testes trocam por fakes; o LLM só vê leituras |
+| `agents/tools/conhecimento.py` (Task 11 do Edison) | PR do Edison | `clientes/conhecimento.py` + `ferramentas.criar_buscar_trechos` | O Avaliador precisava dela já; o Edison só precisa garantir o formato da API (contratos 10 e 11) |
+| Pedido de aprovação | O `Orquestrador` envia ao ver o evento | O nó `aprovacao` muda o status e envia antes de emitir o `RequestInput` | Um lugar só; o nó não roda de novo na retomada (`rerun_on_resume=False`) |
+| Plano B da Task 5 | Sessão nova se a retomada falhar | Não foi preciso | `test_retoma_sessao_em_orquestrador_novo` passa com `DatabaseSessionService` em Postgres |
+| `channels/` do Felipe | Dependência por caminho | Import opcional em `agents/canal.py`; sem o pacote, `CanalLog` | O pacote ainda não existe; ver contrato 7 |
+| `mcp` | sem versão | `mcp>=1.24,<2` | A 2.x mudou a API do cliente e do `FastMCP`; o plano do Felipe usa a 1.x |
+| Arquivos a mais | — | `deps.py`, `agentes/<agente>/agent.py` (uma pasta por agente, padrão do ADK), `ferramentas.py`, `canal.py`, `rules/{validador,mensagem,previsao}.py`, `verificar_modelos.py` | Injeção de dependências, prompts e regras puras separadas para teste |
+
+Ainda depende de ação humana:
+- rodar `uv run python -m agents.verificar_modelos` com `OPENAI_API_KEY` para confirmar o `gpt-4o-mini` (tools + `output_schema`);
+- ensaiar os prompts com os trechos reais do Edison (Task 17).
 
 ## Global Constraints
 
@@ -163,7 +185,7 @@ Testes: `cd agents && uv run pytest -v`. Os que precisam de Postgres usam `testc
 - Create: `agents/pyproject.toml`, `agents/agents/config.py`, `agents/agents/api.py`, `agents/tests/test_health.py`
 
 **Interfaces:**
-- Produces: `Settings` (pydantic-settings) com `database_url`, `erp_mcp_url`, `conhecimento_url`, `openrouter_api_key`, `model_avaliador`, `model_agronomico`, `model_operacional`, `model_supervisor`, `channel: Literal["telegram","painel"] = "painel"`, `telegram_bot_token: str | None`, `gerente_chat_id: int | None`, `approval_timeout_min: int = 30`, `max_replanejamentos: int = 2`, `max_voltas_validador: int = 2`, `timeout_llm_s: float = 60`. `app: FastAPI` com `GET /health` → `{"status": "ok"}`.
+- Produces: `Settings` (pydantic-settings) com `database_url`, `erp_mcp_url`, `conhecimento_url`, `openai_api_key`, `model_avaliador`, `model_agronomico`, `model_operacional`, `model_supervisor`, `channel: Literal["telegram","painel"] = "painel"`, `telegram_bot_token: str | None`, `gerente_chat_id: int | None`, `approval_timeout_min: int = 30`, `max_replanejamentos: int = 2`, `max_voltas_validador: int = 2`, `timeout_llm_s: float = 60`. `app: FastAPI` com `GET /health` → `{"status": "ok"}`.
 
 - [ ] **Step 1:** teste `test_health` → FAIL
 - [ ] **Step 2:** `uv init --package agents`; dependências: `google-adk[db]>=2.13`, `litellm>=1.84`, `mcp`, `fastapi`, `uvicorn[standard]`, `pydantic-settings`, `sqlalchemy[asyncio]`, `asyncpg`, `httpx`; dev: `pytest`, `pytest-asyncio`, `respx`, `testcontainers[postgres]`, `ruff`
@@ -212,7 +234,7 @@ def test_fake_erp_suspende_uma_vez(fake_erp_com_os):
 
 **Interfaces:**
 - Produces:
-  - `modelo_para(nome: Literal["avaliador","agronomico","operacional","supervisor"]) -> LiteLlm` (lê `Settings.model_<nome>`; formato `openrouter/<org>/<modelo>`).
+  - `modelo_para(nome: Literal["avaliador","agronomico","operacional","supervisor"]) -> LiteLlm` (lê `Settings.model_<nome>`; formato `openai/<modelo>`).
   - `criar_workflow(deps: Dependencias) -> Workflow`, em que `Dependencias` agrupa `erp`, `conhecimento`, `canal`, `repo`, `settings` e `modelos: dict[str, BaseLlm]` (injetável nos testes).
   - `criar_app(deps) -> App` com `ResumabilityConfig(is_resumable=True)`.
   - Arestas (sintaxe de `google.adk.workflow`): `("START", contexto)`, `(contexto, {"sem_os": encerrar, "com_os": avaliador})`, `(avaliador, rota_avaliacao)`, `(rota_avaliacao, {"falhou": decisao_manual, "sem_violacao": encerrar, "violacao": acao_preventiva})`, `(acao_preventiva, agronomico, join)`, `(acao_preventiva, operacional, join)`, `(join, planejar)`, `(planejar, {"valido": aprovacao, "reprovado": decisao_manual})`, `(aprovacao, rota_resposta)`, `(rota_resposta, {"SIM": executor, "OPCOES": planejar, "NAO": decisao_manual})`, `(executor, {"ok": encerrar, "revalidar": planejar})`.
@@ -407,7 +429,7 @@ async def test_resposta_repetida(pg_url, deps_fake):
 - [ ] **Step 2–4:** FAIL → implementar → PASS
 - [ ] **Step 5:** `git commit -m "feat(nodes): pausa para aprovação e roteia SIM, NÃO e ver opções"`
 
-**Fim da fase:** PR `feat/agents-plano`. **Marco do dia 4:** os quatro LLMs reais via OpenRouter, ponta a ponta, com o replay do Edison.
+**Fim da fase:** PR `feat/agents-plano`. **Marco do dia 4:** os quatro LLMs reais da OpenAI, ponta a ponta, com o replay do Edison.
 
 ---
 
@@ -454,7 +476,7 @@ async def test_resposta_repetida(pg_url, deps_fake):
 ### Task 17: Prompts e casos de borda
 
 - Estabilizar as instruções dos quatro agentes com o cenário de replay (dia 5), rodando 5 vezes seguidas: em todas, o plano tem que passar no Validador em no máximo 2 voltas.
-- Teste de ponta a ponta com fakes para cada borda: NÃO, sem resposta, clique duplo, `CHANNEL=painel`, Avaliador fora do ar, OpenRouter fora do ar (o pitch precisa saber o que aparece na tela).
+- Teste de ponta a ponta com fakes para cada borda: NÃO, sem resposta, clique duplo, `CHANNEL=painel`, Avaliador fora do ar, OpenAI fora do ar (o pitch precisa saber o que aparece na tela).
 - `git commit -m "test(agents): cobre os casos de borda do cenário da demo"`
 
 ---
@@ -466,7 +488,7 @@ async def test_resposta_repetida(pg_url, deps_fake):
 | Retomada da sessão após restart falha | Teste da Task 5 no dia 2; plano B descrito nela |
 | Avaliador LLM erra o limite ou cita a página errada (A4, risco aceito) | Citação obrigatória por schema; trecho e página gravados na auditoria e mostrados no painel; seed de cenário revisado no ensaio |
 | Avaliador falha e a OS não é suspensa (A5, risco aceito) | Alerta imediato ao gerente; incidente em `aguardando_decisao_manual` bloqueia duplicatas; responder à banca: "sem evidência, o sistema não age sozinho e pede decisão humana" |
-| Modelo do OpenRouter sem suporte a tools + `output_schema` | Validar no dia 3 com o modelo escolhido para cada variável; trocar só a variável de ambiente |
+| Modelo da OpenAI sem suporte a tools + `output_schema` | Validar no dia 3 com o modelo escolhido para cada variável; trocar só a variável de ambiente |
 | Mudança de API do ADK 2.x durante a semana | Fixar a versão no `uv.lock` no dia 1 e não atualizar até o dia 7 |
 
 ## Convenção de branches e commits
