@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: terramind
+      POSTGRES_PASSWORD: terramind
+      POSTGRES_DB: terramind
+      TZ: America/Sao_Paulo
+      PGTZ: America/Sao_Paulo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terramind -d terramind"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Dia 2 (T10.2): qdrant (porta 6333) e erp-mcp (porta 8030)
+  # Dia 3 (T10.2): painel (porta 8080)
+  # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
+  # Frente Gustavo: agents (porta 8000)
+
+volumes:
+  pgdata:
+
