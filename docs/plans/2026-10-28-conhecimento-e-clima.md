@@ -4,7 +4,9 @@
 
 **Goal:** Entregar a base de conhecimento (documentos → Qdrant + regras validadas no Postgres) para **dois tipos de insumo**, defensivos (bulas do Agrofit) e fertilizantes (referências técnicas da Embrapa), as ferramentas `consultar_regras` e `buscar_trechos` para os agentes, e o Monitor de clima (Open-Meteo + replay) que abre incidentes.
 
-**Architecture:** Dois serviços FastAPI e um pipeline offline. `conhecimento/` é biblioteca + API (regras, trechos, revisão manual). `ingest/` é a CLI offline que lê os PDFs e grava no Qdrant e no Postgres, importando a biblioteca `conhecimento`. `monitor/` é uma API FastAPI com um loop em background: compara a previsão com os limiares, grava em `agente.incidentes` e avisa o runner do ADK por HTTP. Regras determinísticas decidem; o RAG só justifica e cita. Uma única tabela `regras_aplicacao` guarda as regras dos dois tipos de insumo: cada tipo preenche as colunas do seu risco e deixa as outras `NULL`.
+**Architecture:** Dois serviços FastAPI e um pipeline offline. `conhecimento/` é biblioteca + API (trechos, fatores de perda, regras, revisão manual). `ingest/` é a CLI offline que lê os PDFs e grava no Qdrant e no Postgres, importando a biblioteca `conhecimento`. `monitor/` é uma API FastAPI com um loop em background: compara a previsão com os limiares, grava em `agente.incidentes` e avisa o runner do ADK por HTTP. **Desde 29/10, o Avaliador de Risco do Gustavo é um LLM que decide a violação a partir dos trechos do Qdrant (`buscar_trechos`) e cita fonte e página** (decisão A4 em [docs/contratos.md](../contratos.md)). Os trechos e seus metadados passaram a decidir; a tabela `regras_aplicacao` continua no schema, mas fica fora do caminho crítico.
+
+> **Revisado em 29/10/2026** com as decisões da frente de agentes. O que mudou: prioridade das fases (a Fase 3 fica opcional, exceto a Task 10), contratos 3, 4, 7 e 8, Task 11 e Task 15, trabalho de dados. A numeração de contratos abaixo é a deste plano; a numeração do time está em `docs/contratos.md`.
 
 **Tech Stack:** Python 3.12, uv, FastAPI, Pydantic v2 + pydantic-settings, SQLAlchemy 2 (Core, síncrono) + psycopg 3, qdrant-client, fastembed, PyMuPDF, LiteLLM, httpx, pytest, respx, testcontainers, ruff.
 
@@ -14,10 +16,10 @@
 
 - Linha de `regras_aplicacao` ou `tolerancia_fenologica` sem `validado_por` nunca sai da API nem das ferramentas.
 - Parâmetro que a bula não traz explicitamente fica `NULL`, sem valor inferido nem default.
-- O Avaliador de Risco lê só a tabela; o Qdrant serve apenas para justificar e citar (`fonte_doc` + `pagina`).
+- O Avaliador de Risco (LLM, frente do Gustavo) decide a partir dos trechos do Qdrant e cita `fonte_doc` + `pagina`. Por isso todo trecho precisa de `produto` (quando o documento é de um produto), `secao` e `pagina` corretos: um metadado errado vira uma decisão errada.
 - Unidades fixas: vento em km/h, temperatura em °C, umidade em %, chuva em mm, tempo em horas.
 - Fuso: `America/Sao_Paulo`. Todo `datetime` é *timezone-aware*.
-- Variáveis: `MODEL_NAME`, `MONITOR_MODE` (`live` | `replay`), `DATABASE_URL`, `QDRANT_URL`, `EMBEDDING_MODEL`, `AGENTS_URL`, `CONHECIMENTO_URL`.
+- Variáveis: `MODEL_EXTRACAO` (só do `ingest`, formato OpenRouter `openrouter/<org>/<modelo>` com `OPENROUTER_API_KEY`; usada apenas se a Fase 3 for feita), `MONITOR_MODE` (`live` | `replay`), `DATABASE_URL`, `QDRANT_URL`, `EMBEDDING_MODEL`, `AGENTS_URL`, `CONHECIMENTO_URL`.
 - Fator de perda: tem fonte citada ou é declarado como estimativa.
 - Um trecho (chunk) nunca atravessa páginas, para a citação de página ser exata.
 - `tipo_insumo` ∈ {`defensivo`, `fertilizante`}, com os mesmos valores em `erp.insumos.tipo`, `conhecimento.regras_aplicacao.tipo_insumo` e `conhecimento.fatores_perda.tipo_insumo`.
@@ -33,12 +35,13 @@ Estes pontos tocam o código do Gustavo ou do Felipe. O plano assume a proposta 
 |---|---|---|---|---|
 | 1 | Identificação do produto | `erp.insumos.produto` = `regras_aplicacao.produto`; `erp.insumos.bula_id` = `conhecimento.documentos.id` (para fertilizante, aponta para a referência da Embrapa); `erp.insumos.tipo` ∈ {`defensivo`, `fertilizante`} | Felipe | 2 |
 | 2 | Containers novos | `conhecimento` e `monitor` viram containers próprios (na spec, o Monitor rodava dentro de `agents`) | Felipe, Gustavo | 17 |
-| 3 | Abertura de incidente | Monitor faz INSERT em `agente.incidentes` e chama `POST {AGENTS_URL}/incidentes/{id}/iniciar`; "aberto" = `status <> 'encerrado'` | Gustavo | 15 |
-| 4 | Ferramentas ADK | Assinaturas de `consultar_regras` e `buscar_trechos` (Task 11) | Gustavo | 11 |
+| 3 | Abertura de incidente | **Fechado com o Gustavo (29/10).** Monitor faz INSERT em `agente.incidentes` com `status = 'aberto'` e chama `POST {AGENTS_URL}/incidentes/{id}/iniciar` (202, idempotente). `previsao_snapshot` guarda **todas as horas** da previsão (5 dias), não só a janela de risco, porque o `janelas_validas` do Gustavo procura a próxima janela nela. "Aberto" = `status <> 'encerrado'`; estados possíveis: `aberto`, `aguardando_aprovacao`, `aguardando_decisao_manual`, `encerrado`, e só `agents` muda o status depois da criação | Gustavo | 15 |
+| 4 | Ferramentas ADK | **Fechado com o Gustavo (29/10).** `buscar_trechos` está no caminho crítico (o Avaliador decide com ela); `consultar_regras` continua existindo, mas nenhum nó depende dela. Assinaturas na Task 11 | Gustavo | 11 |
 | 5 | Migrations | Arquivos SQL numerados em `db/migrations/`; o meu é `010_conhecimento.sql` | Felipe | 2 |
 | 6 | Fonte para adubação | **Decidido (29/10):** trabalhar com os dois. Defensivo usa bula do Agrofit (`tipo_doc = "bula"`); fertilizante usa referência técnica da Embrapa (`tipo_doc = "referencia"` com `produto` preenchido) | Time | 2, 4, 8 |
-| 7 | Regra de chuva do fertilizante | Campos novos em `regras_aplicacao`: `chuva_max_mm` e `janela_chuva_h`. O Avaliador marca violação quando a chuva acumulada nas `janela_chuva_h` horas após `inicio_previsto` da OS é maior que `chuva_max_mm`. `consultar_regras` devolve os campos novos | Gustavo | 2, 11 |
-| 8 | Plano B: limiar sem número no documento | Se nenhuma referência da Embrapa trouxer um limite em mm, o time decide até o fim do dia 2 entre (a) a OS de fertilizante sair da demo, ficando só a de defensivo, ou (b) aceitar uma regra digitada na revisão e declarada como estimativa, no mesmo padrão de `fatores_perda`. O plano **não** implementa (b) até o time pedir | Time | dados, dia 2 |
+| 7 | Regra de chuva do fertilizante | Campos `chuva_max_mm` e `janela_chuva_h` em `regras_aplicacao` continuam no schema. **Desde 29/10, o Avaliador não lê a tabela:** ele lê o trecho da referência da Embrapa e decide. O que importa para a demo é o trecho com o limite de chuva estar indexado com `produto` preenchido | Gustavo | 2, 5 |
+| 8 | Plano B: limiar sem número no documento | Se nenhuma referência da Embrapa trouxer um limite em mm, o Avaliador não terá violação citável: a OS de adubação não é suspensa e o gerente só recebe um alerta. O time decide até o fim do dia 2 se (a) a OS de fertilizante sai da demo, ficando só a de defensivo, ou (b) troca de documento | Time | dados, dia 2 |
+| 9 | Condição do fator de perda | `condicao` = tipo do gatilho do monitor: `chuva` · `vento` · `umidade` · `temperatura`. O `calcular_impacto` do Gustavo busca `GET /fatores-perda?tipo_insumo=&condicao=` com esses valores | Gustavo | 3, 10 |
 
 ## Review Focus
 
@@ -48,6 +51,8 @@ Estes pontos tocam o código do Gustavo ou do Felipe. O plano assume a proposta 
 4. **Cenário de replay gravado em data passada** não dispararia nada no dia da demo → o rebase para "agora" tem teste na Task 13.
 5. **O LLM cita uma página que não existe ou devolve vento em m/s** → página validada contra o PDF e faixas no Pydantic, com testes na Task 8.
 6. **Regra de fertilizante com só metade do par** (`chuva_max_mm` sem `janela_chuva_h`) → `CHECK` na migration e validador no Pydantic, com testes nas Tasks 2, 8 e 9.
+7. **Trecho certo para o Avaliador:** para cada produto da demo, `buscar_trechos("chuva após aplicação", produto=...)` devolve, entre os 3 primeiros, o trecho que contém o limite, com a página certa → teste de aceitação com os PDFs reais na Task 7 (dia 2).
+8. **Snapshot completo:** o incidente guarda as 120 h devolvidas pela fonte, não só a janela de risco → teste na Task 15.
 
 ---
 
@@ -55,13 +60,15 @@ Estes pontos tocam o código do Gustavo ou do Felipe. O plano assume a proposta 
 
 ### 1. Um evento de chuva, dois riscos
 
-A mesma previsão de 80 mm afeta as duas ordens de serviço por motivos diferentes. Por isso as regras têm colunas diferentes.
+A mesma previsão de 80 mm afeta as duas ordens de serviço por motivos diferentes. Desde 29/10, quem decide é o Avaliador (LLM) do Gustavo, lendo o trecho de cada documento; o que esta frente garante é que o trecho certo chegue a ele.
 
 ```mermaid
 flowchart TD
     C[Previsão: 80 mm em 36 h no talhão] --> OS1 & OS2
-    OS1[OS de pulverização<br/>insumo: fungicida<br/>tipo_insumo = defensivo] --> R1{Chuva antes de<br/>horas_sem_chuva_min?}
-    OS2[OS de adubação<br/>insumo: ureia<br/>tipo_insumo = fertilizante] --> R2{Chuva em janela_chuva_h<br/>maior que chuva_max_mm?}
+    OS1[OS de pulverização<br/>insumo: fungicida<br/>tipo_insumo = defensivo] --> B1[buscar_trechos<br/>produto = fungicida<br/>secao = condicoes_climaticas]
+    OS2[OS de adubação<br/>insumo: ureia<br/>tipo_insumo = fertilizante] --> B2[buscar_trechos<br/>produto = Ureia<br/>secao = geral]
+    B1 --> R1{Avaliador: chuva antes<br/>do intervalo da bula?}
+    B2 --> R2{Avaliador: chuva acima<br/>do limite da Embrapa?}
     R1 -- sim --> V1[Violação: a chuva lava o produto da folha<br/>fonte: bula Agrofit, página N]
     R2 -- sim --> V2[Violação: a chuva leva o adubo do solo<br/>fonte: Embrapa, página N]
     V1 & V2 --> S[Ação Preventiva suspende as duas OS]
@@ -104,7 +111,7 @@ flowchart TD
     E --> X2[Prompt de fertilizante:<br/>chuva_max_mm e janela_chuva_h]
     X1 & X2 --> PEND[(regras_aplicacao<br/>validado_por = NULL)]
     PEND --> REV[Revisão manual no Swagger<br/>confere contra a página citada]
-    REV --> OK[(regra validada: Avaliador usa)]
+    REV --> OK[(regra validada<br/>fora do caminho crítico desde 29/10)]
 ```
 
 ### 4. Plano B se o documento do fertilizante não trouxer número (contrato 8)
@@ -133,13 +140,15 @@ flowchart LR
         ERP[(erp.insumos.tipo<br/>erp.ordens_servico)]
     end
     subgraph Gustavo
-        AV[Avaliador de Risco]
+        AV[Avaliador de Risco<br/>LLM]
         AG[Agente Agronômico]
+        IMP[calcular_impacto]
         RUN[runner ADK]
     end
-    API -->|consultar_regras| AV
+    API -->|buscar_trechos| AV
     API -->|buscar_trechos| AG
-    MON -->|INSERT agente.incidentes<br/>POST /incidentes/id/iniciar| RUN
+    API -->|GET /fatores-perda| IMP
+    MON -->|INSERT agente.incidentes<br/>snapshot de 120 h<br/>POST /incidentes/id/iniciar| RUN
     ERP -->|produto + tipo| AV
 ```
 
@@ -312,7 +321,7 @@ Teste equivalente para `/tolerancias/soja/R1` e `/fatores-perda`, e um teste que
 - [ ] **Step 4:** `uv run pytest -v` → PASS
 - [ ] **Step 5:** `git commit -m "feat(conhecimento): expõe regras, tolerâncias e fatores de perda"`
 
-**Fim da fase:** PR `feat/conhecimento-base` → revisão do Gustavo. Com isso, ele já consome regras fake via API.
+**Fim da fase:** PR `feat/conhecimento-base` → revisão do Gustavo. Com isso, ele já consome `GET /fatores-perda` via API; as regras fake só servem se a Fase 3 for feita.
 
 ---
 
@@ -473,6 +482,7 @@ def test_sem_resultado_retorna_lista_vazia(client_busca):
 - [ ] **Step 3:** Implementar com `client.query_points(...)` e `models.Filter(must=[FieldCondition(...)])`.
 - [ ] **Step 4:** `uv run pytest -v` → PASS
 - [ ] **Step 5:** `git commit -m "feat(conhecimento): adiciona busca de trechos com filtro por produto e seção"`
+- [ ] **Step 6 (aceitação com os PDFs reais, dia 2):** para cada produto da demo, rodar `POST /trechos/busca` com `{"consulta": "chuva após a aplicação", "produto": "<produto>"}` e conferir que o trecho com o limite aparece entre os 3 primeiros, com a página certa no PDF. Se não aparecer, ajustar os cabeçalhos reconhecidos na Task 5 ou o `max_chars` antes de seguir. Esse é o teste que mais importa para a demo desde que o Avaliador passou a decidir pelos trechos.
 
 **Fim da fase:** PR `feat/ingest-qdrant`.
 
@@ -480,7 +490,9 @@ def test_sem_resultado_retorna_lista_vazia(client_busca):
 
 ## Fase 3 — Extração estruturada e revisão manual (branch `feat/extracao-revisao`, dias 3–4)
 
-### Task 8: Extração de regras e tolerâncias com LLM
+> **Despriorizada em 29/10.** Nenhum nó do fluxo lê `regras_aplicacao` nem `tolerancia_fenologica` (decisão A4). As Tasks 8 e 9 ficam para depois do dia 5, só se sobrar tempo. **A Task 10 continua obrigatória** e deve ser feita no dia 3, numa branch própria (`feat/fatores-perda`), porque o `calcular_impacto` do Gustavo depende dela para mostrar a perda em R$.
+
+### Task 8: Extração de regras e tolerâncias com LLM (opcional)
 
 **Files:**
 - Create: `ingest/ingest/extracao.py`, `ingest/tests/test_extracao.py`, `ingest/tests/test_extracao_pg.py`
@@ -489,7 +501,7 @@ def test_sem_resultado_retorna_lista_vazia(client_busca):
 **Interfaces:**
 - Produces:
   - `class LlmJson(Protocol)`: `gerar(prompt: str, schema: type[T]) -> T`.
-  - `LiteLlmJson(modelo: str)`: chama `litellm.completion(model=modelo, response_format=schema, ...)` e depois `schema.model_validate_json`. O modelo vem de `MODEL_NAME`.
+  - `LiteLlmJson(modelo: str)`: chama `litellm.completion(model=modelo, response_format=schema, ...)` e depois `schema.model_validate_json`. O modelo vem de `MODEL_EXTRACAO` (OpenRouter).
   - `RegraExtraida(BaseModel)`, com todos os campos opcionais e restritos:
     - `vento_max_kmh: float | None = Field(None, ge=0, le=60)`;
     - `horas_sem_chuva_min: float | None = Field(None, ge=0, le=72)`;
@@ -545,7 +557,7 @@ def test_reextracao_preserva_regra_validada(repo, inserir_regra):  # Postgres
 - [ ] **Step 4:** `uv run pytest -v` → PASS
 - [ ] **Step 5:** `git commit -m "feat(ingest): extrai regras e tolerâncias com LLM validado por schema"`
 
-### Task 9: API de revisão manual
+### Task 9: API de revisão manual (opcional)
 
 **Files:**
 - Create: `conhecimento/conhecimento/api/revisao.py`, `conhecimento/tests/test_api_revisao.py`
@@ -587,7 +599,7 @@ def test_pendentes_traz_texto_da_pagina(client_pg, regra_pendente_id):
 - [ ] **Step 4:** `uv run pytest -v` → PASS
 - [ ] **Step 5:** `git commit -m "feat(conhecimento): adiciona API de revisão manual das regras extraídas"`
 
-### Task 10: Carga dos fatores de perda
+### Task 10: Carga dos fatores de perda (obrigatória, dia 3, branch `feat/fatores-perda`)
 
 **Files:**
 - Create: `ingest/ingest/fatores.py`, `ingest/data/fatores_perda.yaml`, `ingest/tests/test_fatores.py`
@@ -598,10 +610,15 @@ def test_pendentes_traz_texto_da_pagina(client_pg, regra_pendente_id):
   - `carregar_fatores(caminho: Path, docs_existentes: set[str]) -> list[FatorPerda]`.
   - `fonte_ou_estimativa` aceita dois formatos: `"<doc_id>:p.<N>"`, com `doc_id` presente em `documentos`, ou `"estimativa: <justificativa>"`. Qualquer outro valor é erro.
   - Upsert por `(tipo_insumo, condicao)`.
+  - `condicao` ∈ {`chuva`, `vento`, `umidade`, `temperatura`} (contrato 9); outro valor é erro. O YAML da demo precisa ter pelo menos `(defensivo, chuva)` e `(fertilizante, chuva)`.
 
 - [ ] **Step 1: Testes que falham**
 
 ```python
+def test_rejeita_condicao_fora_do_contrato(tmp_path):
+    with pytest.raises(ValueError):
+        carregar_fatores(yaml_fatores(["estimativa: x"], condicao="lavagem"), set())
+
 def test_aceita_citacao_e_estimativa(tmp_path):
     fatores = carregar_fatores(yaml_fatores(["bula-ureia:p.4", "estimativa: perda por lixiviação, Embrapa sem número"]), {"bula-ureia"})
     assert len(fatores) == 2
@@ -620,7 +637,7 @@ def test_rejeita_fonte_vazia(tmp_path):
 - [ ] **Step 4:** `uv run pytest -v` → PASS
 - [ ] **Step 5:** `git commit -m "feat(ingest): carrega fatores de perda com fonte ou estimativa declarada"`
 
-**Fim da fase:** PR `feat/extracao-revisao`.
+**Fim da fase:** PR `feat/fatores-perda` (Task 10) no dia 3; PR `feat/extracao-revisao` (Tasks 8 e 9) só se houver tempo.
 
 ---
 
@@ -634,8 +651,8 @@ def test_rejeita_fonte_vazia(tmp_path):
 **Interfaces:**
 - Consumes: `GET /regras/{produto}` (Task 3) e `POST /trechos/busca` (Task 7), em `CONHECIMENTO_URL`.
 - Produces (funções simples; o ADK lê a docstring e os type hints, então a docstring explica cada parâmetro em português):
-  - `consultar_regras(produto: str) -> dict` → `{"encontrado": True, "regra": {...}}` ou `{"encontrado": False, "motivo": "regra_nao_validada"}`. A `regra` traz `tipo_insumo` e todos os limiares, inclusive `chuva_max_mm` e `janela_chuva_h`. A docstring explica que campo `null` significa "o documento não define este limite; não avaliar".
-  - `buscar_trechos(consulta: str, produto: str | None = None, secao: str | None = None) -> dict` → `{"trechos": [{"texto", "fonte_doc", "pagina", "secao"}]}`.
+  - `buscar_trechos(consulta: str, produto: str | None = None, secao: str | None = None) -> dict` → `{"trechos": [{"texto", "fonte_doc", "pagina", "secao", "produto"}]}`. **É a ferramenta do caminho crítico**: o Avaliador de Risco decide a violação com ela e o Agronômico cita com ela. A docstring diz que, para achar limites de aplicação, a consulta deve ir filtrada por `produto` e, em bula, por `secao="condicoes_climaticas"`; e que lista vazia significa "o documento não traz esse limite".
+  - `consultar_regras(produto: str) -> dict` → `{"encontrado": True, "regra": {...}}` ou `{"encontrado": False, "motivo": "regra_nao_validada"}`. Continua existindo, mas nenhum nó do fluxo depende dela desde 29/10. Se o tempo apertar, pode ficar para depois.
   - Em erro de rede ou timeout (5 s): `{"encontrado": False, "erro": "servico_conhecimento_indisponivel"}`. Nunca levantam exceção.
 
 - [ ] **Step 1: Testes que falham** (respx)
@@ -782,7 +799,7 @@ def test_sem_horas_nao_dispara():
   - `RepositorioMonitor(engine)` com:
     - `talhoes(ids: list[int] | None = None) -> list[Talhao]`;
     - `tem_incidente_aberto(talhao_id: int) -> bool`, que procura `status <> 'encerrado'` criado nas últimas `janela_risco_h` horas;
-    - `criar_incidente(talhao_id: int, gatilhos: list[Gatilho], snapshot: list[HoraPrevisao]) -> int`, que grava com `status = 'aberto'` e `gatilho`/`previsao_snapshot` em JSONB.
+    - `criar_incidente(talhao_id: int, gatilhos: list[Gatilho], snapshot: list[HoraPrevisao]) -> int`, que grava com `status = 'aberto'` e `gatilho`/`previsao_snapshot` em JSONB. O `snapshot` é a lista **inteira** devolvida pela fonte (120 h), não só as horas da janela de risco (contrato 3).
   - `class Notificador(Protocol)`: `iniciar(incidente_id: int) -> None`. `NotificadorHttp(agents_url)` chama `POST {agents_url}/incidentes/{id}/iniciar` com timeout de 5 s.
   - `ResultadoCiclo(incidentes: list[int], erros: list[str], executado_em: AwareDatetime)`.
   - `executar_ciclo(fonte, repo, notificador, limiares, agora, talhao_ids: list[int] | None = None) -> ResultadoCiclo`:
@@ -803,6 +820,10 @@ def test_segundo_ciclo_nao_duplica(fakes):
 def test_fonte_falha_em_um_talhao_segue_nos_outros(fakes_dois_talhoes_um_quebrado):
     r = executar_ciclo(*fakes_dois_talhoes_um_quebrado, LIMIARES, AGORA)
     assert len(r.incidentes) == 1 and len(r.erros) == 1
+
+def test_snapshot_guarda_todas_as_horas(fakes):
+    executar_ciclo(fakes.fonte_chuva, fakes.repo, fakes.notificador, LIMIARES, AGORA)
+    assert len(fakes.repo.snapshots[1]) == len(fakes.fonte_chuva.horas)   # 120, não só a janela
 
 def test_falha_no_aviso_mantem_incidente(fakes_notificador_quebrado):
     r = executar_ciclo(*fakes_notificador_quebrado, LIMIARES, AGORA)
@@ -887,10 +908,10 @@ def test_modo_replay_nao_inicia_loop(client_replay):
 |---|---|---|
 | 1 | Fechar os 8 contratos acima; escolher com o Felipe os produtos do cenário: pelo menos um defensivo (ex.: fungicida na soja) e um fertilizante (ex.: ureia), com uma OS de cada no mesmo talhão e na mesma janela | Contratos registrados no repo (`docs/contratos.md`) |
 | 2 | Baixar 5 a 8 bulas (Agrofit), dando preferência a bulas que trazem intervalo sem chuva **em número**; achar 1 ou 2 referências da Embrapa sobre adubação que tragam limite de chuva **em mm**; baixar os manuais de fenologia de soja e milho e o ZARC de um município goiano; preencher `fontes.yaml`; rodar `python -m ingest indexar`. Se nenhuma referência de fertilizante tiver número, levar o contrato 8 ao time | `GET /trechos/busca` devolve trechos com página certa para cada produto, inclusive o fertilizante |
-| 3 | Rodar `python -m ingest extrair-regras` | `GET /revisao/pendentes` lista uma regra por produto; nenhum produto da demo aparece na lista de regras todas `null` |
-| 4 | Validar página a página pelo Swagger; preencher `fatores_perda.yaml` e rodar `carregar-fatores` | Nenhuma pendência; cada fator com citação ou "estimativa:" |
-| 5 | Ajustar com o Gustavo as consultas do Agronômico a `buscar_trechos` | O Agronômico cita fonte e página na mensagem do Telegram, uma para a OS de defensivo e outra para a de fertilizante |
-| 6 | Apagar o seed fake (`DELETE ... WHERE validado_por = 'seed-fake'`); rodar o ingest na VM; ensaiar o replay | `SELECT count(*) FROM conhecimento.regras_aplicacao WHERE validado_por = 'seed-fake'` = 0 |
+| 3 | Preencher `fatores_perda.yaml` e rodar `carregar-fatores`; conferir à mão, no PDF, a página de cada trecho que o Avaliador vai usar | Cada fator com citação ou "estimativa:"; para cada produto da demo, o trecho com o limite tem a página certa |
+| 4 | Ensaiar o replay com o Gustavo e ver o que o Avaliador decidiu | O Avaliador marca violação nas duas OS citando o trecho certo; se errar, ajustar o chunking ou os metadados, não o prompt dele |
+| 5 | Ajustar com o Gustavo as consultas do Avaliador e do Agronômico a `buscar_trechos` | Fonte e página aparecem na mensagem do Telegram, uma para a OS de defensivo e outra para a de fertilizante |
+| 6 | Rodar o ingest na VM; ensaiar o replay. Se a Fase 3 tiver sido feita, apagar o seed fake (`DELETE ... WHERE validado_por = 'seed-fake'`) | O replay na VM dá o mesmo resultado que na máquina local |
 | 7 | Gravar o vídeo de backup | Vídeo salvo |
 
 ## Convenção de branches e commits
@@ -898,4 +919,4 @@ def test_modo_replay_nao_inicia_loop(client_replay):
 - Uma branch por fase, a partir de `main`: `feat/conhecimento-base`, `feat/ingest-qdrant`, `feat/extracao-revisao`, `feat/tools-conhecimento`, `feat/monitor`, `chore/infra-conhecimento-monitor`.
 - Um commit por tarefa (dois quando a tarefa indica). Cada commit passa em `uv run pytest` e `uv run ruff check .` no serviço tocado.
 - Ao fim de cada fase, abrir um PR para `main` com o Gustavo como revisor. Fazer merge com **rebase**, sem squash, para preservar um commit por tarefa no histórico.
-- Ordem de prioridade se o tempo apertar: Fases 1, 2 e 4 primeiro (desbloqueiam o Gustavo), depois a 5 (o Monitor é o gatilho da demo), depois a 3 e a 6.
+- Ordem de prioridade (revisada em 29/10): Fases 1 e 2 e, na Fase 4, `buscar_trechos` (desbloqueiam o Avaliador do Gustavo); depois a Task 10 (perda em R$); depois a 5 (o Monitor é o gatilho da demo); depois a 6; por último, as Tasks 8 e 9, só se sobrar tempo.
