@@ -7,9 +7,7 @@ import pytest
 from psycopg.errors import CheckViolation, UniqueViolation
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://terramind:terramind@localhost:5432/terramind"
-)
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://terramind:terramind@localhost:5432/terramind")
 
 
 @pytest.fixture
