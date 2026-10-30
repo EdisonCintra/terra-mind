@@ -8,7 +8,7 @@ services:
       TZ: America/Sao_Paulo
       PGTZ: America/Sao_Paulo
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
@@ -18,7 +18,20 @@ services:
       timeout: 3s
       retries: 20
 
-  # Dia 2 (T10.2): qdrant (porta 6333) e erp-mcp (porta 8030)
+  erp-mcp:
+    build:
+      context: .
+      dockerfile: erp_mcp/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8030:8030"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Dia 2 (T10.2): qdrant (porta 6333)
   # Dia 3 (T10.2): painel (porta 8080)
   # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
   # Frente Gustavo: agents (porta 8000)

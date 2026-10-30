@@ -57,19 +57,19 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T6.2 (M) `002_agente.sql`: `incidentes` (`gatilho` e `previsao_snapshot` `jsonb` validados como array, `CHECK` de status com 4 valores, índice único parcial `WHERE status <> 'encerrado'` por talhão), `planos` (`criado_em`, `escalado_em`), `auditoria`.
 - [x] T6.3 (G) `900_seed.sql`: datas relativas a `now()` e fuso `America/Sao_Paulo`; só defensivos (`Abacus HC` e `Engeo Pleno S`); talhões com coordenadas de Rio Verde/GO; 2 pulverizadores (A e B); OS 1 do cenário na janela de 24 h (`Abacus HC`, `0,3 L/ha`, Pulverizador A, João) + OS 2 e OS 3 fora da janela (`+6 days` e `+8 days`); 96 leituras de solo. Sem ureia nem distribuidor.
 - [x] T6.4 (P) Borda do seed conferida (e coberta em `tests/test_db_migrations.py`): Pulverizador B 100% livre em toda a janela pós-chuva (`+36 h` a `+120 h`); estoque suficiente (`500 L >= 36 L`); dose e preço em `L`; `Abacus HC` alinhado ao cenário (confirmar `bula_id` final com Edison no dia 2).
-- [~] T6.5 (P) Validar: `docker compose down -v && docker compose up -d postgres` e rodar `uv run pytest tests/test_db_migrations.py` / `SELECT` no DBeaver (aguarda ligar o engine do Docker Desktop e liberar a porta `5432`, ocupada por `postgresql-x64-18` no Windows).
-- [~] T6.6 (P) Testar o índice único: teste automatizado pronto em `tests/test_db_migrations.py::test_indice_unico_parcial_incidente_por_talhao` (aguarda o container `postgres` subir).
+- [x] T6.5 (P) Validar: `docker compose down -v && docker compose up -d postgres` e rodar `uv run pytest tests/test_db_migrations.py` / `SELECT` no DBeaver (aguarda ligar o engine do Docker Desktop e liberar a porta `5432`, ocupada por `postgresql-x64-18` no Windows). Validado em 30/10 no container (porta 5433 no host, porque o Postgres do Windows ocupa a 5432; use `POSTGRES_PORT=5433`): 3 OS `agendada`, 1 na janela de 24 h, zero sobreposição.
+- [x] T6.6 (P) Testar o índice único: teste automatizado pronto em `tests/test_db_migrations.py::test_indice_unico_parcial_incidente_por_talhao` (aguarda o container `postgres` subir). Validado em 30/10 (`test_indice_unico_parcial_incidente_por_talhao`).
 
 ## 7. Servidor MCP do ERP
-- [ ] T7.1 (P) `db.py` e `registrar_auditoria` (`Jsonb`, conversão de `datetime`/`Decimal`).
-- [ ] T7.2 (M) `leitura.py`: `listar_os`, `detalhar_os`, `disponibilidade_maquinas` (sobreposição com `duracao_horas`), `listar_operadores`, `consultar_talhao`, `leituras_solo`. Chaves e retorno `{"ok": ...}` conforme T4.5.
-- [ ] T7.3 (P) `server.py` com FastMCP, `streamable-http`, porta 8030, docstrings em português. **Sem** `janelas_validas` (D4).
-- [ ] T7.4 (P) Testar no Inspector e com o Gustavo (`listar_os` pelo ADK). **Marco do dia 1.**
-- [ ] T7.5 (M) `escrita.py`: `suspender_os` com a transição no próprio `UPDATE` e auditoria na mesma transação.
-- [ ] T7.6 (M) `reagendar_os`, `alocar_maquina`, `reservar_estoque` com `_plano_aprovado`; máquina livre; estoque suficiente; segunda chamada com o mesmo plano falha.
-- [ ] T7.7 (P) Garantir que sem plano aprovado só passa `agendada → suspensa_preventiva`.
-- [ ] T7.8 (M) `pytest`: suspender OK; suspender de novo falha; reagendar sem plano falha; reservar acima do estoque falha; `alocar_maquina` ocupada falha; `reagendar_os` repetido falha; `listar_os` devolve as chaves do contrato.
-- [ ] T7.9 (P) Dockerfile do `erp_mcp` e bloco `erp-mcp` no compose (build a partir da raiz, se D3).
+- [x] T7.1 (P) `db.py` e `registrar_auditoria` (`Jsonb`, conversão de `datetime`/`Decimal`). `erp_mcp/db.py`.
+- [x] T7.2 (M) `leitura.py`: `listar_os`, `detalhar_os`, `disponibilidade_maquinas` (sobreposição com `duracao_horas`), `listar_operadores`, `consultar_talhao`, `leituras_solo`. Chaves e retorno `{"ok": ...}` conforme T4.5. Chaves do contrato 16; leituras devolvem lista/dict direto, erros `{"ok": false}`.
+- [x] T7.3 (P) `server.py` com FastMCP, `streamable-http`, porta 8030, docstrings em português. **Sem** `janelas_validas` (D4). 10 ferramentas, sem `janelas_validas`.
+- [~] T7.4 (P) Testar no Inspector e com o Gustavo (`listar_os` pelo ADK). **Marco do dia 1.** Validado programaticamente pelo protocolo (local e no container, porta 8030). **Falta:** testar com o `ErpMcp` do Gustavo e no MCP Inspector.
+- [x] T7.5 (M) `escrita.py`: `suspender_os` com a transição no próprio `UPDATE` e auditoria na mesma transação. `erp_mcp/escrita.py`; recusa também incidente inexistente.
+- [x] T7.6 (M) `reagendar_os`, `alocar_maquina`, `reservar_estoque` com `_plano_aprovado`; máquina livre; estoque suficiente; segunda chamada com o mesmo plano falha. Trava por `pg_advisory_xact_lock(plano_id)`; repetição de `reservar_estoque` detectada pela auditoria.
+- [x] T7.7 (P) Garantir que sem plano aprovado só passa `agendada → suspensa_preventiva`. Coberto por `test_sem_plano_aprovado_so_passa_a_suspensao`.
+- [x] T7.8 (M) `pytest`: suspender OK; suspender de novo falha; reagendar sem plano falha; reservar acima do estoque falha; `alocar_maquina` ocupada falha; `reagendar_os` repetido falha; `listar_os` devolve as chaves do contrato. 20 testes passando (`tests/test_erp_mcp.py`, `tests/test_db_migrations.py`, `tests/conftest.py` reseta o banco a cada teste).
+- [x] T7.9 (P) Dockerfile do `erp_mcp` e bloco `erp-mcp` no compose (build a partir da raiz, se D3). `erp_mcp/Dockerfile`, `.dockerignore` e bloco `erp-mcp` no compose; container validado.
 
 ## 8. Canal de notificação
 - [ ] T8.1 (P) BotFather: `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`; `chat_id` do operador no seed. Token só no `.env`.
