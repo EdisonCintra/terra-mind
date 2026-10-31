@@ -26,6 +26,14 @@ class RepositorioMonitor:
                      "WHERE talhao_id = :t AND status <> 'encerrado')"), {"t": talhao_id}
             ).scalar_one()
 
+    def incidente_sem_andamento(self, talhao_id: int) -> int | None:
+        """Incidente que o agents ainda não tirou de `aberto` (contrato 3)."""
+        with self.engine.connect() as conn:
+            return conn.execute(
+                text("SELECT id FROM agente.incidentes WHERE talhao_id = :t AND status = 'aberto'"),
+                {"t": talhao_id},
+            ).scalar_one_or_none()
+
     def criar_incidente(self, talhao_id: int, gatilhos: list[Gatilho], snapshot: list[HoraPrevisao]) -> int:
         with self.engine.begin() as conn:
             return conn.execute(

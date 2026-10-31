@@ -23,13 +23,11 @@ def engine_pg():
     from sqlalchemy import create_engine
     from testcontainers.community.postgres import PostgresContainer
 
-    felipe = (MIGRATIONS / "002_agente.sql").exists()
-    minimo = Path(__file__).parent / "sql" / "contrato_minimo.sql"
-    scripts = sorted(MIGRATIONS.glob("*.sql")) if felipe else [minimo]
     with PostgresContainer("postgres:16", driver="psycopg") as pg:
         engine = create_engine(pg.get_connection_url())
         with engine.begin() as conn:
-            for sql in scripts:
-                conn.exec_driver_sql(sql.read_text(encoding="utf-8"))
+            for sql in sorted(MIGRATIONS.glob("*.sql")):
+                # O driver trata "%" como parâmetro; os SQL têm "%" em comentários.
+                conn.exec_driver_sql(sql.read_text(encoding="utf-8").replace("%", "%%"))
         yield engine
         engine.dispose()

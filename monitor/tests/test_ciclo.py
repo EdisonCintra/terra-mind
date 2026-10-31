@@ -27,6 +27,7 @@ class FonteFalsa:
 class RepoFalso:
     def __init__(self, talhoes):
         self._talhoes, self.abertos, self.snapshots, self.gatilhos = talhoes, set(), {}, {}
+        self.sem_andamento = {}
 
     def talhoes(self, ids=None):
         return [t for t in self._talhoes if ids is None or t.id in ids]
@@ -34,9 +35,13 @@ class RepoFalso:
     def tem_incidente_aberto(self, talhao_id):
         return talhao_id in self.abertos
 
+    def incidente_sem_andamento(self, talhao_id):
+        return self.sem_andamento.get(talhao_id)
+
     def criar_incidente(self, talhao_id, gatilhos, snapshot):
         novo = len(self.snapshots) + 1
         self.abertos.add(talhao_id)
+        self.sem_andamento[talhao_id] = novo
         self.snapshots[novo], self.gatilhos[novo] = snapshot, gatilhos
         return novo
 
@@ -63,7 +68,24 @@ def test_abre_um_incidente_e_avisa():
 def test_segundo_ciclo_nao_duplica():
     repo, notif = RepoFalso([T1]), NotificadorFalso()
     executar_ciclo(FonteFalsa(), repo, notif, LIMIARES, AGORA)
+    repo.sem_andamento.clear()  # o agents já mudou o status
     assert executar_ciclo(FonteFalsa(), repo, notif, LIMIARES, AGORA).incidentes == []
+    assert notif.chamadas == [1] and len(repo.snapshots) == 1
+
+
+def test_incidente_sem_andamento_e_reavisado_sem_abrir_outro():
+    repo = RepoFalso([T1])
+    executar_ciclo(FonteFalsa(), repo, NotificadorFalso(quebrado=True), LIMIARES, AGORA)
+    notif = NotificadorFalso()
+    r = executar_ciclo(FonteFalsa(), repo, notif, LIMIARES, AGORA)
+    assert r.incidentes == [1] and r.erros == [] and notif.chamadas == [1] and len(repo.snapshots) == 1
+
+
+def test_reaviso_com_agents_ainda_fora_mostra_o_erro():
+    repo, notif = RepoFalso([T1]), NotificadorFalso(quebrado=True)
+    executar_ciclo(FonteFalsa(), repo, notif, LIMIARES, AGORA)
+    r = executar_ciclo(FonteFalsa(), repo, notif, LIMIARES, AGORA)
+    assert r.incidentes == [] and "notificar incidente 1" in r.erros[0] and len(repo.snapshots) == 1
 
 
 def test_snapshot_guarda_todas_as_horas():
@@ -102,7 +124,9 @@ def repo_pg(engine_pg):
 
     with engine_pg.begin() as conn:
         conn.execute(text("TRUNCATE agente.incidentes, erp.talhoes RESTART IDENTITY CASCADE"))
-        conn.execute(text("INSERT INTO erp.talhoes (nome, lat, lon) VALUES ('T1', -17.79, -50.92)"))
+        conn.execute(text("INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, "
+                          "estagio_fenologico, lat, lon) "
+                          "VALUES ('T1', 120, 'milho', current_date, 'V6', -17.79, -50.92)"))
     return RepositorioMonitor(engine_pg)
 
 
@@ -134,3 +158,10 @@ def test_pg_incidente_encerrado_nao_bloqueia(repo_pg, engine_pg):
     iid = repo_pg.criar_incidente(1, [], [])
     mudar_status(engine_pg, iid, "encerrado")
     assert repo_pg.tem_incidente_aberto(1) is False
+
+
+def test_pg_incidente_sem_andamento_so_com_status_aberto(repo_pg, engine_pg):
+    iid = repo_pg.criar_incidente(1, [], [])
+    assert repo_pg.incidente_sem_andamento(1) == iid
+    mudar_status(engine_pg, iid, "aguardando_aprovacao")
+    assert repo_pg.incidente_sem_andamento(1) is None

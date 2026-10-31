@@ -21,7 +21,8 @@ def engine():
         engine = create_engine(pg.get_connection_url())
         with engine.begin() as conn:
             for sql in sorted(MIGRATIONS.glob("*.sql")):
-                conn.exec_driver_sql(sql.read_text(encoding="utf-8"))
+                # O driver trata "%" como parâmetro; os SQL têm "%" em comentários.
+                conn.exec_driver_sql(sql.read_text(encoding="utf-8").replace("%", "%%"))
         yield engine
         engine.dispose()
 

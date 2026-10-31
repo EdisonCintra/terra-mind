@@ -54,8 +54,57 @@ services:
       - "6333:6333"
     volumes:
       - qdrantdata:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
-  # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
+  # Roda uma vez a cada subida: PDFs → Qdrant e YAML → Postgres. Refazer não duplica.
+  conhecimento-carga:
+    image: terramind-conhecimento
+    build:
+      context: .
+      dockerfile: base_agricola/Dockerfile
+    command: ["sh", "-c", "python -m base_agricola.ingest indexar && python -m base_agricola.ingest carregar-fatores"]
+    environment: &ambiente_conhecimento
+      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  conhecimento:
+    image: terramind-conhecimento
+    environment: *ambiente_conhecimento
+    ports:
+      - "8010:8010"
+    depends_on:
+      conhecimento-carga:
+        condition: service_completed_successfully
+
+  monitor:
+    build:
+      context: .
+      dockerfile: monitor/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
+      AGENTS_URL: http://agents:8000
+      MONITOR_MODE: ${MONITOR_MODE:-replay}
+      MONITOR_INTERVAL_MIN: ${MONITOR_INTERVAL_MIN:-30}
+      LIMIAR_CHUVA_MM: ${LIMIAR_CHUVA_MM:-20}
+      LIMIAR_VENTO_KMH: ${LIMIAR_VENTO_KMH:-15}
+      LIMIAR_UMIDADE_MIN_PCT: ${LIMIAR_UMIDADE_MIN_PCT:-50}
+      JANELA_RISCO_H: ${JANELA_RISCO_H:-48}
+    ports:
+      - "8020:8020"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agents:
+        condition: service_started
 
   agents:
     build:
@@ -74,6 +123,8 @@ services:
       postgres:
         condition: service_healthy
       erp-mcp:
+        condition: service_started
+      conhecimento:
         condition: service_started
 
 volumes:
