@@ -1,13 +1,2 @@
 {% extends "base.html" %}
 {% block titulo %}Ordens de serviço · TerraMind{% endblock %}
-{% block conteudo %}
-<h2>Ordens de serviço</h2>
-<table>
-  <thead>
-    <tr><th>Talhão</th><th>Operação</th><th>Início</th><th>Máquina</th><th>Status</th></tr>
-  </thead>
-  <tbody hx-get="/parcial/os" hx-trigger="every 2s" hx-swap="innerHTML">
-    {% include "_linhas_os.html" %}
-  </tbody>
-</table>
-{% endblock %}

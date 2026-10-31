@@ -1,11 +1,12 @@
 {% for os in ordens %}
 <tr>
-  <td>{{ os.talhao }}</td>
-  <td>{{ os.tipo_operacao|capitalize }}{% if os.produto %} · {{ os.produto }}{% endif %}</td>
-  <td>{{ os.inicio_previsto|hora }}</td>
-  <td>{{ os.maquina or "—" }}</td>
+  <td class="forte">{{ os.talhao }}</td>
+  <td>{{ {"pulverizacao": "Pulverização"}.get(os.tipo_operacao, os.tipo_operacao|capitalize) }}{% if os.produto %}<small>{{ os.produto }}</small>{% endif %}</td>
+  <td class="mono">{{ os.inicio_previsto|hora }}</td>
+  <td>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</td>
+  <td class="mono perda" data-os="{{ os.id }}">—</td>
   <td><span class="status {{ STATUS_OS.get(os.status, (os.status, 'executada'))[1] }}">{{ STATUS_OS.get(os.status, (os.status, ''))[0] }}</span></td>
 </tr>
 {% else %}
-<tr><td colspan="5" class="vazio">Nenhuma ordem de serviço.</td></tr>
+<tr><td colspan="6" class="vazio">Nenhuma ordem de serviço.</td></tr>
 {% endfor %}

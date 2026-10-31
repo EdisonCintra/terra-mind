@@ -1,12 +1,14 @@
 {% for p in planos %}
-<section class="plano">
+<section class="plano" data-incidente="{{ p.incidente_id }}" data-plano="{{ p.id }}">
   <div class="cabecalho">
-    Incidente #{{ p.incidente_id }} · {{ p.talhao }} · plano #{{ p.id }}
+    <span class="selo-aguardando">Aguardando aprovação</span>
+    <span class="codigo">INC-{{ "%04d"|format(p.incidente_id) }} · {{ p.talhao }} · plano #{{ p.id }}</span>
     {% if p.escalado_em %}<span class="selo-escalado">escalado</span>{% endif %}
   </div>
+  {# painel.js monta a versão em cartões a partir deste texto; se o formato mudar, o texto continua visível. #}
   <pre class="mensagem">{{ p.mensagem or "(plano sem mensagem)" }}</pre>
   <div class="botoes">
-    {% for resposta, rotulo, classe in [("SIM", "✅ SIM", "sim"), ("NAO", "❌ NÃO", "nao"), ("OPCOES", "🔎 Ver opções", "opcoes")] %}
+    {% for resposta, rotulo, classe in [("SIM", "SIM, executar plano", "sim"), ("OPCOES", "Ver opções", "opcoes"), ("NAO", "NÃO, decidir manualmente", "nao")] %}
     <button class="{{ classe }}" hx-post="/aprovacao/{{ p.incidente_id }}/{{ p.id }}/{{ resposta }}"
             hx-target="#resultado" hx-swap="innerHTML">{{ rotulo }}</button>
     {% endfor %}

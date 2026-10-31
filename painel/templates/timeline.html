@@ -1,19 +1,2 @@
 {% extends "base.html" %}
 {% block titulo %}Linha do tempo · TerraMind{% endblock %}
-{% block conteudo %}
-<h2>Linha do tempo do incidente</h2>
-{% if incidentes %}
-<div class="seletor">
-  {% for i in incidentes %}
-  <a href="/timeline?incidente={{ i.id }}" class="{{ 'ativa' if i.id == escolhido }}">
-    #{{ i.id }} · {{ i.talhao }} · {{ STATUS_INCIDENTE.get(i.status, i.status) }}
-  </a>
-  {% endfor %}
-</div>
-<div hx-get="/parcial/timeline?incidente={{ escolhido }}" hx-trigger="every 2s" hx-swap="innerHTML">
-  {% include "_eventos.html" %}
-</div>
-{% else %}
-<p class="vazio">Nenhum incidente ainda. Use "Simular chuva".</p>
-{% endif %}
-{% endblock %}
