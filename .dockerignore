@@ -8,3 +8,6 @@ __pycache__
 .ruff_cache
 docs
 tests
+.superpowers
+**/__pycache__
+**/.pytest_cache

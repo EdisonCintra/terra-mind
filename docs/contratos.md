@@ -25,6 +25,7 @@ Fonte única dos combinados entre as frentes: nomes, formatos, endereços e deci
 | D2 | **Foco só em defensivos agrícolas** (fungicida, herbicida, inseticida). Adubação sai do escopo: fertilizante não tem bula no Agrofit e a referência técnica não garante um limite de chuva citável. Cenário da demo: chuva intensa × pulverização de defensivo agendada | Edison, Gustavo, Felipe | 29/10 | Fechado |
 | D3 | Monorepo com **um ambiente Python na raiz** (`pyproject.toml` + `uv.lock`); cada serviço é uma pasta com código direto, sem pasta aninhada. A pasta da base de conhecimento se chama `base_agricola/`; schema, container e variável continuam `conhecimento` (obs.: `origin/feat/agents` foi aberta antes do PR #1 e alinhará no rebase/merge) | Edison, Gustavo, Felipe | 29/10 | Fechado |
 | D4 | `janelas_validas` é código determinístico em `agents/rules/` (Gustavo), não ferramenta do MCP | Gustavo | 29/10 | Fechado (spec) |
+| D5 | **Bulas da demo:** só defensivos cuja bula traz o limite de chuva escrito: Abacus HC (p. 7) e Ativum (p. 6), fungicidas BASF; Brucia (p. 9) e Amplexus (p. 5), herbicidas. **Produto da OS do cenário: Abacus HC** (registrado para soja e milho) | Edison | 30/10 | Proposto: aguarda ok do Felipe |
 
 ## Contratos
 
@@ -46,6 +47,8 @@ Números de 1 a 12 seguem o plano do Gustavo (consolidados com `origin/feat/agen
 | 14 | Botão "Simular chuva" | O painel chama `POST {MONITOR_URL}/replay` com `{"cenario": "chuva_80mm.json"}` e recebe `{"incidentes": [...], "erros": [...]}` (404 para cenário inexistente; 422 para caminho inválido) | Felipe, Edison | Fechado |
 | 15 | Tipo do insumo | `erp.insumos.tipo` ∈ {`fungicida`, `herbicida`, `inseticida`} (D2). `fatores_perda.tipo_insumo` usa exatamente esses valores, para o `calcular_impacto` buscar o fator com o tipo que vem do ERP | Felipe, Edison, Gustavo | Fechado |
 | 16 | Chaves lidas pelo `agents` no MCP | Validado contra `agents/nodes/contexto.py` e `agents/clientes/erp.py`: `listar_os` → `id` (chave da OS!), `talhao_id`, `status`, `tipo_operacao`, `insumo_id`, `produto`, `tipo_insumo` (`i.tipo AS tipo_insumo`), `dose_por_ha`, `unidade`, `preco_unitario`, `inicio_previsto`, `duracao_horas`, `maquina_id`, `maquina_tipo` (`m.tipo AS maquina_tipo`, opcional), `operador_id`, `talhao` (`t.nome AS talhao`), `area_ha`; `consultar_talhao` → `id`, `nome`, `cultura`, `estagio_fenologico`, `area_ha`, `lat`, `lon`, `tipo_solo`; `disponibilidade_maquinas` → máquinas `disponivel` sem OS `agendada`/`reagendada` sobreposta (`id`, `nome`, `tipo`, `status`); `listar_operadores` → `id`, `nome`, `telegram_chat_id` | Felipe, Gustavo | Fechado |
+
+| 16 | Variáveis dos serviços do Edison | `conhecimento`: `DATABASE_URL`, `QDRANT_URL`, `EMBEDDING_MODEL` (opcional). `monitor`: `DATABASE_URL`, `AGENTS_URL`, `MONITOR_MODE` (`replay` padrão, ou `live`), `MONITOR_INTERVAL_MIN` (30), `LIMIAR_CHUVA_MM` (20), `LIMIAR_VENTO_KMH` (15), `LIMIAR_UMIDADE_MIN_PCT` (50), `JANELA_RISCO_H` (48). `DATABASE_URL` aceita `postgresql://` ou `postgresql+psycopg://`. Ferramenta `buscar_trechos` (dentro do `agents`): `CONHECIMENTO_URL` | todos | Implementado |
 
 ## Pendências
 

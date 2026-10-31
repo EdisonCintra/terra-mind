@@ -1,0 +1,13 @@
+# Fração do valor aplicado (área × dose × preço) que se perde quando a condição viola a bula.
+# Toda linha tem fonte: "<doc_id>:p.<N>" ou "estimativa: <justificativa>" (contrato 11).
+# As bulas dizem que a chuva "pode afetar o desempenho", mas não dizem quanto: por isso os
+# valores abaixo são ESTIMATIVAS PARAMETRIZADAS e devem ser apresentados assim no pitch.
+fatores:
+  - tipo_insumo: fungicida
+    condicao: chuva
+    fator: 0.5
+    fonte_ou_estimativa: "estimativa: chuva até 4 h após a aplicação lava parte do produto da folha; a bula do Abacus HC (p. 7) e a do Ativum (p. 6) dizem que afeta o desempenho, sem quantificar"
+  - tipo_insumo: herbicida
+    condicao: chuva
+    fator: 0.5
+    fonte_ou_estimativa: "estimativa: chuva até 4 h após a aplicação reduz a eficiência; Brucia (p. 9) e Amplexus (p. 5) não quantificam a perda"
