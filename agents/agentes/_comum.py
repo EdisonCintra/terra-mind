@@ -29,6 +29,11 @@ devolverem."""
 # Mensagem que o nó anterior passa como entrada do agente; o contexto real está na instrução.
 ENTRADA_LLM = "Execute a tarefa descrita nas instruções."
 
+# Rodadas de ferramenta por execução do agente. Na última o modelo só pode responder; depois dela,
+# falha (a mesma marca de um erro do modelo).
+MAX_RODADAS_FERRAMENTA = 6
+SAIDA_FINAL = "set_model_response"  # ferramenta que o ADK acrescenta para a resposta no schema
+
 
 def j(valor: Any) -> str:
     return json.dumps(valor, ensure_ascii=False, indent=1, default=str)
@@ -89,6 +94,8 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
       (`after_model_callback`) viram `saida_vazia`. Para agentes com `schema`, o motivo vai também
       para `state["falha_<agente>"]`, que o nó de roteamento seguinte lê para decidir (decisão A5);
       agentes de texto só seguem com a `saida_vazia`.
+    - Loop de ferramentas (`before_model_callback`): depois de `MAX_RODADAS_FERRAMENTA` rodadas o
+      modelo só pode responder; se ainda chamar ferramenta, vira `saida_vazia` como acima.
     """
     chave = chave_falha(nome_agente)
 
@@ -96,6 +103,28 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
         if schema is not None:
             callback_context.state[chave] = motivo
         return _resposta(saida_vazia)
+
+    async def limitar_rodadas(callback_context, llm_request):
+        # Com `include_contents="none"`, `contents` traz só esta execução do agente.
+        rodadas = sum(
+            1
+            for c in llm_request.contents or []
+            if c.role == "model" and any(p.function_call for p in c.parts or [])
+        )
+        if rodadas > MAX_RODADAS_FERRAMENTA:
+            return _marcar(callback_context, f"{rodadas} rodadas de ferramenta sem resposta final")
+        if rodadas == MAX_RODADAS_FERRAMENTA:
+            for tool in llm_request.config.tools or []:
+                tool.function_declarations = [
+                    d for d in tool.function_declarations or [] if d.name == SAIDA_FINAL
+                ]
+            llm_request.config.tools = [
+                t for t in llm_request.config.tools or [] if t.function_declarations
+            ] or None
+            llm_request.append_instructions(
+                ["Você já consultou o suficiente. Não busque mais nada: dê agora a resposta final."]
+            )
+        return None
 
     async def ferramenta_errou(tool, args, tool_context, error):
         logger.warning("ferramenta %s falhou: %s", tool.name, error)
@@ -120,6 +149,7 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
         return None
 
     return {
+        "before_model_callback": limitar_rodadas,
         "on_tool_error_callback": ferramenta_errou,
         "on_model_error_callback": modelo_errou,
         "after_model_callback": conferir_resposta,

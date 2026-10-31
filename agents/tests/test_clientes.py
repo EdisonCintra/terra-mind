@@ -95,6 +95,15 @@ def test_workflow_monta_com_litellm_da_openai():
     settings = Settings(_env_file=None, openai_api_key="sk-teste", model_supervisor="openai/gpt-4o-mini")
     modelo = criar_modelo(settings, "supervisor")
     assert isinstance(modelo, LiteLlm) and modelo.model == "openai/gpt-4o-mini"
+    # Sem isso o ADK manda response_format junto com as ferramentas e o Avaliador entra em loop.
+    assert modelo.capabilities.output_schema_and_tools is False
+    assert modelo._additional_args["reasoning_effort"] == "low"
+    assert (
+        "reasoning_effort"
+        not in criar_modelo(
+            settings.model_copy(update={"reasoning_effort": None}), "supervisor"
+        )._additional_args
+    )
     c = montar_cenario()
     c.deps.settings, c.deps.modelos = settings, {}
     assert criar_app(c.deps).root_agent.name == "incidente"

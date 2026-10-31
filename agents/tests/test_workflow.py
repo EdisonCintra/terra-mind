@@ -132,6 +132,40 @@ async def test_avaliacao_sem_citacao_e_tratada_como_falha():
     assert "runner:falha_interna" not in c.repo.acoes()
 
 
+async def test_avaliador_em_loop_de_ferramenta_para_e_nao_suspende():
+    from agents.agentes._comum import MAX_RODADAS_FERRAMENTA
+
+    sempre_busca = chamar("buscar_trechos", consulta="chuva", produto="Abacus HC")
+    c = montar_cenario(modelos_padrao(avaliador=[sempre_busca]))
+    await iniciar(c)
+    # O fake chama buscar_trechos até na rodada em que ela já não é oferecida; a seguinte vira falha.
+    assert len(c.conhecimento.buscas) == MAX_RODADAS_FERRAMENTA + 1
+    assert c.erp.status(1) == "agendada"
+    assert c.repo.incidentes[7].status == "aguardando_decisao_manual"
+    assert "avaliador:avaliacao_falhou" in c.repo.acoes()
+    assert "runner:falha_interna" not in c.repo.acoes()
+
+
+async def test_avaliador_na_ultima_rodada_so_pode_responder():
+    from agents.agentes._comum import MAX_RODADAS_FERRAMENTA
+
+    ferramentas_por_chamada = []
+
+    def busca_ate_ficar_sem_ferramenta(req):
+        nomes = [d.name for t in req.config.tools or [] for d in t.function_declarations or []]
+        ferramentas_por_chamada.append(nomes)
+        if "buscar_trechos" in nomes:
+            return chamar("buscar_trechos", consulta="chuva", produto="Abacus HC")
+        return avaliacao_violando()
+
+    c = montar_cenario(modelos_padrao(avaliador=[busca_ate_ficar_sem_ferramenta]))
+    await iniciar(c)
+    assert len(ferramentas_por_chamada) == MAX_RODADAS_FERRAMENTA + 1
+    assert "buscar_trechos" not in ferramentas_por_chamada[-1]
+    assert "avaliador:avaliar_risco" in c.repo.acoes()
+    assert c.erp.status(1) == "suspensa_preventiva"
+
+
 async def test_sem_violacao_encerra_sem_mexer_na_os():
     nao_viola = {"violacoes": [{"os_id": 1, "viola": False, "justificativa": "documento não traz limite"}]}
     c = montar_cenario(modelos_padrao(avaliador=roteiro_avaliador(nao_viola)))

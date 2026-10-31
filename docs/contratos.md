@@ -16,7 +16,7 @@ Fonte única dos combinados entre as frentes: nomes, formatos, endereços e deci
 |---|---|---|---|---|
 | A1 | Composição usa `Workflow` (grafo do ADK 2.x). `SequentialAgent`, `ParallelAgent` e `LoopAgent` estão `@deprecated` no `google-adk` 2.13 (impacto só na frente do Gustavo) | Gustavo | 29/10 | Fechado |
 | A2 | Aprovação emite `RequestInput(interrupt_id="aprovacao:{plano_id}")` e retoma com `FunctionResponse(name="adk_request_input", id="aprovacao:{plano_id}")` na mesma sessão; callback precisa só de `incidente_id` e `plano_id` | Gustavo | 29/10 | Fechado |
-| A3 | Modelos da OpenAI direto via `LiteLlm` (formato `openai/<modelo>`, chave `OPENAI_API_KEY`, padrão `openai/gpt-4o-mini`; sem OpenRouter), com uma variável por agente: `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR` | Gustavo | 29/10 | Fechado |
+| A3 | Modelos da OpenAI direto via `LiteLlm` (formato `openai/<modelo>`, chave `OPENAI_API_KEY`, padrão `openai/gpt-6-luna` com `REASONING_EFFORT=low`; sem OpenRouter), com uma variável por agente: `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR` | Gustavo | 29/10 | Fechado |
 | A4 | O Avaliador de Risco é um LLM e decide a violação a partir dos trechos do Qdrant (`buscar_trechos`), citando fonte e página | Gustavo | 29/10 | Fechado |
 | A5 | Se o Avaliador falhar ou não achar evidência, a OS **não** é suspensa: o gerente é alertado e o incidente fica em `aguardando_decisao_manual` | Gustavo | 29/10 | Fechado |
 | A6 | `janelas_validas` é uma função determinística em `agents/rules/`, dona: Gustavo (= D4) | Gustavo | 29/10 | Fechado |

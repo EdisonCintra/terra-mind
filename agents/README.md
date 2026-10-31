@@ -102,7 +102,8 @@ uv run adk run agents/agentes/supervisor      # um agente sozinho
 | `ERP_MCP_URL` | `http://localhost:8030/mcp` | MCP do Felipe |
 | `CONHECIMENTO_URL` | `http://localhost:8010` | API do Edison |
 | `OPENAI_API_KEY` | — | Chave da API da OpenAI |
-| `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR` | `openai/gpt-4o-mini` | Formato `openai/<modelo>`; trocar um agente por vez se precisar de mais qualidade |
+| `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR` | `openai/gpt-6-luna` | Formato `openai/<modelo>`; trocar um agente por vez se precisar de mais qualidade |
+| `REASONING_EFFORT` | `low` | Raciocínio dos quatro agentes. O `gpt-6-luna` não aceita `minimal`; `none` desliga. Vazio = padrão do modelo |
 | `CHANNEL` | `painel` | `telegram` ou `painel` |
 | `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID` | — | Lidas pelo `channels` do Felipe |
 | `APPROVAL_TIMEOUT_MIN` | `30` | Escalonamento de plano sem resposta (uma vez) |
