@@ -8,10 +8,11 @@ INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, estagio_fenologic
     ('Talhão 2 - Baixada',  85.50, 'soja',  current_date - 45, 'R1', -17.810000, -50.900000, 'latossolo');
 
 -- Só defensivos agrícolas (D2 / contrato 15).
--- Contrato 1: conferir com o `fontes.yaml` do Edison o texto exato de `produto` e `bula_id`.
+-- Contrato 1: `produto` e `bula_id` iguais ao `fontes.yaml` do Edison (`id: bula-abacus-hc`, `produto: Abacus HC`).
+-- Engeo Pleno S não tem bula no `fontes.yaml` (e não há fator de perda para inseticida): `bula_id` NULL; só aparece na OS 3, fora da janela de risco.
 INSERT INTO erp.insumos (produto, tipo, unidade, preco_unitario, estoque, bula_id) VALUES
-    ('Abacus HC',     'fungicida',  'L', 185.00, 500.00, 'abacus_hc'),
-    ('Engeo Pleno S', 'inseticida', 'L', 210.00, 300.00, 'engeo_pleno_s');
+    ('Abacus HC',     'fungicida',  'L', 185.00, 500.00, 'bula-abacus-hc'),
+    ('Engeo Pleno S', 'inseticida', 'L', 210.00, 300.00, NULL);
 
 -- Dois pulverizadores disponíveis: A atende a OS agendada; B está 100% livre para qualquer janela de remarcação.
 INSERT INTO erp.maquinas (nome, tipo, status) VALUES
