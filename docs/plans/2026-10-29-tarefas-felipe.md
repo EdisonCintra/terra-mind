@@ -93,10 +93,10 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 
 ## 10. docker-compose
 - [x] T10.1 (P) Dia 1: compose só com `postgres` (healthcheck, volume, migrations e fuso `America/Sao_Paulo` em `docker-compose.yml`).
-- [~] T10.2 (P) Dia 2: `erp-mcp` e `qdrant`. Dia 3: `painel`. Feitos `erp-mcp` e `painel`; falta o `qdrant` (será adicionado com os blocos do Edison).
-- [ ] T10.3 (P) Deixar comentários para `agents`, `conhecimento` e `monitor`; cada dono acrescenta o seu bloco.
+- [x] T10.2 (P) Dia 2: `erp-mcp` e `qdrant`. Dia 3: `painel`. Os três no compose; `qdrant` com volume `qdrantdata` (porta 6333).
+- [x] T10.3 (P) Deixar comentários para `agents`, `conhecimento` e `monitor`; cada dono acrescenta o seu bloco.
 - [x] T10.4 (P) `.env.example` com `DATABASE_URL`, `ERP_MCP_URL`, `CONHECIMENTO_URL`, `AGENTS_URL`, `MONITOR_URL`, `QDRANT_URL`, `OPENAI_API_KEY` (A3 do Gustavo, padrão `openai/gpt-4o-mini` nas quatro `MODEL_*`), `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`, `CHANNEL`, `MONITOR_MODE`, `APPROVAL_TIMEOUT_MIN`, `PYTHONUTF8=1` (entregue junto com a T5.2).
-- [ ] T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço.
+- [~] T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço. Prontos `erp_mcp` e `painel` (contexto na raiz, D3). Faltam conferir `base_agricola`, `monitor` (Edison) e `agents` (Gustavo) no merge.
 - [ ] T10.6 (M) Dia 6: deploy na VM do GCP com o Edison; cópia local idêntica; `docker compose up` do zero nas duas.
 
 ## 11. Plano dia a dia

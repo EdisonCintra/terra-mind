@@ -44,10 +44,17 @@ services:
       postgres:
         condition: service_healthy
 
-  # Dia 2 (T10.2): qdrant (porta 6333)
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
   # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
   # Frente Gustavo: agents (porta 8000)
 
 volumes:
   pgdata:
+  qdrantdata:
 
