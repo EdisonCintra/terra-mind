@@ -4,6 +4,12 @@ Agente que protege operações agrícolas agendadas contra eventos climáticos e
 
 Monorepo com um serviço por pasta. Planos de implementação em [docs/plans/](docs/plans/).
 
+Contratos entre as frentes: [docs/contratos.md](docs/contratos.md).
+
+## Agentes e integração (frente do Gustavo)
+
+Serviço **`agents`** (porta 8000): o workflow ADK do incidente, do contexto à execução do plano aprovado. Detalhes, comandos e variáveis em [agents/README.md](agents/README.md).
+
 ## Conhecimento e clima (frente do Edison)
 
 Dois serviços: **`conhecimento`** (pasta `base_agricola/`, porta 8010), que guarda os trechos das bulas no Qdrant e os fatores de perda no Postgres, e **`monitor`** (porta 8020), que compara a previsão do tempo com limiares e abre incidentes.

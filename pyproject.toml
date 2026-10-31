@@ -18,6 +18,13 @@ dependencies = [
     "sqlalchemy>=2.1.6",
     "typer>=0.27.3",
     "uvicorn[standard]>=0.54.0",
+    # agents (frente do Gustavo)
+    "google-adk[db]>=2.13,<3",
+    "litellm>=1.84,<1.103",  # 1.103+ exige mcp 2.x; o mcp está em 1.x (contrato 4)
+    "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "asyncpg>=0.29",
+    "tzdata>=2024.1",
 ]
 
 [tool.uv]
@@ -27,6 +34,7 @@ package = false
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = ["pg: precisa de Docker para subir um Postgres (testcontainers)"]
 
 [dependency-groups]
 dev = [

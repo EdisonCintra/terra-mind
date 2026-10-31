@@ -52,7 +52,25 @@ services:
       - qdrantdata:/qdrant/storage
 
   # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
-  # Frente Gustavo: agents (porta 8000)
+
+  agents:
+    build:
+      context: .
+      dockerfile: agents/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://terramind:terramind@postgres:5432/terramind
+      ERP_MCP_URL: http://erp-mcp:8030/mcp
+      CONHECIMENTO_URL: http://conhecimento:8010
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      erp-mcp:
+        condition: service_started
 
 volumes:
   pgdata:

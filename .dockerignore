@@ -11,3 +11,5 @@ tests
 .superpowers
 **/__pycache__
 **/.pytest_cache
+**/.adk
+**/tests

@@ -16,5 +16,8 @@ __pycache__/
 .idea/
 .vscode/
 
-#Claude
-.claude 
+# Sessões locais do adk web / adk run
+.adk/
+
+# Claude
+.claude
