@@ -25,6 +25,8 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      DATABASE_URL: postgresql://terramind:terramind@postgres:5432/terramind
     ports:
       - "8030:8030"
     depends_on:
@@ -38,6 +40,8 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      DATABASE_URL: postgresql://terramind:terramind@postgres:5432/terramind
     ports:
       - "8080:8080"
     depends_on:

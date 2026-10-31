@@ -22,11 +22,23 @@ def criar_modelo(settings: Settings, agente: NomeAgente) -> BaseLlm:
     A chave vai explícita porque o `Settings` também lê o `.env`, que o LiteLLM não enxerga.
     Timeout e novas tentativas ficam no cliente: o agente roda como nó do grafo, e o que ainda
     falhar vira a marca de falha das proteções do agente.
+
+    `output_schema_and_tools=False`: com `response_format` e ferramentas na mesma requisição, o
+    gpt-4o-mini repete as chamadas de ferramenta e nunca dá a resposta final (o Avaliador ficou em
+    loop). Assim o ADK manda só as ferramentas e acrescenta `set_model_response` para a saída no schema.
     """
+    from google.adk.models._capabilities import LlmCapabilities
     from google.adk.models.lite_llm import LiteLlm
 
+    class LiteLlmSemSchemaComFerramentas(LiteLlm):
+        @property
+        def capabilities(self) -> LlmCapabilities:
+            return LlmCapabilities(**super().capabilities.model_dump() | {"output_schema_and_tools": False})
+
     extra = {"api_key": settings.openai_api_key} if settings.openai_api_key else {}
-    return LiteLlm(
+    if settings.reasoning_effort:
+        extra["reasoning_effort"] = settings.reasoning_effort
+    return LiteLlmSemSchemaComFerramentas(
         model=settings.modelo(agente),
         timeout=settings.timeout_llm_s,
         num_retries=settings.tentativas_llm,

@@ -22,10 +22,13 @@ class Settings(BaseSettings):
 
     # Modelos da OpenAI pelo LiteLLM, no formato `openai/<modelo>`.
     openai_api_key: str | None = None
-    model_avaliador: str = "openai/gpt-4o-mini"
-    model_agronomico: str = "openai/gpt-4o-mini"
-    model_operacional: str = "openai/gpt-4o-mini"
-    model_supervisor: str = "openai/gpt-4o-mini"
+    model_avaliador: str = "openai/gpt-6-luna"
+    model_agronomico: str = "openai/gpt-6-luna"
+    model_operacional: str = "openai/gpt-6-luna"
+    model_supervisor: str = "openai/gpt-6-luna"
+    # Esforço de raciocínio dos quatro agentes. O gpt-6-luna não aceita "minimal": o menor é "low"
+    # ("none" desliga o raciocínio). Vazio = o padrão do modelo (para modelos sem raciocínio).
+    reasoning_effort: str | None = "low"
 
     channel: Literal["telegram", "painel"] = "painel"
 
