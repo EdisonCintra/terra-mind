@@ -25,4 +25,15 @@ def banco_limpo():
             " erp.insumos, erp.talhoes, agente.auditoria, agente.planos, agente.incidentes"
             " RESTART IDENTITY CASCADE"
         )
+        # Os ids dos incidentes recomeçam em 1; sem limpar as sessões do ADK (criadas pelo `agents`),
+        # o próximo `incidente-1` reaproveitaria uma sessão antiga e o fluxo não rodaria.
+        sessoes = [
+            f"agente.{linha[0]}"
+            for linha in conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'agente'"
+                " AND table_name IN ('events', 'sessions', 'app_states', 'user_states')"
+            ).fetchall()
+        ]
+        if sessoes:
+            conn.execute(f"TRUNCATE {', '.join(sessoes)} CASCADE")
         conn.execute(SEED.read_text(encoding="utf-8"))

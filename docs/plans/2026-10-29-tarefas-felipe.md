@@ -76,7 +76,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T8.2 (M) `channels/base.py`: `Resposta` (valida SIM/NAO/OPCOES), `AoResponder`, `NotificationChannel` (com `iniciar()` e `parar()` padrão, que o `agents` chama) e `criar_canal` (import tardio de `channels.telegram` e `channels.painel`). 6 testes em `tests/test_channels_base.py`. `criar_canal("painel")` só funciona depois da T8.8 e o `"telegram"` depois da T8.3.
 - [x] T8.3 (G) `telegram.py`: botões, `callback_data` curto, `query.answer()`, remoção dos botões, `iniciar()`/`parar()`, `enviar_alerta`, `notificar_operador`. 12 testes sem rede em `tests/test_channels_telegram.py`.
 - [x] T8.4 (P) `channels/teste_bot.py` com `ao_responder` falso (`uv run python -m channels.teste_bot`). Validado no Telegram real em 30/10: clique em SIM chegou ao `ao_responder`.
-- [ ] T8.5 (G) **Dia 2, com o Gustavo:** SIM no Telegram retoma a sessão num processo reiniciado (maior risco técnico).
+- [x] T8.5 (G) **Dia 2, com o Gustavo:** SIM no Telegram retoma a sessão num processo reiniciado (maior risco técnico). **Validado em 31/10:** cenário real (OpenAI `gpt-6-luna` + Telegram). (1) Sem reinício: "Ver opções" (replanejou 06:00 → 07:00) e SIM; OS 1 reagendada, estoque 500 → 464 L, incidente encerrado, aviso ao operador recebido. (2) Com reinício: plano pendente no Telegram, `docker compose restart agents`, SIM no botão da mensagem antiga; a sessão do ADK retomou no Postgres e o Executor rodou (`reagendar_os` e `reservar_estoque`), sem erro nem `Conflict`.
 - [x] T8.6 (P) Resposta repetida (409): `DecisaoJaRegistrada` em `channels/base.py`; o Telegram mostra "decisão já registrada", sem erro. **Falta o ok do Gustavo**: o `ao_responder` dele precisa lançar essa exceção (registrado no contrato 6/7).
 - [x] T8.7 (P) Um único polling por token: `TelegramChannel` loga uma mensagem clara no `Conflict`, aviso no `.env.example`. Falta só enviar o aviso ao grupo (texto abaixo).
   > Aviso ao time: cada token só aceita UM processo em polling. Não rode o `agents` com `CHANNEL=telegram` e o `teste_bot` (ou outro `agents`, ou a VM) ao mesmo tempo com o mesmo token; senão aparece `Conflict: terminated by other getUpdates request`. Um bot por pessoa/ambiente, ou `CHANNEL=painel` nos demais.
@@ -141,7 +141,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 
 ## Resumo do que falta (31/10)
 
-Concluídas em 31/10: T4.1, T4.2, T4.8 e T7.4.
+Concluídas em 31/10: T4.1, T4.2, T4.8, T7.4 e T8.5.
 
 Legenda: `[ ]` não feita · `[~]` meia feita · `[-]` cancelada. Tudo o que não aparece aqui está `[x]`.
 
@@ -161,7 +161,6 @@ A T11.2 (roteiro do pitch) saiu da lista do Felipe: o pitch não é com ele.
 
 | Tarefa | Resumo | Quando | Depende de |
 |---|---|---|---|
-| T8.5 (G) | SIM no Telegram retoma a sessão num processo reiniciado (**maior risco técnico**) | Atrasada (dia 2) | Gustavo; `OPENAI_API_KEY` (ou `DEMO_LLM=fake`) |
 | T12.1 | Prática contínua (testes junto, nomes conferidos contra `contratos.md`, conferir no banco); marcar ao fechar o projeto | Contínua | — |
 
 ### Resolvido em 31/10 (pendências deixadas pelo Edison no contrato)
@@ -170,9 +169,9 @@ A T11.2 (roteiro do pitch) saiu da lista do Felipe: o pitch não é com ele.
 - `AGENTS_URL` e `MONITOR_URL` no `environment` do `painel` no compose.
 - `.env.example` com `CHANNEL=painel`; o `TelegramChannel` sem token ou `chat_id` falha com mensagem clara.
 
-### Bloqueio atual (Gustavo)
+### Teste de ponta a ponta (31/10)
 
-- Em 31/10, o Avaliador entrou em laço de `buscar_trechos` (mais de 500 chamadas, sem resposta final) com `gpt-4o-mini`: o incidente 1 ficou `aberto`. Falta um limite de chamadas por agente (`max_llm_calls`) e levar o caso a `aguardando_decisao_manual`. Sem isso, T8.5, T11.3 e T11.5 não rodam de ponta a ponta.
+O laço do Avaliador e o erro de `datetime` do Supervisor foram corrigidos pelo Gustavo. Rodando o cenário real (Telegram + OpenAI): Avaliador com 5 buscas e citação da bula (p. 7), OS suspensa, perda de R$ 3.330, plano no Telegram, "Ver opções" e SIM, execução pelo MCP e aviso ao operador. Para repetir, o banco precisa ser zerado (um incidente fora de `encerrado` bloqueia o Talhão 1) e os testes de `tests/` também zeram o banco do compose.
 
 ### Ações imediatas do Felipe
 
