@@ -1,0 +1,35 @@
+# Documentos indexados no Qdrant. `arquivo` é relativo a esta pasta.
+# `produto` tem que ser escrito igual a erp.insumos.produto (contrato 1).
+# Bulas baixadas da ADAPAR (cópia das bulas aprovadas pelo MAPA) em 30/10/2026.
+fontes:
+  - id: bula-abacus-hc
+    titulo: Bula Abacus HC (BASF, reg. MAPA 9210)
+    tipo_doc: bula
+    produto: Abacus HC
+    culturas: [soja, milho]
+    arquivo: docs/abacus_hc.pdf
+    url: https://www.adapar.pr.gov.br/sites/adapar/arquivos_restritos/files/documento/2026-08/abacus_hc.pdf
+
+  - id: bula-ativum
+    titulo: Bula Ativum (BASF, reg. MAPA 11216)
+    tipo_doc: bula
+    produto: Ativum
+    culturas: [soja]
+    arquivo: docs/ativum.pdf
+    url: https://www.adapar.pr.gov.br/sites/adapar/arquivos_restritos/files/documento/2026-07/ativum.pdf
+
+  - id: bula-brucia
+    titulo: Bula Brucia (ISK)
+    tipo_doc: bula
+    produto: Brucia
+    culturas: [milho, soja]
+    arquivo: docs/brucia.pdf
+    url: https://www.adapar.pr.gov.br/sites/adapar/arquivos_restritos/files/documento/2026-08/brucia.pdf
+
+  - id: bula-amplexus
+    titulo: Bula Amplexus (BASF)
+    tipo_doc: bula
+    produto: Amplexus
+    culturas: [soja]
+    arquivo: docs/amplexus.pdf
+    url: https://www.adapar.pr.gov.br/sites/adapar/arquivos_restritos/files/documento/2026-07/amplexus.pdf
