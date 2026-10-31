@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titulo %}Aprovação · TerraMind{% endblock %}
+{% block conteudo %}
+<h2>Aprovação pendente</h2>
+<div id="resultado" aria-live="polite"></div>
+<div hx-get="/parcial/pendentes" hx-trigger="every 2s" hx-swap="innerHTML">
+  {% include "_pendentes.html" %}
+</div>
+{% endblock %}

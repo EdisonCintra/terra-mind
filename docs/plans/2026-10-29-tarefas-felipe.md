@@ -84,16 +84,16 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T8.9 (P) Textos em `channels/mensagens.py`: `alerta_decisao_manual(motivo, incidente_id)` (motivos `sem_evidencia`, `avaliador_falhou`, `validador_reprovou`, `nao`, `opcoes_esgotadas`) e `alerta_escalonamento(incidente_id, plano_id, minutos)`. O `agents` passa o texto a `enviar_alerta`; `escalado_em` é gravado por ele. **Avisar o Gustavo** para usar essas funções.
 
 ## 9. Painel web
-- [ ] T9.1 (M) FastAPI + Jinja2 + HTMX local (`static/`), sem CDN, sem login.
-- [ ] T9.2 (M) Tela 1, OS: atualização a cada 2 s, status colorido, fonte grande (dia 3).
-- [ ] T9.3 (M) Tela 2, linha do tempo: auditoria, antes → depois, justificativa e citação (fonte e página) da suspensão (dia 4).
-- [ ] T9.4 (M) Tela 3, aprovação pendente: botões SIM/NÃO/Ver opções, 409 tratado, selo "escalado", alerta vermelho para `aguardando_decisao_manual` (dia 4).
-- [ ] T9.5 (P) Tela 4, "Simular chuva": `POST {MONITOR_URL}/replay`; mostrar `incidentes` e `erros` sem quebrar a página (dia 4).
-- [ ] T9.6 (P) Dockerfile do `painel` e bloco no compose.
+- [x] T9.1 (M) `painel/main.py` (FastAPI + Jinja2) com `htmx.min.js` 2.0.4 em `painel/static/`, sem CDN nem login. Rotas `/`, `/os`, `/parcial/os`, `/health`. Rodar local: `uv run uvicorn painel.main:app --port 8080`.
+- [x] T9.2 (M) Tela 1, OS: `hx-trigger="every 2s"`, status colorido (verde agendada, amarelo suspensa, azul reagendada), fundo escuro e fonte grande. 5 testes em `tests/test_painel.py`.
+- [x] T9.3 (M) Tela 2, `/timeline`: auditoria do incidente (o mais recente por padrão, `?incidente=` troca), atualizada a cada 2 s; mostra `campo: antes → depois` e destaca a citação `(fonte: X, p. N)` do motivo como selo. O formato vem de `acao_preventiva.py` do Gustavo (`origin/feat/agents`).
+- [x] T9.4 (M) Tela 3, `/aprovacao`: planos com `respondido_em IS NULL` (mensagem de `opcoes_json->>'mensagem'`), botões SIM/NÃO/Ver opções que chamam `POST {AGENTS_URL}/incidentes/{id}/resposta`; 409 vira aviso "decisão já registrada"; selo "escalado"; faixa vermelha (`/parcial/alertas`, em todas as telas) para `aguardando_decisao_manual`.
+- [x] T9.5 (P) Tela 4, `/simular`: `POST {MONITOR_URL}/replay` com `chuva_80mm.json`; mostra `incidentes` e `erros`; 404, 422 e Monitor fora do ar viram mensagem. **Falta ensaiar contra o Monitor real do Edison.**
+- [x] T9.6 (P) `painel/Dockerfile` (contexto na raiz) e bloco `painel` no compose; validado em container na porta 8080.
 
 ## 10. docker-compose
 - [x] T10.1 (P) Dia 1: compose só com `postgres` (healthcheck, volume, migrations e fuso `America/Sao_Paulo` em `docker-compose.yml`).
-- [ ] T10.2 (P) Dia 2: `erp-mcp` e `qdrant`. Dia 3: `painel`.
+- [~] T10.2 (P) Dia 2: `erp-mcp` e `qdrant`. Dia 3: `painel`. Feitos `erp-mcp` e `painel`; falta o `qdrant` (será adicionado com os blocos do Edison).
 - [ ] T10.3 (P) Deixar comentários para `agents`, `conhecimento` e `monitor`; cada dono acrescenta o seu bloco.
 - [x] T10.4 (P) `.env.example` com `DATABASE_URL`, `ERP_MCP_URL`, `CONHECIMENTO_URL`, `AGENTS_URL`, `MONITOR_URL`, `QDRANT_URL`, `OPENAI_API_KEY` (A3 do Gustavo, padrão `openai/gpt-4o-mini` nas quatro `MODEL_*`), `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`, `CHANNEL`, `MONITOR_MODE`, `APPROVAL_TIMEOUT_MIN`, `PYTHONUTF8=1` (entregue junto com a T5.2).
 - [ ] T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço.

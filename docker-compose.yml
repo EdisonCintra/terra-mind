@@ -31,8 +31,20 @@ services:
       postgres:
         condition: service_healthy
 
+  painel:
+    build:
+      context: .
+      dockerfile: painel/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # Dia 2 (T10.2): qdrant (porta 6333)
-  # Dia 3 (T10.2): painel (porta 8080)
   # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
   # Frente Gustavo: agents (porta 8000)
 

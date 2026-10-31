@@ -1,0 +1,10 @@
+{% macro item(x) -%}
+{%- if x is mapping -%}{% for k, v in x.items() %}{{ k }}: {{ v }}{{ "; " if not loop.last }}{% endfor %}{%- else -%}{{ x }}{%- endif -%}
+{%- endmacro %}
+{% if falha %}
+<div class="mensagem-erro">{{ falha }}</div>
+{% else %}
+<div class="mensagem-ok">Replay executado: {{ incidentes|length }} incidente(s), {{ erros|length }} erro(s).</div>
+{% for i in incidentes %}<div class="linha-sim">Incidente · {{ item(i) }}</div>{% endfor %}
+{% for e in erros %}<div class="linha-sim erro">Erro · {{ item(e) }}</div>{% endfor %}
+{% endif %}
