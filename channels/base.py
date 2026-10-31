@@ -54,7 +54,7 @@ class NotificationChannel(ABC):
 
     @abstractmethod
     async def pedir_aprovacao(self, incidente_id: int, plano_id: int, texto: str) -> None:
-        """Mensagem com as opções SIM / NÃO / Ver opções."""
+        """Mensagem com os botões Aceitar Proposta / Recusar Proposta / Ver próxima opção."""
 
     @abstractmethod
     async def notificar_operador(self, chat_id: int, texto: str) -> None:

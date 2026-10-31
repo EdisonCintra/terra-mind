@@ -51,8 +51,9 @@ async def test_fluxo_completo_com_sim():
     [(incidente_id, plano_id, texto)] = c.canal.aprovacoes
     assert (incidente_id, plano_id) == (7, 1)
     assert "R$ 3.330,00" in texto  # 120 ha × 0,3 L/ha × R$ 185 × 0,5, montado em código
-    assert "bula-abacus-hc, p. 7" in texto
-    assert "05/11 às 06:00" in texto
+    assert "A bula (p. 7)" in texto  # a citação (fonte e página) continua na auditoria e no painel
+    assert "05/11 às 06:00" in texto and "Opção 1 de 3" in texto
+    assert "Máquina: " in texto
     assert c.conhecimento.buscas and c.conhecimento.buscas[0][1] == "Abacus HC"
 
     assert await responder(orq, 1, "SIM") == "ok"
@@ -85,16 +86,17 @@ async def test_resposta_repetida_nao_reexecuta():
     assert len(c.erp.escritas) == escritas
 
 
-async def test_nao_mantem_suspensa_e_pede_decisao_manual():
+async def test_recusar_proposta_encerra_mantem_suspensa_e_avisa():
     c = montar_cenario()
     orq = await iniciar(c)
     await responder(orq, 1, "NAO")
     assert c.erp.status(1) == "suspensa_preventiva"
-    assert c.repo.incidentes[7].status == "aguardando_decisao_manual"
-    assert "recusou" in c.canal.alertas[-1]
+    assert c.repo.incidentes[7].status == "encerrado"
+    assert "recusada" in c.canal.alertas[-1] and "SUSPENSA" in c.canal.alertas[-1]
+    assert not any("decisão manual" in a for a in c.canal.alertas)
 
 
-async def test_ver_opcoes_replaneja_duas_vezes_e_depois_pede_decisao_manual():
+async def test_ver_proxima_opcao_replaneja_duas_vezes_e_depois_encerra():
     c = montar_cenario()
     orq = await iniciar(c)
     await responder(orq, 1, "OPCOES")
@@ -104,7 +106,7 @@ async def test_ver_opcoes_replaneja_duas_vezes_e_depois_pede_decisao_manual():
     assert len(set(datas)) == 3  # nunca repete uma data já oferecida
 
     await responder(orq, 3, "OPCOES")
-    assert c.repo.incidentes[7].status == "aguardando_decisao_manual"
+    assert c.repo.incidentes[7].status == "encerrado"
     assert c.erp.status(1) == "suspensa_preventiva"
     assert "esgotaram" in c.canal.alertas[-1]
 
@@ -390,3 +392,29 @@ async def test_reenvio_diferente_do_gravado_nao_retoma():
     await c.repo.registrar_resposta(1, 7, "SIM", "gerente")
     assert await responder(orq, 1, "NAO") == "repetida"
     assert c.erp.status(1) == "suspensa_preventiva"
+
+
+async def test_violacao_contradita_pelos_numeros_e_descartada_e_a_chuva_segue_valendo():
+    temperatura = avaliacao_violando(
+        parametro="temperatura", limite=30, unidade="°C", janela_h=None, valor_previsto=22.2
+    )["violacoes"][0]
+    avaliacao = avaliacao_violando()
+    avaliacao["violacoes"].append(temperatura)
+    c = montar_cenario(modelos_padrao(avaliador=roteiro_avaliador(avaliacao)))
+    await iniciar(c)
+    assert c.erp.status(1) == "suspensa_preventiva"  # a chuva sustenta a suspensão
+    descartada = [a for a in c.repo.auditoria if a["acao"] == "violacao_descartada"]
+    assert len(descartada) == 1 and descartada[0]["depois"]["itens"][0]["parametro"] == "temperatura"
+    texto = c.canal.aprovacoes[0][2]
+    assert "22.2" not in texto and "30 °C" not in texto
+
+
+async def test_so_violacao_contradita_nao_suspende_a_os():
+    so_temperatura = avaliacao_violando(
+        parametro="temperatura", limite=30, unidade="°C", janela_h=None, valor_previsto=22.2
+    )
+    c = montar_cenario(modelos_padrao(avaliador=roteiro_avaliador(so_temperatura)))
+    await iniciar(c)
+    assert c.erp.status(1) == "agendada"
+    assert c.repo.incidentes[7].status == "encerrado"
+    assert "avaliador:violacao_descartada" in c.repo.acoes()

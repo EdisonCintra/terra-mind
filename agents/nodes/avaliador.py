@@ -10,6 +10,7 @@ from agents.agentes._comum import chave_falha
 from agents.deps import Dependencias
 from agents.modelos import AvaliacaoRisco, como_json
 from agents.nodes.comum import auditar
+from agents.rules.violacao import violacao_sustentada
 
 
 def criar_rota_avaliacao(deps: Dependencias):
@@ -24,8 +25,21 @@ def criar_rota_avaliacao(deps: Dependencias):
         # O LLM só decide sobre as OS que recebeu; ids desconhecidos são descartados.
         conhecidas = {o["os_id"] for o in ctx.state["os_em_risco"]}
         avaliacao.violacoes = [v for v in avaliacao.violacoes if v.os_id in conhecidas]
+        # Violação cujos números a contradizem (ex.: 22 °C contra um máximo de 30 °C) não suspende a OS.
+        descartadas = [v for v in avaliacao.violacoes if not violacao_sustentada(v)]
+        for v in descartadas:
+            v.viola = False
         ctx.state["avaliacao"] = como_json(avaliacao)
         await auditar(deps, ctx, "avaliador", "avaliar_risco", depois=como_json(avaliacao))
+        if descartadas:
+            await auditar(
+                deps,
+                ctx,
+                "avaliador",
+                "violacao_descartada",
+                depois={"itens": [como_json(v) for v in descartadas]},
+                justificativa="o valor previsto não ultrapassa o limite citado",
+            )
         if not any(v.viola for v in avaliacao.violacoes):
             ctx.state["motivo_encerramento"] = "Avaliador não encontrou violação citável"
             return Event(route="sem_violacao")

@@ -16,8 +16,8 @@ from channels.base import AoResponder, DecisaoJaRegistrada, NotificationChannel,
 log = logging.getLogger(__name__)
 
 PREFIXO = "r"  # callback_data: r:{incidente_id}:{plano_id}:{resposta}  (limite do Telegram: 64 bytes)
-ROTULOS = {"SIM": "✅ SIM", "NAO": "❌ NÃO", "OPCOES": "🔎 Ver opções"}
-ECO = {"SIM": "SIM", "NAO": "NÃO", "OPCOES": "Ver opções"}
+ROTULOS = {"SIM": "Aceitar Proposta", "OPCOES": "Ver próxima opção", "NAO": "Recusar Proposta"}
+ECO = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
 
 
 def montar_callback(incidente_id: int, plano_id: int, resposta: str) -> str:
@@ -36,9 +36,12 @@ def ler_callback(data: str) -> Resposta | None:
 
 
 def montar_teclado(incidente_id: int, plano_id: int) -> InlineKeyboardMarkup:
+    # Um botão por linha: mais fácil de tocar no celular.
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(rotulo, callback_data=montar_callback(incidente_id, plano_id, r))
-          for r, rotulo in ROTULOS.items()]]
+        [
+            [InlineKeyboardButton(rotulo, callback_data=montar_callback(incidente_id, plano_id, r))]
+            for r, rotulo in ROTULOS.items()
+        ]
     )
 
 
@@ -97,7 +100,7 @@ class TelegramChannel(NotificationChannel):
             log.exception("falha ao registrar a resposta %s", resposta)
             await query.message.reply_text("Não consegui registrar a resposta. Tente pelo painel.")
         else:
-            await query.message.reply_text(f"Resposta registrada: {ECO[resposta.resposta]}")
+            await query.message.reply_text(f"{ECO[resposta.resposta]} por {quem}.")
 
     async def iniciar(self) -> None:
         """Liga o long polling sem travar o resto do programa."""

@@ -195,11 +195,10 @@ def test_mensagem_tem_rodape_conferido():
         perda_rs=23040,
     )
     texto = compor_mensagem(plano(JANELA_1), {1: os_em_risco()}, {1: [CHUVA_30_24H]}, {1: impacto})
-    assert (
-        "Perda evitada: R$ 23.040,00" in texto
-        and "embrapa-ureia, p. 4" in texto
-        and "04/11 às 07:00" in texto
-    )
+    assert "Perda evitada: R$ 23.040,00" in texto and "(p. 4)" in texto
+    assert "quarta, 04/11 às 07:00" in texto
+    assert texto.rstrip().endswith("Escolha uma opção abaixo.")
+    assert "—" not in texto and not any(ord(c) > 0x2600 for c in texto)  # sem emojis
 
 
 # ---------------------------------------------------------------- achados da revisão
@@ -251,3 +250,57 @@ async def test_revalidacao_com_erp_fora_nao_invalida_a_janela():
     erp.indisponivel = True
     assert not (await validar(plano(JANELA_1), contexto_da_demo(), erp, AGORA)).aprovado
     assert (await validar(plano(JANELA_1), contexto_da_demo(), erp, AGORA, exigir_erp=False)).aprovado
+
+
+# ---------------------------------------------------------------- violação conferida em código
+
+
+def _violacao(parametro, limite, previsto, viola=True):
+    return ViolacaoOs(
+        os_id=1,
+        viola=viola,
+        parametro=parametro,
+        limite=limite,
+        valor_previsto=previsto,
+        trecho="x",
+        fonte_doc="bula-abacus-hc",
+        pagina=7,
+        justificativa="x",
+    )
+
+
+def test_violacao_so_vale_se_o_numero_a_sustenta():
+    from agents.rules.violacao import violacao_sustentada
+
+    assert violacao_sustentada(_violacao("chuva", 0, 16))
+    assert not violacao_sustentada(_violacao("chuva", 0, 0))
+    assert not violacao_sustentada(_violacao("temperatura", 30, 22.2))  # o caso real: 22 °C < 30 °C
+    assert violacao_sustentada(_violacao("temperatura", 30, 34))
+    assert violacao_sustentada(_violacao("vento", 10, 14))
+    assert not violacao_sustentada(_violacao("vento", 10, 9.6))
+    assert violacao_sustentada(_violacao("umidade", 60, 40))  # umidade viola abaixo do mínimo
+    assert not violacao_sustentada(_violacao("umidade", 60, 90))
+
+
+def test_sem_numero_para_conferir_a_violacao_segue_valendo():
+    from agents.rules.violacao import violacao_sustentada
+
+    assert violacao_sustentada(_violacao("chuva", 0, None))
+    assert violacao_sustentada(_violacao("chuva", 0, 10, viola=False))
+
+
+def test_mensagem_nao_mostra_motivo_contradito_pelos_numeros():
+    impacto = Impacto(
+        os_id=1,
+        area_ha=120,
+        dose_por_ha=0.3,
+        preco_unitario=185,
+        fator=0.5,
+        fonte_fator="estimativa: x",
+        perda_rs=3330,
+    )
+    chuva = _violacao("chuva", 0, 16)
+    chuva.janela_h = 4
+    temperatura = _violacao("temperatura", 30, 22.2)
+    texto = compor_mensagem(plano(JANELA_1), {1: os_em_risco()}, {1: [chuva, temperatura]}, {1: impacto})
+    assert "chuva em até 4 h" in texto and "22.2" not in texto and "30 °C" not in texto

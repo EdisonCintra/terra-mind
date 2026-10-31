@@ -61,7 +61,10 @@ def criar_workflow(deps: Dependencias, id_da_entrada: bool = False) -> Workflow:
             (analises, preparar_plano, supervisor, validador),
             (validador, {"valido": aprovacao, "revisar": supervisor, DEFAULT_ROUTE: decisao_manual}),
             (aprovacao, rota_resposta),
-            (rota_resposta, {"SIM": executor, "OPCOES": preparar_plano, DEFAULT_ROUTE: decisao_manual}),
+            (
+                rota_resposta,
+                {"SIM": executor, "OPCOES": preparar_plano, "NAO": encerrar, DEFAULT_ROUTE: decisao_manual},
+            ),
             (executor, {"ok": encerrar, "revalidar": preparar_plano, DEFAULT_ROUTE: decisao_manual}),
         ],
     )

@@ -44,8 +44,11 @@ def test_callback_invalido_e_ignorado(data):
 
 
 def test_teclado_tem_tres_botoes():
-    botoes = montar_teclado(7, 3).inline_keyboard[0]
-    assert [b.callback_data for b in botoes] == ["r:7:3:SIM", "r:7:3:NAO", "r:7:3:OPCOES"]
+    linhas = montar_teclado(7, 3).inline_keyboard
+    assert all(len(linha) == 1 for linha in linhas)  # um botão por linha
+    botoes = [linha[0] for linha in linhas]
+    assert [b.callback_data for b in botoes] == ["r:7:3:SIM", "r:7:3:OPCOES", "r:7:3:NAO"]
+    assert [b.text for b in botoes] == ["Aceitar Proposta", "Ver próxima opção", "Recusar Proposta"]
 
 
 async def test_pedir_aprovacao_manda_botoes_ao_gerente(envio):
@@ -71,7 +74,7 @@ async def test_clique_responde_remove_botoes_e_chama_ao_responder():
     query.answer.assert_awaited_once()
     query.edit_message_reply_markup.assert_awaited_once_with(reply_markup=None)
     ao_responder.assert_awaited_once_with(Resposta(7, 3, "SIM", "Gerente Teste"))
-    query.message.reply_text.assert_awaited_once_with("Resposta registrada: SIM")
+    query.message.reply_text.assert_awaited_once_with("Proposta aceita por Gerente Teste.")
 
 
 async def test_resposta_repetida_mostra_decisao_ja_registrada():

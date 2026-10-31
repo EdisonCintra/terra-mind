@@ -8,7 +8,7 @@
   {# painel.js monta a versão em cartões a partir deste texto; se o formato mudar, o texto continua visível. #}
   <pre class="mensagem">{{ p.mensagem or "(plano sem mensagem)" }}</pre>
   <div class="botoes">
-    {% for resposta, rotulo, classe in [("SIM", "SIM, executar plano", "sim"), ("OPCOES", "Ver opções", "opcoes"), ("NAO", "NÃO, decidir manualmente", "nao")] %}
+    {% for resposta, rotulo, classe in [("SIM", "Aceitar Proposta", "sim"), ("OPCOES", "Ver próxima opção", "opcoes"), ("NAO", "Recusar Proposta", "nao")] %}
     <button class="{{ classe }}" hx-post="/aprovacao/{{ p.incidente_id }}/{{ p.id }}/{{ resposta }}"
             hx-target="#resultado" hx-swap="innerHTML">{{ rotulo }}</button>
     {% endfor %}

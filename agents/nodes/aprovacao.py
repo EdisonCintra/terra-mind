@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from agents.deps import Dependencias
 from agents.modelos import RespostaGerente
-from agents.nodes.comum import alertar, auditar
+from agents.nodes.comum import alertar, auditar, ids
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,19 @@ def criar_aprovacao(deps: Dependencias):
     return aprovacao
 
 
+async def _recusar(deps: Dependencias, ctx: Context, motivo: str, aviso: str) -> Event:
+    """Proposta recusada (ou opções esgotadas): encerra o incidente, sem decisão manual.
+
+    As OS já suspensas continuam `suspensa_preventiva`; o gerente é avisado e o Monitor volta a poder
+    abrir incidente no talhão.
+    """
+    suspensas = ctx.state.get("os_suspensas") or []
+    alvo = f"OS {ids(suspensas)} segue(m) SUSPENSA(S)" if suspensas else "Nenhuma OS foi alterada"
+    ctx.state["motivo_encerramento"] = motivo
+    await alertar(deps, f"{aviso}\n{alvo}. Nenhuma outra ação foi feita.")
+    return Event(route="NAO")
+
+
 def criar_rota_resposta(deps: Dependencias):
     async def rota_resposta(ctx: Context, node_input):
         incidente_id = ctx.state["incidente_id"]
@@ -51,7 +64,7 @@ def criar_rota_resposta(deps: Dependencias):
             r = RespostaGerente.model_validate(node_input)
         except ValidationError:
             ctx.state["motivo_manual"] = {"codigo": "resposta_invalida", "detalhe": str(node_input)}
-            return Event(route="NAO")
+            return Event(route="INVALIDA")  # erro do sistema: segue para a decisão manual
         # Pela API ou pelo Telegram, o Orquestrador já gravou (aqui volta "repetida", sem efeito).
         # No `adk web` / `adk run` a resposta só chega por aqui; o MCP exige o SIM em agente.planos.
         await deps.repo.registrar_resposta(ctx.state["plano_id"], incidente_id, r.resposta, r.respondido_por)
@@ -66,12 +79,13 @@ def criar_rota_resposta(deps: Dependencias):
                     f"Proponha datas diferentes das já oferecidas: {ctx.state.get('datas_oferecidas')}."
                 )
                 return Event(route="OPCOES")
-            ctx.state["motivo_manual"] = {
-                "codigo": "opcoes_esgotadas",
-                "detalhe": f"{feitos} re-planejamentos",
-            }
-            return Event(route="NAO")
-        ctx.state["motivo_manual"] = {"codigo": "gerente_recusou", "detalhe": r.respondido_por}
-        return Event(route="NAO")
+            return await _recusar(
+                deps,
+                ctx,
+                f"as opções de remarcação se esgotaram ({feitos} re-planejamentos)",
+                "As opções de remarcação se esgotaram sem aprovação.",
+            )
+        quem = r.respondido_por
+        return await _recusar(deps, ctx, f"proposta recusada por {quem}", f"Proposta recusada por {quem}.")
 
     return rota_resposta

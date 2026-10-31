@@ -144,7 +144,7 @@ def test_resposta_encaminha_ao_agents_com_o_formato_do_contrato(cliente, monkeyp
     vistas = http_falso(monkeypatch, lambda req: httpx.Response(200, json={"status": "registrada"}))
     monkeypatch.setenv("AGENTS_URL", "http://agents:8000")
     r = cliente.post("/aprovacao/7/3/SIM")
-    assert "Resposta registrada: SIM" in r.text and 'class="mensagem-ok"' in r.text
+    assert "Proposta aceita." in r.text and 'class="mensagem-ok"' in r.text
     assert str(vistas[0].url) == "http://agents:8000/incidentes/7/resposta"
     assert json.loads(vistas[0].content) == {"plano_id": 3, "resposta": "SIM", "respondido_por": "painel"}
 

@@ -20,7 +20,7 @@ from painel import dados
 
 AQUI = Path(__file__).parent
 FUSO = ZoneInfo("America/Sao_Paulo")  # contrato 12
-RESPOSTAS = {"SIM": "SIM", "NAO": "NÃO", "OPCOES": "Ver opções"}
+RESPOSTAS = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
 CENARIO = "chuva_80mm.json"  # contrato 14
 TALHAO_DEMO = 1  # a OS do cenário está no Talhão 1; sem isso o replay abre um incidente vazio no Talhão 2
 
@@ -150,7 +150,7 @@ def responder(request: Request, incidente_id: int, plano_id: int, resposta: str)
         elif r.status_code == 404:
             nivel, texto = "erro", "Plano não encontrado."
         elif r.is_success:
-            nivel, texto = "ok", f"Resposta registrada: {RESPOSTAS[resposta]}."
+            nivel, texto = "ok", f"{RESPOSTAS[resposta]}."
         else:
             nivel, texto = "erro", f"O serviço de agentes recusou a resposta (HTTP {r.status_code})."
     return templates.TemplateResponse(request, "_mensagem.html", {"nivel": nivel, "texto": texto})

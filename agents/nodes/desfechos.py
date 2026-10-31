@@ -37,8 +37,6 @@ def texto_decisao_manual(estado) -> str:
     alvo = f"OS {ids(suspensas)} segue(m) SUSPENSA(S)" if suspensas else "Nenhuma OS foi alterada"
     razoes = {
         "plano_reprovado": "não encontrei uma janela que passe no Validador",
-        "gerente_recusou": "você recusou o plano",
-        "opcoes_esgotadas": "as opções de remarcação se esgotaram",
         "janela_invalida": "a janela aprovada deixou de valer",
         "resposta_invalida": "a resposta recebida não foi reconhecida",
     }

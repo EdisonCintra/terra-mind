@@ -14,7 +14,7 @@ Plano: [docs/plans/2026-10-29-agentes-gustavo.md](../docs/plans/2026-10-29-agent
 | Análises | OS suspensas | Agronômico e Operacional (**LLMs**) em paralelo; falha de um vira texto e o fluxo segue | `analise_agronomica`, `analise_operacional` |
 | Plano | Análises, janelas válidas | Supervisor (**LLM**) propõe; Validador (código) confere clima, horário, horizonte e máquina; até 2 voltas | `agente.planos` + mensagem com rodapé montado em código |
 | Aprovação | Plano | `RequestInput(interrupt_id="aprovacao:{plano_id}")` pausa a sessão | Telegram ou painel |
-| Resposta | SIM / NÃO / Ver opções | SIM → Executor; Ver opções → novo plano (até 2); NÃO → decisão manual | — |
+| Resposta | Aceitar Proposta (`SIM`) / Recusar Proposta (`NAO`) / Ver próxima opção (`OPCOES`) | Aceitar → Executor; Ver próxima opção → novo plano (até 2; esgotadas, encerra); Recusar → encerra o incidente, com as OS suspensas e aviso ao gerente | — |
 | Execução | SIM | Revalida a janela; `reagendar_os`, `alocar_maquina`, `reservar_estoque`; avisa o operador | ERP atualizado, incidente `encerrado` |
 
 ```
@@ -34,7 +34,7 @@ rota_resposta ─┬─ SIM → executor ─┬─ ok → encerrar
                │                  ├─ revalidar → preparar_plano
                │                  └─ falhou → decisao_manual
                ├─ OPCOES (≤2) → preparar_plano
-               └─ NAO → decisao_manual
+               └─ NAO (recusou, ou opções esgotadas) → encerrar (OS seguem suspensas)
 ```
 
 Garantias, cada uma com teste:

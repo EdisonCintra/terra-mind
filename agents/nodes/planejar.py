@@ -9,6 +9,9 @@ Executor quando a janela aprovada deixou de valer. O estado traz `pedido_gerente
 `motivo_reprovacao` para a próxima proposta. O laço é limitado por `max_voltas_validador`.
 """
 
+import logging
+from datetime import timedelta
+
 from google.adk import Context, Event
 
 from agents.agentes._comum import ENTRADA_LLM, chave_falha
@@ -17,6 +20,24 @@ from agents.modelos import Impacto, PlanoProposto, como_json
 from agents.nodes.comum import auditar
 from agents.rules.mensagem import compor_mensagem
 from agents.rules.validador import ContextoPlano, validar
+
+logger = logging.getLogger(__name__)
+
+
+async def nomes_das_maquinas(deps: Dependencias, plano: PlanoProposto, os_por_id: dict) -> dict[int, str]:
+    """id → nome das máquinas do plano, só para a mensagem. Se o ERP falhar, a mensagem usa "Máquina N"."""
+    nomes: dict[int, str] = {}
+    for opcao in plano.opcoes:
+        os = os_por_id[opcao.os_id]
+        try:
+            livres = await deps.erp.disponibilidade_maquinas(
+                opcao.novo_inicio, opcao.novo_inicio + timedelta(hours=os.duracao_horas), os.tipo_maquina
+            )
+        except Exception:  # noqa: BLE001 - o nome é só apresentação
+            logger.warning("não consegui buscar o nome da máquina %s", opcao.maquina_id)
+            continue
+        nomes.update({m["id"]: m["nome"] for m in livres if "id" in m and "nome" in m})
+    return nomes
 
 
 def criar_preparar_plano(deps: Dependencias):
@@ -63,7 +84,11 @@ def criar_validador(deps: Dependencias):
         ctx.state["motivo_reprovacao"] = None
         ctx.state["pedido_gerente"] = None
         impactos = {i["os_id"]: Impacto.model_validate(i) for i in ctx.state.get("impactos") or []}
-        mensagem = compor_mensagem(aprovado, contexto.os_por_id, contexto.violacoes_por_os, impactos)
+        maquinas = await nomes_das_maquinas(deps, aprovado, contexto.os_por_id)
+        opcao = (ctx.state.get("replanejamentos", 0) + 1, deps.settings.max_replanejamentos + 1)
+        mensagem = compor_mensagem(
+            aprovado, contexto.os_por_id, contexto.violacoes_por_os, impactos, maquinas, opcao
+        )
         plano_id = await deps.repo.criar_plano(
             ctx.state["incidente_id"], {"opcoes": como_json(aprovado)["opcoes"], "mensagem": mensagem}
         )

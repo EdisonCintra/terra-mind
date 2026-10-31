@@ -2,9 +2,9 @@
 
     uv run python -m channels.teste_bot
 
-Manda uma aprovação com botões ao `GERENTE_CHAT_ID`; clique em SIM, NÃO ou Ver opções e a resposta
-aparece aqui no terminal (o `ao_responder` é falso). Ctrl+C encerra. Lembre: só um processo por token
-pode fazer polling (erro `Conflict` se houver outro).
+Manda uma aprovação com botões ao `GERENTE_CHAT_ID`; clique em Aceitar Proposta, Recusar Proposta ou
+Ver próxima opção e a resposta aparece aqui no terminal (o `ao_responder` é falso). Ctrl+C encerra.
+Lembre: só um processo por token pode fazer polling (erro `Conflict` se houver outro).
 """
 
 import asyncio
