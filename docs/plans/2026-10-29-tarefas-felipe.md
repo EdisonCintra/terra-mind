@@ -81,7 +81,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T8.7 (P) Um único polling por token: `TelegramChannel` loga uma mensagem clara no `Conflict`, aviso no `.env.example`. Falta só enviar o aviso ao grupo (texto abaixo).
   > Aviso ao time: cada token só aceita UM processo em polling. Não rode o `agents` com `CHANNEL=telegram` e o `teste_bot` (ou outro `agents`, ou a VM) ao mesmo tempo com o mesmo token; senão aparece `Conflict: terminated by other getUpdates request`. Um bot por pessoa/ambiente, ou `CHANNEL=painel` nos demais.
 - [x] T8.8 (M) `channels/painel.py` (`PainelChannel`): o alerta vira linha em `agente.auditoria` (`no='painel'`, `acao='enviar_alerta'`); `notificar_operador` também é registrado; `pedir_aprovacao` não cria nem altera planos. `enviar_alerta` ganhou `incidente_id` opcional para ligar o alerta ao incidente (compatível com a chamada antiga). 4 testes em `tests/test_channels_painel.py`.
-- [x] T8.9 (P) Textos em `channels/mensagens.py`: `alerta_decisao_manual(motivo, incidente_id)` (motivos `sem_evidencia`, `avaliador_falhou`, `validador_reprovou`, `nao`, `opcoes_esgotadas`) e `alerta_escalonamento(incidente_id, plano_id, minutos)`. O `agents` passa o texto a `enviar_alerta`; `escalado_em` é gravado por ele. **Avisar o Gustavo** para usar essas funções.
+- [x] T8.9 (P) Escalonamento e decisão manual: os textos ficaram com o Gustavo (`agents/nodes/desfechos.py`, `agents/timeout.py`), mais completos que os meus; removi `channels/mensagens.py`. Como o `agents` não passa `incidente_id` em `enviar_alerta`, o `PainelChannel` o extrai do início do texto ("Incidente N:") para ligar o alerta ao incidente na linha do tempo e na faixa vermelha. `escalado_em` é gravado pelo `agents`.
 
 ## 9. Painel web
 - [x] T9.1 (M) `painel/main.py` (FastAPI + Jinja2) com `htmx.min.js` 2.0.4 em `painel/static/`, sem CDN nem login. Rotas `/`, `/os`, `/parcial/os`, `/health`. Rodar local: `uv run uvicorn painel.main:app --port 8080`.
@@ -96,7 +96,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T10.2 (P) Dia 2: `erp-mcp` e `qdrant`. Dia 3: `painel`. Os três no compose; `qdrant` com volume `qdrantdata` (porta 6333).
 - [x] T10.3 (P) Deixar comentários para `agents`, `conhecimento` e `monitor`; cada dono acrescenta o seu bloco.
 - [x] T10.4 (P) `.env.example` com `DATABASE_URL`, `ERP_MCP_URL`, `CONHECIMENTO_URL`, `AGENTS_URL`, `MONITOR_URL`, `QDRANT_URL`, `OPENAI_API_KEY` (A3 do Gustavo, padrão `openai/gpt-4o-mini` nas quatro `MODEL_*`), `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`, `CHANNEL`, `MONITOR_MODE`, `APPROVAL_TIMEOUT_MIN`, `PYTHONUTF8=1` (entregue junto com a T5.2).
-- [~] T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço. Prontos `erp_mcp` e `painel` (contexto na raiz, D3). Faltam conferir `base_agricola`, `monitor` (Edison) e `agents` (Gustavo) no merge.
+- [~] T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço. Prontos `erp_mcp`, `painel` e `agents` (pinados em `uv:0.11.25`); `monitor` e `base_agricola` (Edison) usam `uv:latest` sem versão fixa. Falta validar o build e a subida dos cinco serviços juntos.
 - [ ] T10.6 (M) Dia 6: deploy na VM do GCP com o Edison; cópia local idêntica; `docker compose up` do zero nas duas.
 
 ## 11. Plano dia a dia
@@ -113,7 +113,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [ ] T11.1 (G) BMC com o time.
 - [ ] T11.2 (M) Roteiro do pitch: o que a banca vê na tela (e respostas às perguntas da banca sobre canal, ERP e escala).
 - [ ] T11.3 (M) Ajustes do painel pedidos pelo time; a OS fica amarela segundos depois de "Simular chuva".
-- [ ] T11.4 (M) Seção do README: mini-ERP, MCP, canal, como subir.
+- [x] T11.4 (M) Seção do README: mini-ERP, MCP, canal, painel e como subir (`README.md`, seção "frente do Felipe").
 - [ ] T11.5 (M) Casos de borda: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual`.
 - [ ] T11.6 (M) Dia 7: sem código novo; ensaio cronometrado de 3 min e apoio ao vídeo de backup.
 
@@ -140,7 +140,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 | Pacote `channels` | Gustavo | Dia 2 |
 | Base do compose e `.env.example` | Edison, Gustavo | Dia 1 |
 
-## Resumo do que falta (30/10)
+## Resumo do que falta (31/10)
 
 Legenda: `[ ]` não feita · `[~]` meia feita. Tudo o que não aparece aqui está `[x]`.
 
@@ -148,31 +148,27 @@ Legenda: `[ ]` não feita · `[~]` meia feita. Tudo o que não aparece aqui est�
 
 | Tarefa | O que já foi feito | O que falta | Depende de |
 |---|---|---|---|
-| T4.1 (M) Contratos | Contratos 2–16, A1–A7 e D1–D4 consolidados em `docs/contratos.md` | Fechar o contrato 1 (hoje **Aberto**) e avisar o grupo no PR | Edison |
-| T4.2 (P) Defensivo da demo (C1) | `produto` = `Abacus HC` e `bula_id` = `bula-abacus-hc`, iguais ao `fontes.yaml` da `origin/feat/base-agricola` | Confirmar com o Edison e marcar o contrato 1 como **Fechado** | Edison |
-| T4.8 (P) Cenário do replay | Regra validada: `ReplayFonte` rebaseia `chuva_80mm.json` para `now()` | Conferir o JSON final no ensaio | Edison (Task 13) |
-| T7.4 (P) Testar o MCP | Validado pelo protocolo, local e em container (porta 8030) | Testar com o `ErpMcp` do Gustavo e no MCP Inspector | Gustavo |
-| T10.5 (P) Dockerfiles | `erp_mcp` e `painel` prontos (contexto na raiz, D3) | Conferir `base_agricola`, `monitor` (Edison) e `agents` (Gustavo) no merge | Edison, Gustavo |
+| T4.1 / T4.2 (contrato 1) | `Abacus HC` e `bula-abacus-hc` iguais ao `fontes.yaml` | Marcar o contrato 1 como **Fechado** e avisar o grupo | Edison (ok) |
+| T4.8 (P) Cenário do replay | Regra validada: `ReplayFonte` rebaseia `chuva_80mm.json` para `now()` | Conferir o JSON final no ensaio | Edison |
+| T7.4 (P) Testar o MCP | Validado pelo protocolo, local e em container | Testar com o `ErpMcp` do Gustavo e no MCP Inspector | Gustavo (já na `main`) |
+| T10.5 (P) Dockerfiles | `erp_mcp`, `painel`, `agents` prontos | `monitor` e `base_agricola` usam `uv:latest`; validar o build dos cinco juntos | Edison |
 
 ### Não feitas `[ ]`
 
 | Tarefa | Resumo | Quando | Depende de |
 |---|---|---|---|
-| T8.5 (G) | SIM no Telegram retoma a sessão num processo reiniciado (**maior risco técnico**) | Dia 2, atrasada | Gustavo (`agents` rodando) |
-| T10.6 (M) | Deploy na VM do GCP, cópia local idêntica, `docker compose up` do zero nas duas | Dia 6 | Edison, merge dos serviços |
+| T8.5 (G) | SIM no Telegram retoma a sessão num processo reiniciado (**maior risco técnico**) | Atrasada (dia 2) | Gustavo; `OPENAI_API_KEY` (ou `DEMO_LLM=fake`) |
+| T10.6 (M) | Deploy na VM do GCP, cópia local idêntica, `docker compose up` do zero nas duas | Dia 6 | Edison |
 | T11.1 (G) | BMC com o time | Dia 5 | Time |
 | T11.2 (M) | Roteiro do pitch: o que a banca vê na tela e respostas sobre canal, ERP e escala | Dia 5 | Pode ser rascunhado agora |
-| T11.3 (M) | Ajustes do painel pedidos pelo time; conferir que a OS fica amarela segundos depois de "Simular chuva" | Dia 5 | Monitor e `agents` rodando |
-| T11.4 (M) | Seção do README: mini-ERP, MCP, canal, como subir (o `README.md` tem 5 linhas) | Dia 6 | Pode ser feita agora |
-| T11.5 (M) | Casos de borda de ponta a ponta: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual`. Já há testes unitários para 409, `DecisaoJaRegistrada`, selo "escalado" e faixa de decisão manual | Dia 6 | `agents` e Monitor |
+| T11.3 (M) | Ajustes do painel; conferir que a OS fica amarela segundos depois de "Simular chuva" | Dia 5 | Pilha inteira de pé |
+| T11.5 (M) | Casos de borda de ponta a ponta: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual` | Dia 6 | Pilha inteira de pé |
 | T11.6 (M) | Dia 7: sem código novo; ensaio cronometrado de 3 min e apoio ao vídeo de backup | Dia 7 | Tudo pronto |
-| T12.1 | Prática contínua: pedir o teste junto, conferir nomes contra `contratos.md`, conferir no banco depois de cada escrita. Vem sendo seguida; marcar quando o projeto fechar | Contínua | — |
+| T12.1 | Prática contínua (testes junto, nomes conferidos contra `contratos.md`, conferir no banco); marcar ao fechar o projeto | Contínua | — |
 
-### Pendências fora da numeração
+### Ações imediatas do Felipe
 
-- **Merge do PR do Edison (`origin/feat/base-agricola`):** resolver conflitos em `.dockerignore`, `docs/contratos.md`, `pyproject.toml` e `uv.lock` (rodar `uv lock`, não editar à mão); renumerar as variáveis dos serviços do Edison para o contrato **17** (o 16 fica com as chaves do MCP).
-- **Compose depois do merge:** colar os blocos `conhecimento` e `monitor` do README do Edison; fazer `indexar` e `carregar-fatores` rodarem na subida, depois de Postgres e Qdrant (sem isso a busca volta vazia e o Avaliador entende que a bula não traz o limite); incluir o bloco `agents` do Gustavo.
-- **Combinados com o Gustavo (contrato 6/7, ainda **propostos**):** o `ao_responder` lança `channels.base.DecisaoJaRegistrada`; usar os textos de `channels/mensagens.py` e passar `incidente_id` em `enviar_alerta`; o `motivo` de `suspender_os` mantém o formato `(fonte: X, p. N)`.
-- **Aviso ao grupo:** polling único por token do Telegram (texto já está no contrato 6/7).
-- **Ensaiar com serviços reais:** botão "Simular chuva" contra o Monitor do Edison e respostas do painel contra o `agents`.
-- **Ao final:** rodar `uv run ruff check .` e `uv run pytest -q` após o merge.
+- Recriar o banco local: `docker compose down -v && docker compose up -d --build` (o container atual foi criado antes da `010_conhecimento.sql` e não tem as tabelas do schema `conhecimento`).
+- Preencher `OPENAI_API_KEY` no `.env` (hoje vazia) ou rodar o `agents` com `DEMO_LLM=fake`.
+- Pedir ao Edison: (1) ok para fechar o contrato 1; (2) corrigir `monitor/tests/test_ciclo.py` (os 3 testes `test_pg_*` inserem `erp.talhoes (nome, lat, lon)` sem as colunas obrigatórias do `001_erp.sql`); (3) fixar a versão do `uv` nos dois Dockerfiles dele.
+- Avisar o grupo (no PR): polling único por token do Telegram; contrato 16 (chaves do MCP) e 17 (variáveis do Edison).

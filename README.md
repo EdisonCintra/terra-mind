@@ -58,3 +58,40 @@ No Windows, mande corpos com acento a partir de um arquivo UTF-8 (`--data-binary
 ```
 
 O `DATABASE_URL` destes serviços usa o driver `postgresql+psycopg://` (SQLAlchemy).
+
+## Fazenda simulada, canal e painel (frente do Felipe)
+
+Quatro peças: o **mini-ERP** (Postgres), o **servidor MCP** que os agentes usam para ler e escrever nele, o **canal** de notificação (Telegram ou painel) e o **painel web**.
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Mini-ERP | `db/migrations/` (`001_erp.sql`, `002_agente.sql`, `900_seed.sql`) | Talhões, insumos, máquinas, operadores, ordens de serviço e leituras de solo; no schema `agente`, incidentes, planos e auditoria. O seed usa datas relativas a `now()` e só defensivos (Abacus HC e Engeo Pleno S). |
+| Servidor MCP | `erp_mcp/` (porta 8030, `/mcp`) | 6 ferramentas de leitura e 4 de escrita. Só `suspender_os` age sem aprovação (`agendada → suspensa_preventiva`); `reagendar_os`, `alocar_maquina` e `reservar_estoque` exigem plano aprovado no banco. Toda escrita grava `agente.auditoria` na mesma transação. |
+| Canal | `channels/` | `NotificationChannel` com `TelegramChannel` (botões SIM / NÃO / Ver opções, long polling) e `PainelChannel` (grava o alerta na auditoria). `CHANNEL=telegram` ou `painel` escolhe um sem mexer no fluxo. Roda dentro do processo `agents`. |
+| Painel web | `painel/` (porta 8080) | Quatro telas: ordens de serviço ao vivo, linha do tempo com a citação (fonte e página), aprovação pendente e "Simular chuva". Sem login e sem CDN. |
+
+Inputs, lógica e outputs do que é seu no fluxo:
+
+| Etapa | Input | Lógica | Output |
+|---|---|---|---|
+| Suspensão | `os_id`, `incidente_id`, motivo com a citação | `UPDATE ... WHERE status = 'agendada'` e auditoria na mesma transação | OS `suspensa_preventiva`; a segunda chamada devolve `{"ok": false}` |
+| Aprovação | Plano em `agente.planos` | Mensagem com botões no Telegram, ou os mesmos botões no painel | `Resposta(incidente_id, plano_id, SIM / NAO / OPCOES, respondido_por)` para o `agents` |
+| Execução | `plano_id` aprovado | O MCP recusa se o plano não está aprovado, se a máquina está ocupada, se falta estoque ou se já foi feito | OS reagendada, máquina alocada, estoque baixado |
+
+### Como subir
+
+```bash
+cp .env.example .env     # preencha TELEGRAM_BOT_TOKEN, GERENTE_CHAT_ID e OPENAI_API_KEY
+docker compose up -d --build
+```
+
+- Painel em `http://localhost:8080`. O botão "Simular chuva" dispara o cenário `chuva_80mm.json` no Monitor.
+- As migrations só rodam quando o banco é criado. Se mudar um `.sql`, recrie: `docker compose down -v && docker compose up -d --build` (o `-v` apaga os dados).
+- Se a porta 5432 do host estiver ocupada (Postgres do Windows), suba com `POSTGRES_PORT=5433` e use `DATABASE_URL=postgresql://terramind:terramind@localhost:5433/terramind` ao rodar testes fora do Docker.
+- Telegram: crie o bot no @BotFather e ponha o token e o `chat_id` no `.env`. Só **um** processo pode fazer polling por token (erro `Conflict`); use `CHANNEL=painel` nos demais ambientes.
+- Teste manual do bot: `uv run python -m channels.teste_bot`.
+
+```bash
+uv run pytest tests -q      # MCP, migrations, canais e painel (precisa do Postgres do compose)
+uv run ruff check .
+```

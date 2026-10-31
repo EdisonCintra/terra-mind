@@ -14,7 +14,7 @@ INSERT INTO erp.insumos (produto, tipo, unidade, preco_unitario, estoque, bula_i
     ('Abacus HC',     'fungicida',  'L', 185.00, 500.00, 'bula-abacus-hc'),
     ('Engeo Pleno S', 'inseticida', 'L', 210.00, 300.00, NULL);
 
--- Dois pulverizadores disponíveis: A atende a OS agendada; B está 100% livre para qualquer janela de remarcação.
+-- Dois pulverizadores disponíveis: A atende a OS agendada; B está totalmente livre para qualquer janela de remarcação.
 INSERT INTO erp.maquinas (nome, tipo, status) VALUES
     ('Pulverizador A', 'pulverizador', 'disponivel'),
     ('Pulverizador B', 'pulverizador', 'disponivel');

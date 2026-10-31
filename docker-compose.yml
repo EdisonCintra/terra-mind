@@ -38,6 +38,9 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      AGENTS_URL: http://agents:8000
+      MONITOR_URL: http://monitor:8020
     ports:
       - "8080:8080"
     depends_on:
@@ -51,7 +54,59 @@ services:
     volumes:
       - qdrantdata:/qdrant/storage
 
-  # Frente Edison (Task 17): conhecimento (porta 8010) e monitor (porta 8020)
+  conhecimento:
+    build:
+      context: .
+      dockerfile: base_agricola/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
+      QDRANT_URL: http://qdrant:6333
+    ports:
+      - "8010:8010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  # Carga única da base de conhecimento: indexa as bulas no Qdrant e carrega os fatores de perda.
+  # Sem ela a busca volta vazia e o Avaliador entende que a bula não traz o limite.
+  # Idempotente (upsert): pode rodar de novo a qualquer momento com `docker compose run --rm carga`.
+  carga:
+    build:
+      context: .
+      dockerfile: base_agricola/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
+      QDRANT_URL: http://qdrant:6333
+    command: >
+      sh -c "python -m base_agricola.ingest indexar &&
+             python -m base_agricola.ingest carregar-fatores"
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  monitor:
+    build:
+      context: .
+      dockerfile: monitor/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
+      AGENTS_URL: http://agents:8000
+      MONITOR_MODE: ${MONITOR_MODE:-replay}
+    ports:
+      - "8020:8020"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agents:
+        condition: service_started
 
   agents:
     build:
@@ -71,6 +126,10 @@ services:
         condition: service_healthy
       erp-mcp:
         condition: service_started
+      conhecimento:
+        condition: service_started
+      carga:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
