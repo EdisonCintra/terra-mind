@@ -1,90 +1,88 @@
 # TerraMind
 
-Agente que protege operações agrícolas agendadas contra eventos climáticos extremos: o Monitor detecta a chuva prevista, a ordem de serviço em risco é suspensa e um plano de reagendamento vai para aprovação do gerente.
+Agente que protege operações agrícolas agendadas contra eventos climáticos extremos. Quando a previsão indica chuva, vento ou umidade fora do limite, o TerraMind encontra as ordens de serviço em risco, suspende o que a bula do produto não permite e monta um plano de reagendamento, que só é executado depois que o gerente aprova.
 
-Monorepo com um serviço por pasta. Planos de implementação em [docs/plans/](docs/plans/).
+## Como funciona
 
-Contratos entre as frentes: [docs/contratos.md](docs/contratos.md).
+```
+Monitor (clima) ──incidente──→ agents (workflow) ──consulta──→ conhecimento (bulas)
+                                    │    ▲
+                         lê/escreve │    │ SIM / NÃO / Ver opções
+                                    ▼    │
+                            ERP via MCP   Telegram ou painel (gerente)
+```
 
-## Agentes e integração (frente do Gustavo)
+<p align="center">
+  <img src="docs/img/workflow.png" alt="Workflow do incidente no TerraMind" width="760">
+</p>
 
-Serviço **`agents`** (porta 8000): o workflow ADK do incidente, do contexto à execução do plano aprovado. Detalhes, comandos e variáveis em [agents/README.md](agents/README.md).
+1. O `monitor` lê a previsão horária de 5 dias (Open-Meteo ou um cenário gravado) e compara chuva acumulada, vento e umidade na janela de 48 h com os limiares. Se algum passar, abre um incidente com as 120 h da previsão e avisa o `agents`.
+2. O workflow busca no ERP as OS agendadas do talhão que caem na janela de risco. Se não houver nenhuma, o incidente é encerrado.
+3. O Avaliador (LLM) cruza cada OS com a previsão e consulta as bulas na base de conhecimento. Toda violação precisa citar o trecho, a fonte e a página. Sem citação, nada é suspenso e o gerente recebe um alerta.
+4. As OS que violam a bula são suspensas (`agendada → suspensa_preventiva`). É a única escrita feita sem aprovação. A perda evitada em R$ é calculada em código, com fatores de perda documentados.
+5. O Agronômico olha o estágio fenológico da cultura e o Operacional olha máquinas, operadores e estoque. Os dois analisam as OS suspensas ao mesmo tempo.
+6. O Supervisor (LLM) propõe um reagendamento e o Validador (código) confere clima, horário, horizonte e máquina. Se o Validador reprovar, o Supervisor revisa até 2 vezes; se continuar reprovado, o caso vai para decisão manual.
+7. O plano chega ao gerente pelo Telegram ou pelo painel. O rodapé (perda, data, máquina, fonte e página) é montado a partir do estado, nunca do texto do LLM. Enquanto espera a resposta, a sessão fica pausada no Postgres e sobrevive a um restart.
+8. Com SIM, o sistema reagenda a OS, aloca a máquina, reserva o estoque e avisa o operador. Ver opções gera um novo plano (até 2 vezes). NÃO manda o caso para decisão manual.
 
-## Conhecimento e clima (frente do Edison)
+Valores em R$ só saem de código, um clique duplo não executa nada duas vezes e o ERP recusa qualquer reagendamento sem plano aprovado no banco. Toda escrita grava auditoria na mesma transação.
 
-Dois serviços: **`conhecimento`** (pasta `base_agricola/`, porta 8010), que guarda os trechos das bulas no Qdrant e os fatores de perda no Postgres, e **`monitor`** (porta 8020), que compara a previsão do tempo com limiares e abre incidentes.
+## Agentes
 
-| Etapa | Input | Lógica | Output |
+O workflow é um grafo do Google ADK. Quatro nós são agentes LLM e o resto é código: contexto, suspensão, janelas, cálculo de perda, validação e execução. Cada agente recebe o contexto numa instrução em JSON montada em código e não vê o histórico da sessão. Ele só sabe o que está na instrução e o que as ferramentas devolvem.
+
+| Agente | Quando roda | Ferramentas | Saída |
 |---|---|---|---|
-| Base de conhecimento (offline) | Bulas em PDF (`base_agricola/dados/docs/`) listadas em `fontes.yaml` | Texto por página → trechos de até 500 caracteres por seção da bula, sem cruzar página → embeddings no Qdrant | Trechos com `produto`, `secao` e `pagina` para citar |
-| Busca (`buscar_trechos`) | Consulta + nome do produto | Busca semântica filtrada por produto | Trechos com fonte e página; lista vazia = a bula não traz o limite |
-| Fatores de perda | `fatores_perda.yaml` | Cada fator com página citada ou estimativa declarada | `GET /fatores-perda?tipo_insumo=&condicao=` |
-| 1 · Gatilho (Monitor) | Previsão horária de 5 dias (Open-Meteo ou cenário gravado) | Chuva acumulada, vento e umidade na janela de 48 h contra limiares | Incidente em `agente.incidentes` com as 120 h da previsão; aviso em `POST {AGENTS_URL}/incidentes/{id}/iniciar` |
+| Avaliador de Risco | Depois do contexto, se há OS na janela | `buscar_trechos` | `AvaliacaoRisco`: por OS e limite violado, parâmetro, limite, janela em horas, valor previsto, trecho literal, fonte e página |
+| Agronômico | Depois da suspensão, junto com o Operacional | `buscar_trechos`, `consultar_talhao` | Texto de até 6 frases, com fonte e página |
+| Operacional | Depois da suspensão, junto com o Agronômico | `janelas_validas`, `listar_os`, `disponibilidade_maquinas`, `listar_operadores` | Texto de até 8 frases, com datas e ids |
+| Supervisor | Depois das análises, e de novo quando o Validador reprova ou o gerente pede outras opções | `janelas_validas`, `calcular_impacto` | `PlanoProposto`: uma opção (novo início e máquina) por OS suspensa e a mensagem ao gerente |
 
-Bulas da demo, todas com limite de chuva escrito: Abacus HC (p. 7), Ativum (p. 6), Brucia (p. 9) e Amplexus (p. 5).
+O Avaliador de Risco procura na bula de cada produto os limites de chuva, vento, umidade e temperatura. Depois compara com a previsão no horário da OS, que já chega calculada em código: os extremos durante a aplicação e a chuva acumulada depois do fim. Ele só marca violação se o trecho trouxer o limite e a previsão passar dele. O schema exige o texto literal do trecho, a fonte e a página, e rejeita a saída que vier sem isso.
 
-Fenologia, para o Agente Agronômico: [Fisiologia do Milho](https://www.infoteca.cnptia.embrapa.br/bitstream/doc/486995/1/Circ22.pdf) e [Estádios fenológicos da soja](https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/1128387/1/p.-33-54-de-SP-17-2020-online.pdf), da Embrapa. Esses trechos não têm `produto`: busque sem esse filtro, de preferência com `cultura` e o nome do estágio (`estádio V6 do milho`).
+O Agronômico explica o que a chuva pode causar naquela cultura e naquele estágio: perda de produto, lixiviação, deriva, mudança na janela de aplicação. Para isso, busca os documentos de fenologia da Embrapa pela cultura e pelo nome do estágio (`estádio V6 do milho`) e cruza com o que a bula diz sobre época, intervalo de aplicação e intervalo de segurança.
 
-### Comandos
+O Operacional consulta as janelas válidas de cada OS suspensa e sugere quando remarcar e com qual máquina, de preferência a que já estava alocada. Também aponta conflitos com outras OS do mesmo talhão ou da mesma máquina.
 
-```bash
-uv sync                                                         # ambiente único do monorepo
-uv run pytest base_agricola agents monitor                      # testes rápidos
-RODAR_LENTOS=1 uv run pytest base_agricola -k aceitacao         # bulas reais + modelo de embeddings
-curl -X POST localhost:8020/replay -H 'content-type: application/json' -d '{"cenario":"chuva_80mm.json"}'
-```
+O Supervisor junta as duas análises num plano. Ele só pode escolher datas e máquinas que `janelas_validas` devolveu. A mensagem ao gerente tem no máximo 5 linhas e não leva valores em R$ nem páginas, porque esses dados entram no rodapé, montado em código. Se o Validador reprova, o Supervisor recebe o motivo e corrige. Se o gerente pede outras opções, as datas já oferecidas saem da lista.
 
-No Windows, mande corpos com acento a partir de um arquivo UTF-8 (`--data-binary @arquivo.json`): o terminal pode enviar outra codificação e a API responde 400.
+### O que fica em código
 
-### Subida no Docker
+- Um início de janela só vale se for hora cheia entre 06h e 18h, estiver pelo menos 2 h à frente, couber nas 120 h da previsão e respeitar o limite citado pelo Avaliador durante o tempo em que ele se aplica. No caso da chuva, esse tempo é a aplicação mais as horas seguintes que a bula pede. Também precisa haver máquina livre do tipo certo no ERP.
+- A perda evitada é `área × dose × preço × fator`. O fator vem da base de conhecimento, com página citada ou estimativa declarada. Se não houver fator, a perda fica em branco; o LLM não chuta um valor.
+- O Validador reprova o plano quando falta opção para alguma OS suspensa, quando a data já foi oferecida ao gerente, quando a janela não passa no clima ou quando a máquina está ocupada, não existe ou é de outro tipo. Cada motivo volta para o Supervisor.
+- Antes de gravar, o Executor confere a janela de novo. Se ela deixou de valer, o fluxo volta para um novo plano.
 
-O `docker compose up -d --build` já sobe o `conhecimento` e o `monitor`. O serviço `conhecimento-carga` roda antes, indexa as bulas no Qdrant e carrega os fatores de perda; se alguma bula falhar, o `conhecimento` não sobe.
+### Quando um agente falha
 
-As migrations e o seed só rodam com o volume do Postgres vazio, e as datas das OS contam a partir desse momento. Antes de cada ensaio ou apresentação, recrie o banco:
+Cada agente pode fazer até 6 rodadas de chamadas de ferramenta, e na última só pode responder. Se uma ferramenta dá erro, o modelo recebe `{"ok": false}` e segue. Se o próprio modelo falha, estoura o timeout (90 s, com 2 tentativas) ou devolve algo fora do schema, a saída vira vazia e o fluxo segue por um caminho seguro:
 
-```bash
-docker compose down -v
-docker compose up -d --build
-```
+- Se o Avaliador falha, nada é suspenso, a OS continua agendada e o gerente recebe um alerta.
+- Se o Agronômico ou o Operacional falha, a análise dele vira "(análise indisponível)" e o Supervisor trabalha com a outra.
+- Se o Supervisor falha, o plano sai vazio, o Validador reprova e, depois de 2 voltas, o caso vai para decisão manual.
 
-## Fazenda simulada, canal e painel (frente do Felipe)
+Os modelos ficam nas variáveis `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL` e `MODEL_SUPERVISOR`. Para testar um agente sozinho, sem Postgres, MCP ou Telegram, rode `uv run adk web agents/agentes` (detalhes em [agents/README.md](agents/README.md)).
 
-Quatro peças: o **mini-ERP** (Postgres), o **servidor MCP** que os agentes usam para ler e escrever nele, o **canal** de notificação (Telegram ou painel) e o **painel web**.
+## Serviços
 
-| Peça | Onde | O que faz |
+| Serviço | Porta | Papel |
 |---|---|---|
-| Mini-ERP | `db/migrations/` (`001_erp.sql`, `002_agente.sql`, `900_seed.sql`) | Talhões, insumos, máquinas, operadores, ordens de serviço e leituras de solo; no schema `agente`, incidentes, planos e auditoria. O seed usa datas relativas a `now()` e só defensivos (Abacus HC e Engeo Pleno S). |
-| Servidor MCP | `erp_mcp/` (porta 8030, `/mcp`) | 6 ferramentas de leitura e 4 de escrita. Só `suspender_os` age sem aprovação (`agendada → suspensa_preventiva`); `reagendar_os`, `alocar_maquina` e `reservar_estoque` exigem plano aprovado no banco. Toda escrita grava `agente.auditoria` na mesma transação. |
-| Canal | `channels/` | `NotificationChannel` com `TelegramChannel` (botões SIM / NÃO / Ver opções, long polling) e `PainelChannel` (grava o alerta na auditoria). `CHANNEL=telegram` ou `painel` escolhe um sem mexer no fluxo. Roda dentro do processo `agents`. |
-| Painel web | `painel/` (porta 8080) | Quatro telas: ordens de serviço ao vivo, linha do tempo com a citação (fonte e página), aprovação pendente e "Simular chuva". Sem login e sem CDN. |
+| `monitor` | 8020 | Compara a previsão com os limiares e abre incidentes |
+| `agents` | 8000 | Workflow do incidente (Google ADK) e canal de aprovação |
+| `conhecimento` | 8010 | Trechos das bulas no Qdrant e fatores de perda |
+| `erp-mcp` | 8030 | Servidor MCP sobre o mini-ERP (talhões, OS, máquinas, estoque) |
+| `painel` | 8080 | Ordens de serviço ao vivo, linha do tempo, aprovação e "Simular chuva" |
+| `postgres`, `qdrant` | 5432, 6333 | ERP, estado dos agentes e base vetorial |
 
-Inputs, lógica e outputs do que é seu no fluxo:
-
-| Etapa | Input | Lógica | Output |
-|---|---|---|---|
-| Suspensão | `os_id`, `incidente_id`, motivo com a citação | `UPDATE ... WHERE status = 'agendada'` e auditoria na mesma transação | OS `suspensa_preventiva`; a segunda chamada devolve `{"ok": false}` |
-| Aprovação | Plano em `agente.planos` | Mensagem com botões no Telegram, ou os mesmos botões no painel | `Resposta(incidente_id, plano_id, SIM / NAO / OPCOES, respondido_por)` para o `agents` |
-| Execução | `plano_id` aprovado | O MCP recusa se o plano não está aprovado, se a máquina está ocupada, se falta estoque ou se já foi feito | OS reagendada, máquina alocada, estoque baixado |
-
-### Como subir
+## Executar
 
 ```bash
-cp .env.example .env     # preencha TELEGRAM_BOT_TOKEN, GERENTE_CHAT_ID e OPENAI_API_KEY
+cp .env.example .env          # preencha OPENAI_API_KEY (e o Telegram, se usar CHANNEL=telegram)
 docker compose up -d --build
 ```
 
-- Painel em `http://localhost:8080`. O botão "Simular chuva" dispara o cenário `chuva_80mm.json` no Monitor.
-- As migrations só rodam quando o banco é criado. Se mudar um `.sql`, recrie: `docker compose down -v && docker compose up -d --build` (o `-v` apaga os dados).
-- Se a porta 5432 do host estiver ocupada (Postgres do Windows), suba com `POSTGRES_PORT=5433` e use `DATABASE_URL=postgresql://terramind:terramind@localhost:5433/terramind` ao rodar testes fora do Docker.
-- Telegram: crie o bot no @BotFather e ponha o token e o `chat_id` no `.env`. Só **um** processo pode fazer polling por token (erro `Conflict`); use `CHANNEL=painel` nos demais ambientes.
-- Teste manual do bot: `uv run python -m channels.teste_bot`.
+Abra `http://localhost:8080` e clique em Simular chuva para disparar o cenário de 80 mm.
 
-```bash
-uv run pytest tests -q      # MCP, migrations, canais e painel (precisa do Postgres do compose)
-```
+As datas do seed contam a partir da criação do banco. Para recomeçar a demo do zero, rode `docker compose down -v && docker compose up -d --build`.
 
-> **Cuidado:** os testes de `tests/` zeram as tabelas `erp` e `agente` do Postgres e recarregam o seed a cada teste. Se o compose estiver de pé, **apagam os incidentes, planos e a auditoria da demo em andamento**. Rode-os com a pilha parada ou com `DATABASE_URL` apontando para um banco separado.
-
-```bash
-uv run ruff check .
-```
+Mais detalhes: [agents/README.md](agents/README.md) · [docs/contratos.md](docs/contratos.md) · [docs/plans/](docs/plans/)
