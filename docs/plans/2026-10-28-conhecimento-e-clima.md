@@ -838,7 +838,7 @@ git checkout -b <branch da fase>
 
 - [x] Triagem das bulas (30/10): **Abacus HC** (fungicida, "4 h" p. 7, principal), **Ativum** (fungicida BASF, soja, "4 h" p. 6, reserva), **Brucia** (herbicida, "4 h" e "48 h" p. 9), **Amplexus** (herbicida, "4 h" p. 5), **Soprano 125 SC** e **Aproach Premium** (fungicidas sem número de chuva, negativos)
 - [x] 4 bulas com limite de chuva em `base_agricola/dados/docs/` e no `fontes.yaml`: Abacus HC, Ativum, Brucia, Amplexus (negativos descartados, 30/10)
-- [ ] Manual de fenologia de soja e milho (opcional, para o Agronômico)
+- [x] Fenologia de soja e milho no `fontes.yaml` (31/10): Embrapa, com V6 e R1 encontrados na busca. Falta o Agronômico usar: sem `produto`, com `cultura` (frente do Gustavo)
 - [x] Task 4: ler o `fontes.yaml` e extrair o texto por página (commit pendente)
 - [x] Task 5: dividir em trechos por seção da bula (commit pendente) — 27 testes passando; o limite de chuva das 4 bulas reais cai no trecho e na página certos
 - [x] Task 6: indexar no Qdrant sem duplicar (commit pendente)
