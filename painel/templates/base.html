@@ -6,72 +6,18 @@
   <title>{% block titulo %}TerraMind{% endblock %}</title>
   <link rel="stylesheet" href="/static/painel.css">
   <script src="/static/htmx.min.js"></script>
-  <script src="/static/painel.js" defer></script>
 </head>
 <body>
-  {# Tela única, só de acompanhamento: a decisão do gerente acontece no canal (Telegram). Os blocos se atualizam pelas rotas /parcial; painel.js só deriva números do que elas trazem. #}
-  {% set incidente = "?incidente=" ~ escolhido if escolhido else "" %}
-  <header class="topo">
-    <div class="marca">
-      <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16Z"/><path d="M4 21c2-5 5-8 10-10"/></svg></span>
-      <div>
-        <h1>TerraMind</h1>
-        <p>Operações agrícolas protegidas do clima</p>
-      </div>
-    </div>
-    <div class="acoes">
-      <span class="ao-vivo">Ao vivo</span>
-      <button class="grande" hx-post="/simular/chuva" hx-target="#simulacao" hx-swap="innerHTML"
-              hx-disabled-elt="this">Simular chuva</button>
-    </div>
+  <header>
+    <h1>TerraMind</h1>
+    <nav>
+      <a href="/os" class="{{ 'ativa' if ativa == 'os' }}">Ordens de serviço</a>
+      <a href="/timeline" class="{{ 'ativa' if ativa == 'timeline' }}">Linha do tempo</a>
+      <a href="/aprovacao" class="{{ 'ativa' if ativa == 'aprovacao' }}">Aprovação</a>
+      <a href="/simular" class="{{ 'ativa' if ativa == 'simular' }}">Simular chuva</a>
+    </nav>
   </header>
-
-  <div id="simulacao" aria-live="polite"></div>
-  <div class="faixas" hx-get="/parcial/alertas" hx-trigger="load, every 2s" hx-swap="innerHTML"></div>
-
-  <section class="kpis" aria-label="Resumo">
-    <div class="kpi"><span class="rotulo">Chuva prevista 48 h</span><strong id="kpi-chuva" class="quente">—</strong><small id="kpi-chuva-nota">Sem incidente aberto</small></div>
-    <div class="kpi"><span class="rotulo">Ordens suspensas</span><strong id="kpi-suspensas" class="atencao">—</strong><small id="kpi-suspensas-nota">Suspensão automática e reversível</small></div>
-    <div class="kpi"><span class="rotulo">Ordens reagendadas</span><strong id="kpi-reagendadas" class="azul">—</strong><small id="kpi-reagendadas-nota">Com plano aprovado</small></div>
-    <div class="kpi"><span class="rotulo">Perda evitada</span><strong id="kpi-perda" class="bom">R$ 0,00</strong><small id="kpi-perda-nota">Total com plano executado · estimativa</small><small id="kpi-perda-acao" class="acao-kpi"></small></div>
-    <div class="kpi"><span class="rotulo">Próximo dia sem chuva</span><strong id="kpi-seco">—</strong><small id="kpi-seco-nota">Sem incidente aberto</small></div>
-  </section>
-
-  <main class="grade">
-    <div class="coluna">
-      <section class="painel">
-        <div class="titulo-bloco"><h2>Ordens de serviço</h2><span id="os-total" class="nota"></span></div>
-        <div class="tabela">
-          <table>
-            <thead>
-              <tr><th>Talhão</th><th>Operação</th><th>Início</th><th>Máquina</th><th>Perda</th><th>Status</th></tr>
-            </thead>
-            <tbody id="ordens" hx-get="/parcial/os" hx-trigger="{{ 'every 2s' if ordens is defined else 'load, every 2s' }}" hx-swap="innerHTML">
-              {% if ordens is defined %}{% include "_linhas_os.html" %}{% endif %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="painel" id="previsao">
-        <div class="titulo-bloco"><h2>Previsão</h2><span class="nota">cenário gravado · 120 h</span></div>
-        <div id="previsao-numeros" class="numeros" hidden>
-          <div><span class="rotulo">Chuva 48 h</span><strong id="prev-chuva" class="quente"></strong></div>
-          <div><span class="rotulo">Vento máx. 48 h</span><strong id="prev-vento"></strong></div>
-        </div>
-        <div id="grafico"><p class="vazio">O gráfico aparece quando a chuva for simulada.</p></div>
-      </section>
-    </div>
-
-    <aside class="painel lateral">
-      <div class="titulo-bloco"><h2>Linha do tempo</h2><span id="status-incidente" class="selo" hidden></span></div>
-      <div id="seletor" hx-get="/timeline{{ incidente }}" hx-select=".seletor" hx-trigger="load, every 2s" hx-swap="innerHTML">
-        {% if incidentes %}{% include "_seletor.html" %}{% endif %}
-      </div>
-      <div id="eventos" class="eventos" hx-get="/parcial/timeline{{ incidente }}" hx-trigger="{{ 'every 2s' if eventos is defined else 'load, every 2s' }}" hx-swap="innerHTML">
-        {% if eventos is defined %}{% include "_eventos.html" %}{% endif %}
-      </div>
-    </aside>
-  </main>
+  <div hx-get="/parcial/alertas" hx-trigger="load, every 2s" hx-swap="innerHTML"></div>
+  <main>{% block conteudo %}{% endblock %}</main>
 </body>
 </html>

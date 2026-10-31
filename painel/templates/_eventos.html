@@ -1,41 +1,15 @@
-{% set ACOES = {
-  "listar_os_em_risco": "Ordens em risco identificadas",
-  "propor_plano": "Plano proposto",
-  "validar_plano": "Plano validado",
-  "revalidacao_falhou": "Janela deixou de valer",
-  "avaliar_risco": "Risco avaliado pela bula",
-  "avaliacao_falhou": "Avaliação de risco falhou",
-  "suspender_os": "Ordem suspensa",
-  "pedir_aprovacao": "Plano enviado ao gerente",
-  "resposta_gerente": "Gerente respondeu",
-  "escalonar_aprovacao": "Aprovação escalonada",
-  "reagendar_os": "Ordem reagendada",
-  "alocar_maquina": "Máquina alocada",
-  "reservar_estoque": "Estoque reservado",
-  "executar_plano": "Plano executado",
-  "execucao_falhou": "Execução falhou",
-  "pedir_decisao_manual": "Decisão manual solicitada",
-  "falha_interna": "Falha interna",
-  "enviar_alerta": "Alerta enviado",
-  "notificar_operador": "Operador avisado",
-  "encerrar_incidente": "Incidente encerrado",
-} %}
-{% set ALERTAS = ["avaliacao_falhou", "pedir_decisao_manual", "execucao_falhou", "revalidacao_falhou", "falha_interna", "enviar_alerta"] %}
-{% set ESPERAS = ["pedir_aprovacao", "escalonar_aprovacao"] %}
 {% for e in eventos %}
-{% set reprovado = e.depois is mapping and e.depois.get("aprovado") is false %}
-<article class="evento {{ 'alerta' if e.acao in ALERTAS or reprovado else 'espera' if e.acao in ESPERAS else 'ok' }}" data-acao="{{ e.acao }}"{% if e.acao == "suspender_os" and e.depois %} data-depois='{{ e.depois|tojson }}'{% endif %}{% if e.acao == "propor_plano" and e.depois is mapping and e.depois.get("opcoes") %} data-proposta='{{ {"plano": e.depois.plano_id, "inicio": e.depois.opcoes[0].novo_inicio}|tojson }}'{% endif %}>
-  <div class="linha-evento"><span class="no">{{ e.no }}</span><span class="quando">{{ e.ts|hms }}</span></div>
-  <div class="acao">{{ "Perda calculada" if e.depois and e.depois.impactos else ACOES.get(e.acao, e.acao) }}</div>
-  {% if e.texto %}<div class="texto">{{ e.texto }}</div>{% endif %}
-  {% if reprovado %}<div class="texto">{{ (e.depois.get("motivos") or [])|join("; ") or "Reprovado" }}</div>{% endif %}
-  {% for fonte, pagina in e.citacoes %}
-  <span class="citacao">{{ fonte }}, p. {{ pagina }}</span>
-  {% endfor %}
-  {% if e.acao == "avaliar_risco" and e.depois %}{% for v in e.depois.violacoes or [] if v.viola %}
-  <span class="citacao">{{ v.fonte_doc }}, p. {{ v.pagina }}</span>
-  {% endfor %}{% endif %}
+<article class="evento">
+  <div class="quando">{{ e.ts|hms }}</div>
+  <div class="corpo">
+    <div class="quem"><strong>{{ e.no }}</strong> · {{ e.acao }}</div>
+    {% if e.texto %}<div class="texto">{{ e.texto }}</div>{% endif %}
+    {% for fonte, pagina in e.citacoes %}
+    <span class="citacao">📖 {{ fonte }}, p. {{ pagina }}</span>
+    {% endfor %}
+    {% for m in e.mudancas %}<div class="mudanca">{{ m }}</div>{% endfor %}
+  </div>
 </article>
 {% else %}
-<p class="vazio">Nenhum incidente ainda. Quando a chuva for simulada, cada passo aparece aqui.</p>
+<p class="vazio">Sem eventos de auditoria para este incidente.</p>
 {% endfor %}

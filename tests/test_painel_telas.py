@@ -79,40 +79,10 @@ def test_timeline_mostra_citacao_e_mudanca_de_status(cliente):
     assert escrita.suspender_os(1, inc, "Chuva prevista antes das 4 h (fonte: bula-abacus-hc, p. 7)")["ok"]
     html = cliente.get(f"/timeline?incidente={inc}").text
     assert "bula-abacus-hc, p. 7" in html and 'class="citacao"' in html
-    assert "Ordem suspensa" in html and "status: agendada" not in html  # só o título, sem o JSON cru
+    assert "status: agendada → suspensa_preventiva" in html
     assert "(fonte:" not in html  # a citação sai do texto e vira selo
     assert f"/parcial/timeline?incidente={inc}" in html
     assert "bula-abacus-hc, p. 7" in cliente.get(f"/parcial/timeline?incidente={inc}").text
-
-
-def test_timeline_mostra_so_titulo_e_check_do_plano_validado(cliente):
-    from json import dumps
-
-    inc = novo_incidente()
-    insere = "INSERT INTO agente.auditoria (incidente_id, no, acao, depois) VALUES (%s, %s, %s, %s::jsonb)"
-    sql(insere, (inc, "validador", "validar_plano", dumps({"aprovado": True, "motivos": [], "volta": 1})))
-    html = cliente.get(f"/parcial/timeline?incidente={inc}").text
-    assert "Plano validado" in html and 'class="evento ok"' in html
-    assert "motivos" not in html and "aprovado" not in html and "volta" not in html
-
-    reprovado = dumps({"aprovado": False, "motivos": ["máquina ocupada"]})
-    sql(insere, (inc, "validador", "validar_plano", reprovado))
-    html = cliente.get(f"/parcial/timeline?incidente={inc}").text
-    assert 'class="evento alerta"' in html and "máquina ocupada" in html
-
-
-def test_cada_proposta_e_cada_plano_pendente_trazem_o_id_para_comparar_opcoes(cliente):
-    from json import dumps
-
-    inc = novo_incidente("aguardando_aprovacao")
-    plano = novo_plano(inc, "Remarcar")
-    opcao = {"os_id": 1, "novo_inicio": "2026-11-02T07:00:00-03:00"}
-    proposta = dumps({"plano_id": plano, "opcoes": [opcao]})
-    insere = "INSERT INTO agente.auditoria (incidente_id, no, acao, depois) VALUES (%s, %s, %s, %s::jsonb)"
-    sql(insere, (inc, "supervisor", "propor_plano", proposta))
-    html = cliente.get(f"/parcial/timeline?incidente={inc}").text
-    assert "data-proposta" in html and "2026-11-02T07:00:00-03:00" in html and f'"plano": {plano}' in html
-    assert f'data-plano="{plano}"' in cliente.get("/parcial/pendentes").text
 
 
 def test_timeline_usa_o_incidente_mais_recente_por_padrao(cliente):
@@ -129,7 +99,7 @@ def test_aprovacao_lista_so_planos_sem_resposta_com_selo_de_escalado(cliente):
     pendente = novo_plano(inc, "Remarcar OS 1 para sexta", escalado=True)
     respondido = novo_plano(inc, "Plano antigo")
     sql("UPDATE agente.planos SET respondido_em = now(), aprovado_por = 'x' WHERE id = %s", (respondido,))
-    html = cliente.get("/parcial/pendentes").text
+    html = cliente.get("/aprovacao").text
     assert "Remarcar OS 1 para sexta" in html and "Plano antigo" not in html
     assert "escalado" in html
     for r in ("SIM", "NAO", "OPCOES"):
@@ -137,7 +107,7 @@ def test_aprovacao_lista_so_planos_sem_resposta_com_selo_de_escalado(cliente):
 
 
 def test_aprovacao_vazia(cliente):
-    assert "Nenhuma aprovação pendente" in cliente.get("/parcial/pendentes").text
+    assert "Nenhuma aprovação pendente" in cliente.get("/aprovacao").text
 
 
 def test_resposta_encaminha_ao_agents_com_o_formato_do_contrato(cliente, monkeypatch):
@@ -224,13 +194,3 @@ def test_simular_chuva_usa_o_talhao_configurado(cliente, monkeypatch):
     monkeypatch.setenv("TALHAO_DEMO", "2")
     cliente.post("/simular/chuva")
     assert json.loads(vistas[0].content)["talhao_id"] == 2
-
-
-def test_tela_e_so_de_acompanhamento_sem_botoes_de_decisao(cliente):
-    inc = novo_incidente("aguardando_aprovacao")
-    novo_plano(inc, "Remarcar OS 1 para sexta")
-    for rota in ("/os", "/timeline", "/aprovacao"):
-        html = cliente.get(rota).text
-        assert "Remarcar OS 1 para sexta" not in html and "hx-post=\"/aprovacao/" not in html
-        assert "Decisão" not in html and 'id="status-incidente"' in html
-        assert 'hx-post="/simular/chuva"' in html

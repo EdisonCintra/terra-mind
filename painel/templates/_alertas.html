@@ -1,6 +1,6 @@
 {% for m in manuais %}
 <div class="alerta-vermelho">
-  <strong>Incidente #{{ m.id }} · {{ m.talhao }} aguarda decisão manual.</strong>
+  <strong>⚠️ Incidente #{{ m.id }} · {{ m.talhao }} aguarda decisão manual.</strong>
   {% if m.alerta %}<div>{{ m.alerta }}</div>{% endif %}
   <a href="/timeline?incidente={{ m.id }}">Ver linha do tempo</a>
 </div>

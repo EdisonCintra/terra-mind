@@ -45,13 +45,3 @@ def test_os_suspensa_fica_amarela(cliente):
     assert escrita.suspender_os(1, inc, "teste")["ok"]
     html = cliente.get("/parcial/os").text
     assert html.count('class="status suspensa"') == 1 and html.count('class="status agendada"') == 2
-
-
-def test_cenario_do_grafico_e_igual_ao_do_monitor(cliente):
-    from pathlib import Path
-
-    raiz = Path(__file__).resolve().parents[1]
-    copia = (raiz / "painel" / "static" / "chuva_80mm.json").read_bytes()
-    assert copia == (raiz / "monitor" / "scenarios" / "chuva_80mm.json").read_bytes()
-    assert cliente.get("/static/chuva_80mm.json").status_code == 200
-    assert cliente.get("/static/painel.js").status_code == 200

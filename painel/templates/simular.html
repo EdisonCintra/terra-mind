@@ -1,2 +1,9 @@
 {% extends "base.html" %}
 {% block titulo %}Simular chuva · TerraMind{% endblock %}
+{% block conteudo %}
+<h2>Simular chuva</h2>
+<p class="vazio">Carrega a previsão gravada (80 mm em 36 h) e abre os incidentes. Acompanhe a tela de ordens de serviço.</p>
+<button class="grande" hx-post="/simular/chuva" hx-target="#simulacao" hx-swap="innerHTML"
+        hx-disabled-elt="this">🌧️ Simular chuva</button>
+<div id="simulacao" aria-live="polite"></div>
+{% endblock %}
