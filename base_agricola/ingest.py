@@ -46,6 +46,8 @@ def comando_indexar(manifesto: Path = MANIFESTO, doc: str | None = None) -> None
                                QdrantClient(url=os.environ["QDRANT_URL"]), FastEmbedEmbedder())
     for doc_id, n in resultado.items():
         typer.echo(f"{doc_id}: {n if isinstance(n, str) else f'{n} trechos'}")
+    if any(isinstance(n, str) for n in resultado.values()):
+        raise typer.Exit(code=1)
 
 
 @app.command("carregar-fatores")

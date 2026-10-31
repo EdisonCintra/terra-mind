@@ -29,36 +29,21 @@ Bulas da demo, todas com limite de chuva escrito: Abacus HC (p. 7), Ativum (p. 6
 uv sync                                                         # ambiente único do monorepo
 uv run pytest base_agricola agents monitor                      # testes rápidos
 RODAR_LENTOS=1 uv run pytest base_agricola -k aceitacao         # bulas reais + modelo de embeddings
-docker compose exec conhecimento python -m base_agricola.ingest indexar          # PDFs → Qdrant
-docker compose exec conhecimento python -m base_agricola.ingest carregar-fatores # YAML → Postgres
 curl -X POST localhost:8020/replay -H 'content-type: application/json' -d '{"cenario":"chuva_80mm.json"}'
 ```
 
 No Windows, mande corpos com acento a partir de um arquivo UTF-8 (`--data-binary @arquivo.json`): o terminal pode enviar outra codificação e a API responde 400.
 
-### Blocos para o `docker-compose.yml`
+### Subida no Docker
 
-```yaml
-  conhecimento:
-    build: { context: ., dockerfile: base_agricola/Dockerfile }
-    environment:
-      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
-      QDRANT_URL: http://qdrant:6333
-    ports: ["8010:8010"]
-    depends_on: { postgres: { condition: service_healthy }, qdrant: { condition: service_started } }
+O `docker compose up -d --build` já sobe o `conhecimento` e o `monitor`. O serviço `conhecimento-carga` roda antes, indexa as bulas no Qdrant e carrega os fatores de perda; se alguma bula falhar, o `conhecimento` não sobe.
 
-  monitor:
-    build: { context: ., dockerfile: monitor/Dockerfile }
-    environment:
-      DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
-      AGENTS_URL: http://agents:8000
-      MONITOR_MODE: ${MONITOR_MODE:-replay}
-    ports: ["8020:8020"]
-    depends_on: { postgres: { condition: service_healthy } }
+As migrations e o seed só rodam com o volume do Postgres vazio, e as datas das OS contam a partir desse momento. Antes de cada ensaio ou apresentação, recrie o banco:
+
+```bash
+docker compose down -v
+docker compose up -d --build
 ```
-
-O `DATABASE_URL` destes serviços usa o driver `postgresql+psycopg://` (SQLAlchemy).
-
 ## Fazenda simulada, canal e painel (frente do Felipe)
 
 Quatro peças: o **mini-ERP** (Postgres), o **servidor MCP** que os agentes usam para ler e escrever nele, o **canal** de notificação (Telegram ou painel) e o **painel web**.

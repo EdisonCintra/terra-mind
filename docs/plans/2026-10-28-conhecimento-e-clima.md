@@ -813,11 +813,11 @@ git checkout -b <branch da fase>
 
 ## ✅ Checklist do Edison (onde estamos)
 
-> Atualize marcando `[x]`. Branch atual: **`feat/base-agricola`**.
+> Atualize marcando `[x]`. Branch atual: **`fix/integracao-conhecimento-clima`**.
 
 ### Agora (30/10)
 
-> **Código da minha parte: pronto.** Todas as tasks (1–7, 10–17) implementadas e revisadas. RAG: 57 testes de `base_agricola` + `agents` passando (4 lentos pulados, passam com `RODAR_LENTOS=1`); suíte completa 89 passando. Falta o merge do PR e as entregas do time.
+> **Código da minha parte: pronto.** Todas as tasks (1–7, 10–17) implementadas e revisadas. RAG: 57 testes de `base_agricola` + `agents` passando (4 lentos pulados, passam com `RODAR_LENTOS=1`); suíte completa 89 passando. PR #2 na `main` (31/10). Falta o PR da integração e as entregas do time.
 
 - [x] Task 1: esqueleto da API com `/health` (`00fb5f0`)
 - [x] Task 2: tabelas `documentos` e `fatores_perda` + repositório (commit pendente)
@@ -860,7 +860,7 @@ git checkout -b <branch da fase>
 ### Dias 5 a 7
 
 - [x] Task 17: Dockerfiles e README (commit pendente) — testado num compose temporário: os 4 containers sobem, `indexar` gera 513 trechos, a busca acha o limite de chuva em 1º nas 4 bulas, o replay abre 1 incidente com 120 h e não duplica
-- [ ] Felipe colar os blocos `conhecimento` e `monitor` (README) no `docker-compose.yml` dele
+- [x] `conhecimento`, `conhecimento-carga` e `monitor` no `docker-compose.yml` (31/10, feito na frente do Edison, porque o compose da `main` estava sem eles)
 - [x] Revisão final (auto-revisão, 30/10): corrigidos Qdrant fora do ar → 503 e modelo de embeddings baixado no build e carregado na subida (antes, a 1ª busca levava ~10 s e estourava o timeout de 5 s da ferramenta); 89 testes passando
 - [x] Commit e PR único da `feat/base-agricola` (30/10)
 - [ ] Ensaiar o replay com o Gustavo: o Avaliador cita a bula certa?
