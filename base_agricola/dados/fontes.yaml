@@ -33,3 +33,19 @@ fontes:
     culturas: [soja]
     arquivo: docs/amplexus.pdf
     url: https://www.adapar.pr.gov.br/sites/adapar/arquivos_restritos/files/documento/2026-07/amplexus.pdf
+
+  # Fenologia: sem produto, a busca por `produto` do Avaliador não traz estes trechos.
+  # Baixados da Embrapa em 31/10/2026. Cobrem os estágios do seed: milho V6 e soja R1.
+  - id: fenologia-milho
+    titulo: Fisiologia do Milho (Embrapa, Circular Técnica 22, 2002)
+    tipo_doc: fenologia
+    culturas: [milho]
+    arquivo: docs/fenologia_milho.pdf
+    url: https://www.infoteca.cnptia.embrapa.br/bitstream/doc/486995/1/Circ22.pdf
+
+  - id: fenologia-soja
+    titulo: Estádios fenológicos da soja (Embrapa)
+    tipo_doc: fenologia
+    culturas: [soja]
+    arquivo: docs/fenologia_soja.pdf
+    url: https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/1128387/1/p.-33-54-de-SP-17-2020-online.pdf

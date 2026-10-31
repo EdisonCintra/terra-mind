@@ -82,3 +82,22 @@ def test_aceitacao_bulas_reais_trecho_do_limite_no_top3(produto):
         indexar(client, emb, dividir_em_trechos(f, extrair_paginas(f.arquivo)), "trechos")
     top3 = buscar(client, emb, "trechos", "chuva após a aplicação", produto=produto, limite=3)
     assert any(t.pagina == LIMITES[produto] and "horas" in t.texto for t in top3), [t.pagina for t in top3]
+
+
+ESTAGIOS = {"milho": ("Estádio V6 seis folhas desenvolvidas ponto de crescimento pendão", "V6"),
+            "soja": ("estádio R1 da soja início do florescimento", "R1")}
+
+
+@pytest.mark.skipif(not os.environ.get("RODAR_LENTOS"), reason="baixa o modelo de embeddings; RODAR_LENTOS=1")
+@pytest.mark.parametrize("cultura", ESTAGIOS)
+def test_aceitacao_fenologia_acha_o_estagio_e_nao_mistura_com_a_bula(cultura):
+    from base_agricola.embeddings import FastEmbedEmbedder
+
+    client, emb = QdrantClient(":memory:"), FastEmbedEmbedder()
+    for f in carregar_manifesto(DADOS / "fontes.yaml"):
+        indexar(client, emb, dividir_em_trechos(f, extrair_paginas(f.arquivo)), "trechos")
+    consulta, estagio = ESTAGIOS[cultura]
+    top3 = buscar(client, emb, "trechos", consulta, cultura=cultura, limite=3)
+    assert any(t.fonte_doc == f"fenologia-{cultura}" and estagio in t.texto for t in top3)
+    bula = buscar(client, emb, "trechos", "chuva após a aplicação", produto="Abacus HC", limite=10)
+    assert {t.fonte_doc for t in bula} == {"bula-abacus-hc"}

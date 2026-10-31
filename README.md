@@ -23,6 +23,8 @@ Dois serviços: **`conhecimento`** (pasta `base_agricola/`, porta 8010), que gua
 
 Bulas da demo, todas com limite de chuva escrito: Abacus HC (p. 7), Ativum (p. 6), Brucia (p. 9) e Amplexus (p. 5).
 
+Fenologia, para o Agente Agronômico: [Fisiologia do Milho](https://www.infoteca.cnptia.embrapa.br/bitstream/doc/486995/1/Circ22.pdf) e [Estádios fenológicos da soja](https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/1128387/1/p.-33-54-de-SP-17-2020-online.pdf), da Embrapa. Esses trechos não têm `produto`: busque sem esse filtro, de preferência com `cultura` e o nome do estágio (`estádio V6 do milho`).
+
 ### Comandos
 
 ```bash

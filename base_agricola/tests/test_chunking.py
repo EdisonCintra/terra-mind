@@ -67,3 +67,15 @@ def test_bulas_reais_trecho_do_limite_de_chuva(produto):
     achados = [t for t in trechos if re.search(padrao, " ".join(t.texto.split()))]
     assert achados, "nenhum trecho com o limite de chuva"
     assert (achados[0].pagina, achados[0].secao, achados[0].produto) == (pagina, secao, produto)
+
+
+FENOLOGIA = {"fenologia-milho": ("milho", "V6", 8), "fenologia-soja": ("soja", "R1", 4)}
+
+
+@pytest.mark.parametrize("doc_id", FENOLOGIA)
+def test_fenologia_real_traz_o_estagio_da_fazenda(doc_id):
+    [f] = [f for f in carregar_manifesto(DADOS / "fontes.yaml") if f.id == doc_id]
+    cultura, estagio, pagina = FENOLOGIA[doc_id]
+    trechos = dividir_em_trechos(f, extrair_paginas(f.arquivo))
+    assert f.culturas == [cultura] and {(t.secao, t.produto) for t in trechos} == {("geral", None)}
+    assert any(estagio in t.texto and t.pagina == pagina for t in trechos)

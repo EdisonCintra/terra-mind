@@ -43,5 +43,6 @@ def test_id_repetido_invalido(tmp_path):
 
 def test_manifesto_real_aponta_para_pdfs_existentes():
     fontes = carregar_manifesto(DADOS / "fontes.yaml")
-    assert {f.produto for f in fontes} == {"Abacus HC", "Ativum", "Brucia", "Amplexus"}
+    bulas = {f.produto for f in fontes if f.tipo_doc == "bula"}
+    assert bulas == {"Abacus HC", "Ativum", "Brucia", "Amplexus"}
     assert all(isinstance(f, Fonte) and f.arquivo.is_file() for f in fontes)
