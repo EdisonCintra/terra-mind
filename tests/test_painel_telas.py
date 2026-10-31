@@ -166,7 +166,7 @@ def test_simular_chuva_chama_o_replay_e_mostra_o_resultado(cliente, monkeypatch)
     monkeypatch.setenv("MONITOR_URL", "http://monitor:8020")
     html = cliente.post("/simular/chuva").text
     assert str(vistas[0].url) == "http://monitor:8020/replay"
-    assert json.loads(vistas[0].content) == {"cenario": "chuva_80mm.json"}
+    assert json.loads(vistas[0].content) == {"cenario": "chuva_80mm.json", "talhao_id": 1}
     assert "1 incidente(s), 1 erro(s)" in html and "id: 5" in html and "sem previsão" in html
 
 
@@ -187,3 +187,10 @@ def test_simular_chuva_com_monitor_fora_do_ar(cliente, monkeypatch):
 
 def test_tela_simular_tem_o_botao(cliente):
     assert 'hx-post="/simular/chuva"' in cliente.get("/simular").text
+
+
+def test_simular_chuva_usa_o_talhao_configurado(cliente, monkeypatch):
+    vistas = http_falso(monkeypatch, lambda req: httpx.Response(200, json={"incidentes": [], "erros": []}))
+    monkeypatch.setenv("TALHAO_DEMO", "2")
+    cliente.post("/simular/chuva")
+    assert json.loads(vistas[0].content)["talhao_id"] == 2

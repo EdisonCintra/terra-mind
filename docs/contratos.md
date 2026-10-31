@@ -56,5 +56,5 @@ Números de 1 a 12 seguem o plano do Gustavo (consolidados com `origin/feat/agen
 | ~~Escolher o defensivo da demo e fechar `produto` + `bula_id` (contrato 1)~~ feito: Abacus HC, `bula-abacus-hc` | Edison, Felipe | dia 2 |
 | ~~Alinhar `origin/feat/agents` com D2 (seed demo sem ureia) e D3 (ambiente Python na raiz) no rebase/merge com a `main`~~ feito em 31/10: `agents/` sem pacote aninhado, dependências no `pyproject.toml` da raiz, cenário da demo com Abacus HC (bula p. 7) | Gustavo | dia 2 |
 | Encerrar sem evidência contraria a A5: alertar o gerente e ir para `aguardando_decisao_manual`; passar `incidente_id` em `enviar_alerta` | Gustavo | dia 3 |
-| Painel mandar `talhao_id` no replay (a linha do tempo abre no incidente vazio do Talhão 2); `AGENTS_URL` e `MONITOR_URL` no compose; `.env.example` funcionar sem token do Telegram | Felipe | dia 3 |
+| ~~Painel mandar `talhao_id` no replay; `AGENTS_URL` e `MONITOR_URL` no compose; `.env.example` funcionar sem token do Telegram~~ feito em 31/10: o painel manda `talhao_id` 1 (`TALHAO_DEMO`), as URLs estão no `environment` do `painel` e o `.env.example` vem com `CHANNEL=painel` | Felipe | dia 3 |
 | Revisar o fator de perda 0,5 (estimativa) antes do pitch (contrato 11) | Time | dia 5 |

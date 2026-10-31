@@ -106,3 +106,10 @@ async def test_conflict_de_polling_vira_mensagem_clara(caplog):
     contexto = SimpleNamespace(error=Conflict("terminated by other getUpdates request"))
     await canal()._ao_errar(None, contexto)
     assert "outro processo" in caplog.text and "TELEGRAM_BOT_TOKEN" in caplog.text
+
+
+def test_sem_token_ou_chat_id_o_erro_manda_usar_o_painel(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setenv("GERENTE_CHAT_ID", "")
+    with pytest.raises(RuntimeError, match="CHANNEL=painel"):
+        criar_canal("telegram", AsyncMock())

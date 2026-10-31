@@ -44,6 +44,7 @@ As migrations e o seed só rodam com o volume do Postgres vazio, e as datas das 
 docker compose down -v
 docker compose up -d --build
 ```
+
 ## Fazenda simulada, canal e painel (frente do Felipe)
 
 Quatro peças: o **mini-ERP** (Postgres), o **servidor MCP** que os agentes usam para ler e escrever nele, o **canal** de notificação (Telegram ou painel) e o **painel web**.
@@ -78,5 +79,10 @@ docker compose up -d --build
 
 ```bash
 uv run pytest tests -q      # MCP, migrations, canais e painel (precisa do Postgres do compose)
+```
+
+> **Cuidado:** os testes de `tests/` zeram as tabelas `erp` e `agente` do Postgres e recarregam o seed a cada teste. Se o compose estiver de pé, **apagam os incidentes, planos e a auditoria da demo em andamento**. Rode-os com a pilha parada ou com `DATABASE_URL` apontando para um banco separado.
+
+```bash
 uv run ruff check .
 ```

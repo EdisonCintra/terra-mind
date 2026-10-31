@@ -47,9 +47,15 @@ class TelegramChannel(NotificationChannel):
         self, ao_responder: AoResponder, token: str | None = None, gerente_chat_id: int | None = None
     ):
         self.ao_responder = ao_responder
-        gerente = gerente_chat_id if gerente_chat_id is not None else os.environ["GERENTE_CHAT_ID"]
+        gerente = gerente_chat_id if gerente_chat_id is not None else os.environ.get("GERENTE_CHAT_ID", "")
+        token = token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not token or not gerente:
+            raise RuntimeError(
+                "CHANNEL=telegram exige TELEGRAM_BOT_TOKEN e GERENTE_CHAT_ID preenchidos; "
+                "sem eles use CHANNEL=painel"
+            )
         self.gerente = int(gerente)
-        self.app = Application.builder().token(token or os.environ["TELEGRAM_BOT_TOKEN"]).build()
+        self.app = Application.builder().token(token).build()
         self.app.add_handler(CallbackQueryHandler(self._ao_clicar, pattern=f"^{PREFIXO}:"))
         self.app.add_error_handler(self._ao_errar)
 

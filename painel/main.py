@@ -22,6 +22,7 @@ AQUI = Path(__file__).parent
 FUSO = ZoneInfo("America/Sao_Paulo")  # contrato 12
 RESPOSTAS = {"SIM": "SIM", "NAO": "NÃO", "OPCOES": "Ver opções"}
 CENARIO = "chuva_80mm.json"  # contrato 14
+TALHAO_DEMO = 1  # a OS do cenário está no Talhão 1; sem isso o replay abre um incidente vazio no Talhão 2
 
 app = FastAPI(title="TerraMind · Painel")
 app.mount("/static", StaticFiles(directory=AQUI / "static"), name="static")
@@ -168,7 +169,8 @@ def simular_chuva(request: Request):
     contexto: dict = {"incidentes": [], "erros": [], "falha": None}
     try:
         with cliente_http() as http:
-            r = http.post(url, json={"cenario": CENARIO})
+            talhao = int(os.environ.get("TALHAO_DEMO", TALHAO_DEMO))
+            r = http.post(url, json={"cenario": CENARIO, "talhao_id": talhao})
     except httpx.HTTPError:
         contexto["falha"] = "Não consegui falar com o Monitor."
     else:

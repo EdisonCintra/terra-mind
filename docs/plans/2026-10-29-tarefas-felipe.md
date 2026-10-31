@@ -43,9 +43,9 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 
 **Pendentes que ainda dependem de insumo externo do Edison (não travam banco nem MCP de código):**
 
-- [~] T4.1 (M) Contratos 2–16, A1–A7 e D1–D4 já consolidados em `docs/contratos.md`; falta apenas fechar o nome do defensivo (abaixo) e avisar no grupo no PR.
-  1. [~] T4.2 **(Edison, prazo dia 2 — não trava T6.1/T6.2; usar placeholder no seed)** C15 (`tipo` ∈ {`fungicida`,`herbicida`,`inseticida`}) já **fechado** com D2. Falta só C1: escolher no Agrofit o defensivo da demo com intervalo sem chuva em número e fechar `erp.insumos.produto` + `bula_id`.
-  2. [~] T4.8 **(Edison, conferir quando a Task 13 dele sair)** Regra já validada: `ReplayFonte` do Edison faz rebase de `chuva_80mm.json` para `now()` com 80 mm nas primeiras 36 h (120 h totais), então OS agendadas em `now() + 12h` / `now() + 20h` caem na janela automaticamente e o Pulverizador B sem OS nos 5 dias fica livre em qualquer janela seca. Falta só conferir o JSON final no ensaio.
+- [x] T4.1 (M) Contratos 2–17, A1–A7 e D1–D5 consolidados em `docs/contratos.md`; contrato 1 **Fechado** pelo Edison (`Abacus HC`, `bula-abacus-hc`). Falta só avisar o grupo no PR.
+  1. [x] T4.2 Contrato 1 fechado: `erp.insumos.produto` = `Abacus HC` e `bula_id` = `bula-abacus-hc`, iguais ao `fontes.yaml` do Edison (conferido em 31/10).
+  2. [x] T4.8 `monitor/scenarios/chuva_80mm.json` conferido em 31/10: 80,0 mm entre a 14ª e a 33ª hora, seco depois; a OS do seed (+20 h, 4 mm naquela hora) cai dentro da chuva; `ReplayFonte` rebaseia o cenário para a hora atual.
 
 ## 5. Estrutura de pastas
 - [x] T5.1 (P) Esqueleto do monorepo conforme D3 fechado: `db/migrations`, `erp_mcp/`, `channels/`, `painel/{templates,static}`, `docs` (sem pasta aninhada). Validado em 30/10 com `pythonpath = ["."]` e `uv sync`: pacotes `erp_mcp`, `channels` e `painel` importam direto da raiz (compatível com `from channels.base import criar_canal` do `agents`).
@@ -64,7 +64,7 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T7.1 (P) `db.py` e `registrar_auditoria` (`Jsonb`, conversão de `datetime`/`Decimal`). `erp_mcp/db.py`.
 - [x] T7.2 (M) `leitura.py`: `listar_os`, `detalhar_os`, `disponibilidade_maquinas` (sobreposição com `duracao_horas`), `listar_operadores`, `consultar_talhao`, `leituras_solo`. Chaves e retorno `{"ok": ...}` conforme T4.5. Chaves do contrato 16; leituras devolvem lista/dict direto, erros `{"ok": false}`.
 - [x] T7.3 (P) `server.py` com FastMCP, `streamable-http`, porta 8030, docstrings em português. **Sem** `janelas_validas` (D4). 10 ferramentas, sem `janelas_validas`.
-- [~] T7.4 (P) Testar no Inspector e com o Gustavo (`listar_os` pelo ADK). **Marco do dia 1.** Validado programaticamente pelo protocolo (local e no container, porta 8030). **Falta:** testar com o `ErpMcp` do Gustavo e no MCP Inspector.
+- [x] T7.4 (P) Testado em 31/10 contra o container do `erp-mcp` (porta 8030): (1) com o `ErpMcp` do Gustavo (`listar_os` com todas as chaves do contrato 16, `consultar_talhao`, `disponibilidade_maquinas`, `listar_operadores`, `suspender_os`); (2) com o MCP Inspector em modo CLI (`tools/list` = 10 ferramentas; `tools/call listar_operadores`).
 - [x] T7.5 (M) `escrita.py`: `suspender_os` com a transição no próprio `UPDATE` e auditoria na mesma transação. `erp_mcp/escrita.py`; recusa também incidente inexistente.
 - [x] T7.6 (M) `reagendar_os`, `alocar_maquina`, `reservar_estoque` com `_plano_aprovado`; máquina livre; estoque suficiente; segunda chamada com o mesmo plano falha. Trava por `pg_advisory_xact_lock(plano_id)`; repetição de `reservar_estoque` detectada pela auditoria.
 - [x] T7.7 (P) Garantir que sem plano aprovado só passa `agendada → suspensa_preventiva`. Coberto por `test_sem_plano_aprovado_so_passa_a_suspensao`.
@@ -106,12 +106,11 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 | 2 | T4.9; T7.5–T7.9, T8.2, T8.3, T8.5–T8.7, T10.2 (`erp-mcp`, `qdrant`); revisar o contrato mínimo do Gustavo contra suas migrations |
 | 3 | T9.1, T9.2, T9.6, T10.2 (`painel`); ensaio ponta a ponta com fakes |
 | 4 | T9.3, T9.4, T9.5, T8.8, T8.9; testar `CHANNEL=painel`; ensaiar o replay real (OS amarelas → plano → SIM → OS azuis) |
-| 5 | T11.1–T11.3 |
+| 5 | T11.1, T11.3 |
 | 6 | T10.6, T11.4, T11.5 |
 | 7 | T11.6 |
 
 - [ ] T11.1 (G) BMC com o time.
-- [ ] T11.2 (M) Roteiro do pitch: o que a banca vê na tela (e respostas às perguntas da banca sobre canal, ERP e escala).
 - [ ] T11.3 (M) Ajustes do painel pedidos pelo time; a OS fica amarela segundos depois de "Simular chuva".
 - [x] T11.4 (M) Seção do README: mini-ERP, MCP, canal, painel e como subir (`README.md`, seção "frente do Felipe").
 - [ ] T11.5 (M) Casos de borda: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual`.
@@ -142,29 +141,40 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 
 ## Resumo do que falta (31/10)
 
+Concluídas em 31/10: T4.1, T4.2, T4.8 e T7.4.
+
 Legenda: `[ ]` não feita · `[~]` meia feita. Tudo o que não aparece aqui está `[x]`.
 
 ### Meia feitas `[~]`
 
 | Tarefa | O que já foi feito | O que falta | Depende de |
 |---|---|---|---|
-| T4.1 / T4.2 (contrato 1) | `Abacus HC` e `bula-abacus-hc` iguais ao `fontes.yaml` | Marcar o contrato 1 como **Fechado** e avisar o grupo | Edison (ok) |
-| T4.8 (P) Cenário do replay | Regra validada: `ReplayFonte` rebaseia `chuva_80mm.json` para `now()` | Conferir o JSON final no ensaio | Edison |
-| T7.4 (P) Testar o MCP | Validado pelo protocolo, local e em container | Testar com o `ErpMcp` do Gustavo e no MCP Inspector | Gustavo (já na `main`) |
-| T10.5 (P) Dockerfiles | `erp_mcp`, `painel`, `agents` prontos | `monitor` e `base_agricola` usam `uv:latest`; validar o build dos cinco juntos | Edison |
+| T10.5 (P) Dockerfiles | `erp_mcp`, `painel`, `agents` prontos; build dos cinco serviços validado em 31/10 | `monitor` e `base_agricola` usam `uv:latest`; validar o build dos cinco juntos | Edison |
 
 ### Não feitas `[ ]`
+
+A T11.2 (roteiro do pitch) saiu da lista do Felipe: o pitch não é com ele.
+
 
 | Tarefa | Resumo | Quando | Depende de |
 |---|---|---|---|
 | T8.5 (G) | SIM no Telegram retoma a sessão num processo reiniciado (**maior risco técnico**) | Atrasada (dia 2) | Gustavo; `OPENAI_API_KEY` (ou `DEMO_LLM=fake`) |
 | T10.6 (M) | Deploy na VM do GCP, cópia local idêntica, `docker compose up` do zero nas duas | Dia 6 | Edison |
 | T11.1 (G) | BMC com o time | Dia 5 | Time |
-| T11.2 (M) | Roteiro do pitch: o que a banca vê na tela e respostas sobre canal, ERP e escala | Dia 5 | Pode ser rascunhado agora |
 | T11.3 (M) | Ajustes do painel; conferir que a OS fica amarela segundos depois de "Simular chuva" | Dia 5 | Pilha inteira de pé |
 | T11.5 (M) | Casos de borda de ponta a ponta: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual` | Dia 6 | Pilha inteira de pé |
 | T11.6 (M) | Dia 7: sem código novo; ensaio cronometrado de 3 min e apoio ao vídeo de backup | Dia 7 | Tudo pronto |
 | T12.1 | Prática contínua (testes junto, nomes conferidos contra `contratos.md`, conferir no banco); marcar ao fechar o projeto | Contínua | — |
+
+### Resolvido em 31/10 (pendências deixadas pelo Edison no contrato)
+
+- `talhao_id` no replay: o painel manda `talhao_id: 1` (`TALHAO_DEMO` muda), então o Talhão 2 não abre incidente vazio.
+- `AGENTS_URL` e `MONITOR_URL` no `environment` do `painel` no compose.
+- `.env.example` com `CHANNEL=painel`; o `TelegramChannel` sem token ou `chat_id` falha com mensagem clara.
+
+### Bloqueio atual (Gustavo)
+
+- Em 31/10, o Avaliador entrou em laço de `buscar_trechos` (mais de 500 chamadas, sem resposta final) com `gpt-4o-mini`: o incidente 1 ficou `aberto`. Falta um limite de chamadas por agente (`max_llm_calls`) e levar o caso a `aguardando_decisao_manual`. Sem isso, T8.5, T11.3 e T11.5 não rodam de ponta a ponta.
 
 ### Ações imediatas do Felipe
 
