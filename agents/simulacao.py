@@ -28,6 +28,11 @@ TRECHO_BULA = (
     "A ocorrência de chuvas dentro de um período de quatro (4) horas após a aplicação pode afetar o"
     " desempenho do produto."
 )
+# Texto real do "Fisiologia do Milho" (Embrapa, Circular Técnica 22), p. 8, indexado pelo Edison.
+TRECHO_FENOLOGIA_V6 = (
+    "Figura 4. Estádio de seis folhas completamente desenvolvidas. (Adaptado de Ritchie & Hanway, 1989)."
+    " Figura 5. Planta no estádio V6, mostrando o ponto de cresci-"
+)
 
 
 # ---------------------------------------------------------------- LLM
@@ -250,9 +255,14 @@ class FakeConhecimento:
     trechos: list[dict] = field(default_factory=list)
     buscas: list[tuple] = field(default_factory=list)
 
-    async def buscar_trechos(self, consulta, produto=None, secao=None, limite=3):
-        self.buscas.append((consulta, produto, secao))
-        return [t for t in self.trechos if produto is None or t.get("produto") == produto][:limite]
+    async def buscar_trechos(self, consulta, produto=None, secao=None, limite=3, cultura=None):
+        self.buscas.append((consulta, produto, cultura, secao))
+        return [
+            t
+            for t in self.trechos
+            if (produto is None or t.get("produto") == produto)
+            and (cultura is None or cultura in t.get("culturas", []))
+        ][:limite]
 
     async def fator_perda(self, tipo_insumo, condicao):
         return self.fatores.get((tipo_insumo, condicao))
@@ -456,7 +466,16 @@ def montar_cenario(
                 "pagina": 7,
                 "secao": "condicoes_climaticas",
                 "produto": PRODUTO,
-            }
+                "culturas": ["soja", "milho"],
+            },
+            {
+                "texto": TRECHO_FENOLOGIA_V6,
+                "fonte_doc": "fenologia-milho",
+                "pagina": 8,
+                "secao": "outra",
+                "produto": None,
+                "culturas": ["milho"],
+            },
         ],
     )
     canal = FakeCanal()

@@ -14,7 +14,12 @@ class ConhecimentoIndisponivel(Exception):
 
 class ConhecimentoCliente(Protocol):
     async def buscar_trechos(
-        self, consulta: str, produto: str | None = None, secao: str | None = None, limite: int = 3
+        self,
+        consulta: str,
+        produto: str | None = None,
+        secao: str | None = None,
+        limite: int = 3,
+        cultura: str | None = None,
     ) -> list[dict]: ...
 
     async def fator_perda(self, tipo_insumo: str, condicao: str) -> dict | None: ...
@@ -24,10 +29,12 @@ class ConhecimentoHttp:
     def __init__(self, url: str, timeout_s: float = 5):
         self._http = httpx.AsyncClient(base_url=url, timeout=timeout_s)
 
-    async def buscar_trechos(self, consulta, produto=None, secao=None, limite=3):
+    async def buscar_trechos(self, consulta, produto=None, secao=None, limite=3, cultura=None):
         corpo = {"consulta": consulta, "limite": limite}
         if produto:
             corpo["produto"] = produto
+        if cultura:
+            corpo["cultura"] = cultura
         if secao:
             corpo["secao"] = secao
         try:

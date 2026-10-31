@@ -22,6 +22,13 @@ async def test_buscar_trechos_envia_filtros():
 
 
 @respx.mock
+async def test_buscar_trechos_envia_cultura():
+    rota = respx.post(f"{URL}/trechos/busca").respond(200, json=[])
+    await ConhecimentoHttp(URL).buscar_trechos("V6 seis folhas", cultura="milho")
+    assert rota.calls.last.request.content == b'{"consulta":"V6 seis folhas","limite":3,"cultura":"milho"}'
+
+
+@respx.mock
 async def test_fator_inexistente_volta_none():
     respx.get(f"{URL}/fatores-perda").respond(404, json={"detail": "x"})
     assert await ConhecimentoHttp(URL).fator_perda("fertilizante", "chuva") is None

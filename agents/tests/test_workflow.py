@@ -166,6 +166,24 @@ async def test_avaliador_na_ultima_rodada_so_pode_responder():
     assert c.erp.status(1) == "suspensa_preventiva"
 
 
+async def test_agronomico_busca_fenologia_pela_cultura_sem_produto():
+    vistos = []
+
+    def decide(req):
+        vistos.append(ultima_resposta_de(req, "buscar_trechos"))
+        return "Milho em V6 (fenologia-milho, p. 8)."
+
+    busca = chamar(
+        "buscar_trechos", consulta="estádio V6 do milho seis folhas desenvolvidas", cultura="milho"
+    )
+    c = montar_cenario(modelos_padrao(agronomico=[busca, decide]))
+    await iniciar(c)
+    assert ("estádio V6 do milho seis folhas desenvolvidas", None, "milho", None) in c.conhecimento.buscas
+    assert {"fonte_doc": "fenologia-milho", "pagina": 8} in [
+        {"fonte_doc": t["fonte_doc"], "pagina": t["pagina"]} for t in vistos[0]["trechos"]
+    ]
+
+
 async def test_supervisor_responde_pelo_set_model_response_com_data():
     """Com a OpenAI o plano chega por `set_model_response`; `novo_inicio` é datetime no schema."""
 
