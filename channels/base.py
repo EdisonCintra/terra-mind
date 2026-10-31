@@ -30,7 +30,15 @@ class Resposta:
             raise ValueError(f"resposta inválida: {self.resposta!r} (use {', '.join(RESPOSTAS_VALIDAS)})")
 
 
+class DecisaoJaRegistrada(Exception):
+    """O `ao_responder` lança isto quando o plano já tem resposta (o equivalente ao 409 do painel).
+
+    O canal mostra "decisão já registrada" ao gerente, sem tratar como erro.
+    """
+
+
 # Função que o `agents` fornece: recebe a decisão e retoma a sessão do incidente.
+# Se o plano já foi respondido, lança `DecisaoJaRegistrada`.
 AoResponder = Callable[[Resposta], Awaitable[None]]
 
 
@@ -38,8 +46,11 @@ class NotificationChannel(ABC):
     """Molde comum do Telegram e do painel."""
 
     @abstractmethod
-    async def enviar_alerta(self, texto: str) -> None:
-        """Mensagem simples para o gerente, sem botões (decisão manual, escalonamento)."""
+    async def enviar_alerta(self, texto: str, incidente_id: int | None = None) -> None:
+        """Mensagem simples para o gerente, sem botões (decisão manual, escalonamento).
+
+        `incidente_id` é opcional: o painel o usa para ligar o alerta ao incidente na auditoria.
+        """
 
     @abstractmethod
     async def pedir_aprovacao(self, incidente_id: int, plano_id: int, texto: str) -> None:

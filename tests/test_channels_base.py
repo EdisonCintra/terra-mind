@@ -13,7 +13,7 @@ class CanalFalso(NotificationChannel):
         self.ao_responder = ao_responder
         self.enviados: list[tuple] = []
 
-    async def enviar_alerta(self, texto):
+    async def enviar_alerta(self, texto, incidente_id=None):
         self.enviados.append(("alerta", texto))
 
     async def pedir_aprovacao(self, incidente_id, plano_id, texto):
@@ -62,3 +62,9 @@ def test_criar_canal_entrega_o_ao_responder_a_implementacao(monkeypatch):
 
     canal = criar_canal("telegram", ao_responder)
     assert isinstance(canal, CanalFalso) and canal.ao_responder is ao_responder
+
+
+def test_decisao_ja_registrada_e_uma_excecao_comum():
+    from channels.base import DecisaoJaRegistrada
+
+    assert issubclass(DecisaoJaRegistrada, Exception)

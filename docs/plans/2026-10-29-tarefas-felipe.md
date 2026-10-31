@@ -72,15 +72,16 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T7.9 (P) Dockerfile do `erp_mcp` e bloco `erp-mcp` no compose (build a partir da raiz, se D3). `erp_mcp/Dockerfile`, `.dockerignore` e bloco `erp-mcp` no compose; container validado.
 
 ## 8. Canal de notificação
-- [ ] T8.1 (P) BotFather: `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`; `chat_id` do operador no seed. Token só no `.env`.
+- [x] T8.1 (P) BotFather: `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID` preenchidos no `.env` (30/10). Token só no `.env`; o `chat_id` do operador não vai no seed versionado, só por `UPDATE` local.
 - [x] T8.2 (M) `channels/base.py`: `Resposta` (valida SIM/NAO/OPCOES), `AoResponder`, `NotificationChannel` (com `iniciar()` e `parar()` padrão, que o `agents` chama) e `criar_canal` (import tardio de `channels.telegram` e `channels.painel`). 6 testes em `tests/test_channels_base.py`. `criar_canal("painel")` só funciona depois da T8.8 e o `"telegram"` depois da T8.3.
-- [ ] T8.3 (G) `telegram.py`: botões, `callback_data` curto, `query.answer()`, remoção dos botões, `iniciar()`, `enviar_alerta`, `notificar_operador`.
-- [ ] T8.4 (P) `teste_bot.py` com `ao_responder` falso.
+- [x] T8.3 (G) `telegram.py`: botões, `callback_data` curto, `query.answer()`, remoção dos botões, `iniciar()`/`parar()`, `enviar_alerta`, `notificar_operador`. 12 testes sem rede em `tests/test_channels_telegram.py`.
+- [x] T8.4 (P) `channels/teste_bot.py` com `ao_responder` falso (`uv run python -m channels.teste_bot`). Validado no Telegram real em 30/10: clique em SIM chegou ao `ao_responder`.
 - [ ] T8.5 (G) **Dia 2, com o Gustavo:** SIM no Telegram retoma a sessão num processo reiniciado (maior risco técnico).
-- [ ] T8.6 (P) Resposta repetida (409): mensagem "decisão já registrada", sem erro para o usuário.
-- [ ] T8.7 (P) Um único polling por token (avisar o time sobre `Conflict`).
-- [ ] T8.8 (M) `painel.py` (`PainelChannel`): registra o alerta em `agente.auditoria`; não cria nem altera planos.
-- [ ] T8.9 (P) Escalonamento e decisão manual: textos claros em `enviar_alerta` ("sem resposta, OS segue suspensa"; "sem evidência na bula, OS não suspensa, decida manualmente"). `escalado_em` é gravado pelo `agents`.
+- [x] T8.6 (P) Resposta repetida (409): `DecisaoJaRegistrada` em `channels/base.py`; o Telegram mostra "decisão já registrada", sem erro. **Falta o ok do Gustavo**: o `ao_responder` dele precisa lançar essa exceção (registrado no contrato 6/7).
+- [x] T8.7 (P) Um único polling por token: `TelegramChannel` loga uma mensagem clara no `Conflict`, aviso no `.env.example`. Falta só enviar o aviso ao grupo (texto abaixo).
+  > Aviso ao time: cada token só aceita UM processo em polling. Não rode o `agents` com `CHANNEL=telegram` e o `teste_bot` (ou outro `agents`, ou a VM) ao mesmo tempo com o mesmo token; senão aparece `Conflict: terminated by other getUpdates request`. Um bot por pessoa/ambiente, ou `CHANNEL=painel` nos demais.
+- [x] T8.8 (M) `channels/painel.py` (`PainelChannel`): o alerta vira linha em `agente.auditoria` (`no='painel'`, `acao='enviar_alerta'`); `notificar_operador` também é registrado; `pedir_aprovacao` não cria nem altera planos. `enviar_alerta` ganhou `incidente_id` opcional para ligar o alerta ao incidente (compatível com a chamada antiga). 4 testes em `tests/test_channels_painel.py`.
+- [x] T8.9 (P) Textos em `channels/mensagens.py`: `alerta_decisao_manual(motivo, incidente_id)` (motivos `sem_evidencia`, `avaliador_falhou`, `validador_reprovou`, `nao`, `opcoes_esgotadas`) e `alerta_escalonamento(incidente_id, plano_id, minutos)`. O `agents` passa o texto a `enviar_alerta`; `escalado_em` é gravado por ele. **Avisar o Gustavo** para usar essas funções.
 
 ## 9. Painel web
 - [ ] T9.1 (M) FastAPI + Jinja2 + HTMX local (`static/`), sem CDN, sem login.
