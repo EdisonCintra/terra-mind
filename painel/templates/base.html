@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}TerraMind{% endblock %}</title>
+  <link rel="stylesheet" href="/static/painel.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>TerraMind</h1>
+    <nav>
+      <a href="/os" class="{{ 'ativa' if ativa == 'os' }}">Ordens de serviço</a>
+      <a href="/timeline" class="{{ 'ativa' if ativa == 'timeline' }}">Linha do tempo</a>
+      <a href="/aprovacao" class="{{ 'ativa' if ativa == 'aprovacao' }}">Aprovação</a>
+      <a href="/simular" class="{{ 'ativa' if ativa == 'simular' }}">Simular chuva</a>
+    </nav>
+  </header>
+  <div hx-get="/parcial/alertas" hx-trigger="load, every 2s" hx-swap="innerHTML"></div>
+  <main>{% block conteudo %}{% endblock %}</main>
+</body>
+</html>

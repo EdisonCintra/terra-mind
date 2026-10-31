@@ -8,6 +8,8 @@ __pycache__/
 
 # Ambiente
 .env
+.env.*
+!.env.example
 
 # Ferramentas
 .superpowers/

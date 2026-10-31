@@ -1,0 +1,11 @@
+{% for os in ordens %}
+<tr>
+  <td>{{ os.talhao }}</td>
+  <td>{{ os.tipo_operacao|capitalize }}{% if os.produto %} · {{ os.produto }}{% endif %}</td>
+  <td>{{ os.inicio_previsto|hora }}</td>
+  <td>{{ os.maquina or "—" }}</td>
+  <td><span class="status {{ STATUS_OS.get(os.status, (os.status, 'executada'))[1] }}">{{ STATUS_OS.get(os.status, (os.status, ''))[0] }}</span></td>
+</tr>
+{% else %}
+<tr><td colspan="5" class="vazio">Nenhuma ordem de serviço.</td></tr>
+{% endfor %}
