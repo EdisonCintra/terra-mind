@@ -8,7 +8,7 @@
 
 ## 1. O TerraMind em um parágrafo
 
-Uma fazenda tem **ordens de serviço** (OS) agendadas, por exemplo "aplicar adubo no talhão 3 amanhã às 7h". Se vier uma chuva forte, esse adubo vai embora com a água e o dinheiro é perdido. O TerraMind vigia a previsão do tempo; quando vê chuva forte chegando, **suspende a OS sozinho** (é reversível, então pode fazer sem perguntar), monta um plano para remarcá-la e **pede aprovação ao gerente no Telegram**. Se o gerente responder SIM, o sistema remarca a OS, aloca a máquina e avisa o operador.
+Uma fazenda tem **ordens de serviço** (OS) agendadas, por exemplo "pulverizar fungicida no talhão 3 amanhã às 7h". O defensivo precisa de algumas horas sem chuva para agir; se chover antes, a chuva lava o produto da planta e o dinheiro é perdido. O TerraMind vigia a previsão do tempo; quando vê chuva forte chegando, **suspende a OS sozinho** (é reversível, então pode fazer sem perguntar), monta um plano para remarcá-la e **pede aprovação ao gerente no Telegram**. Se o gerente responder SIM, o sistema remarca a OS, aloca a máquina e avisa o operador.
 
 ## 2. O seu pedaço
 
@@ -45,7 +45,7 @@ Quem chama o seu código:
 | Ferramenta | Para quê | Instalação |
 |---|---|---|
 | Docker Desktop | Rodar Postgres e os serviços | docker.com |
-| Python 3.12 + **uv** | Linguagem e gerenciador de pacotes | `pip install uv` ou docs do uv |
+| Python 3.12 + **uv** | Linguagem e gerenciador de pacotes (um ambiente só, na raiz: `uv sync`) | `pip install uv` ou docs do uv |
 | `psycopg[binary]` | Falar com o Postgres usando SQL puro | `uv add "psycopg[binary]"` |
 | `mcp` | Criar o servidor MCP | `uv add "mcp[cli]"` |
 | `python-telegram-bot` | Bot do Telegram | `uv add python-telegram-bot` |
@@ -64,7 +64,7 @@ Usamos **SQL puro com psycopg** (sem ORM). Você escreve `SELECT`/`UPDATE` como 
 
 | # | Assunto | Proposta | Com quem |
 |---|---|---|---|
-| 1 | Nome do produto | `erp.insumos.produto` tem o mesmo texto que `conhecimento.regras_aplicacao.produto` (ex.: `"Ureia 46%"`) | Edison |
+| 1 | Nome do produto | `erp.insumos.produto` tem o mesmo texto que o `produto` dos trechos no Qdrant (o Avaliador filtra por ele). O defensivo da demo ainda vai ser escolhido no Agrofit com o Edison | Edison |
 | 2 | Migrations | Arquivos SQL numerados em `db/migrations/`: os seus são `001_erp.sql`, `002_agente.sql` e `900_seed.sql`; o do Edison é `010_conhecimento.sql` | Edison, Gustavo |
 | 3 | Schema `agente` | Você cria as tabelas `incidentes`, `planos` e `auditoria` (seção 6.2); o Gustavo confere os campos | Gustavo |
 | 4 | Endereço do MCP | `http://erp-mcp:8030/mcp`, transporte **streamable HTTP** | Gustavo |
@@ -80,34 +80,33 @@ Usamos **SQL puro com psycopg** (sem ORM). Você escreve `SELECT`/`UPDATE` como 
 
 ```
 terramind/
+├── pyproject.toml               # ambiente Python único na raiz (D3) + uv.lock
+├── uv.lock
 ├── db/
 │   └── migrations/
 │       ├── 001_erp.sql          # tabelas da fazenda
 │       ├── 002_agente.sql       # incidentes, planos, auditoria
 │       └── 900_seed.sql         # dados de exemplo
-├── erp_mcp/
-│   ├── pyproject.toml
-│   ├── Dockerfile
-│   └── erp_mcp/
-│       ├── db.py                # conexão com o banco
-│       ├── leitura.py           # ferramentas de consulta
-│       ├── escrita.py           # ferramentas que alteram dados
-│       └── server.py            # registra as ferramentas e sobe o servidor
+├── erp_mcp/                     # código direto na pasta, sem subpasta aninhada
+│   ├── Dockerfile               # build com contexto na raiz
+│   ├── db.py                    # conexão com o banco
+│   ├── leitura.py               # ferramentas de consulta
+│   ├── escrita.py               # ferramentas que alteram dados
+│   └── server.py                # registra as ferramentas e sobe o servidor
 ├── channels/
-│   ├── pyproject.toml
-│   └── channels/
-│       ├── base.py              # NotificationChannel (a "interface")
-│       ├── telegram.py          # implementação Telegram
-│       └── painel.py            # implementação painel (fallback)
+│   ├── base.py                  # NotificationChannel (a "interface")
+│   ├── telegram.py              # implementação Telegram
+│   └── painel.py                # implementação painel (fallback)
 ├── painel/
-│   ├── pyproject.toml
 │   ├── Dockerfile
-│   └── painel/
-│       ├── main.py              # FastAPI
-│       └── templates/           # HTML (Jinja2)
+│   ├── main.py                  # FastAPI
+│   ├── templates/               # HTML (Jinja2)
+│   └── static/                  # htmx.min.js
 ├── docker-compose.yml
 └── .env.example
 ```
+
+> D3: não há `pyproject.toml` por serviço nem pasta `erp_mcp/erp_mcp/`. Os pacotes importam direto da raiz (`from channels.base import criar_canal`, `pythonpath = ["."]`).
 
 ---
 
@@ -139,7 +138,7 @@ CREATE TABLE erp.talhoes (
 CREATE TABLE erp.insumos (
     id              serial PRIMARY KEY,
     produto         text NOT NULL UNIQUE,           -- contrato 1: igual ao do Edison
-    tipo            text NOT NULL,                  -- 'fertilizante' | 'herbicida' | 'fungicida' ...
+    tipo            text NOT NULL,                  -- 'fungicida' | 'herbicida' | 'inseticida' (docs/contratos.md, contrato 15)
     unidade         text NOT NULL,                  -- 'kg' | 'L'
     preco_unitario  numeric(12,2) NOT NULL,         -- R$ por unidade
     estoque         numeric(12,2) NOT NULL CHECK (estoque >= 0),
@@ -149,7 +148,7 @@ CREATE TABLE erp.insumos (
 CREATE TABLE erp.maquinas (
     id      serial PRIMARY KEY,
     nome    text NOT NULL,
-    tipo    text NOT NULL,                          -- 'pulverizador' | 'distribuidor' ...
+    tipo    text NOT NULL,                          -- 'pulverizador'
     status  text NOT NULL DEFAULT 'disponivel'      -- 'disponivel' | 'manutencao'
 );
 
@@ -162,7 +161,7 @@ CREATE TABLE erp.operadores (
 CREATE TABLE erp.ordens_servico (
     id               serial PRIMARY KEY,
     talhao_id        int NOT NULL REFERENCES erp.talhoes(id),
-    tipo_operacao    text NOT NULL,                 -- 'adubacao' | 'pulverizacao' ...
+    tipo_operacao    text NOT NULL,                 -- 'pulverizacao' (D2: sem adubação)
     insumo_id        int REFERENCES erp.insumos(id),
     dose_por_ha      numeric(10,3),                 -- MESMA unidade de insumos.unidade
     inicio_previsto  timestamptz NOT NULL,
@@ -229,7 +228,7 @@ Regras para o seed:
 1. **Datas relativas a `now()`**, nunca fixas. Uma OS marcada para "2026-10-30 07:00" vira passado no dia da demo e nada dispara. Use `now() + interval '20 hours'`.
 2. Coordenadas reais de Goiás, porque o monitor do Edison consulta o Open-Meteo com elas. Rio Verde fica em torno de `-17.79, -50.92`.
 3. Os nomes de produto saem do contrato 1, combinados com o Edison.
-4. O cenário principal precisa de **uma OS de adubação nas próximas 24 h**, com máquina e operador. Crie também 2 ou 3 OS fora da janela de risco, para mostrar que o sistema só mexe na OS certa, e uma segunda máquina livre, para o plano ter para onde remarcar.
+4. O cenário principal precisa de **uma OS de pulverização de defensivo nas próximas 24 h**, com máquina e operador. Crie também 2 ou 3 OS fora da janela de risco, para mostrar que o sistema só mexe na OS certa, e uma segunda máquina livre, para o plano ter para onde remarcar.
 
 ```sql
 INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, estagio_fenologico, lat, lon, tipo_solo) VALUES
@@ -237,18 +236,19 @@ INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, estagio_fenologic
   ('Talhão 2 - Baixada', 85.5, 'soja',  current_date - 45, 'V8', -17.810, -50.900, 'latossolo');
 
 INSERT INTO erp.insumos (produto, tipo, unidade, preco_unitario, estoque, bula_id) VALUES
-  ('Ureia 46%', 'fertilizante', 'kg', 3.20, 30000, NULL);   -- produto: confirmar com o Edison
+  ('Abacus HC',     'fungicida',  'L', 185.00, 500.00, 'bula-abacus-hc'),   -- contrato 1: igual ao fontes.yaml do Edison
+  ('Engeo Pleno S', 'inseticida', 'L', 210.00, 300.00, NULL);              -- sem bula no fontes.yaml; só na OS 3, fora da janela
 
 INSERT INTO erp.maquinas (nome, tipo) VALUES
-  ('Distribuidor A', 'distribuidor'),
-  ('Distribuidor B', 'distribuidor');
+  ('Pulverizador A', 'pulverizador'),
+  ('Pulverizador B', 'pulverizador');
 
 INSERT INTO erp.operadores (nome, telegram_chat_id) VALUES
   ('João', NULL);   -- preencha com o seu chat_id para receber as mensagens de teste
 
 INSERT INTO erp.ordens_servico (talhao_id, tipo_operacao, insumo_id, dose_por_ha, inicio_previsto, maquina_id, operador_id) VALUES
-  (1, 'adubacao', 1, 200, now() + interval '20 hours', 1, 1),   -- a OS do cenário
-  (2, 'adubacao', 1, 150, now() + interval '6 days',  1, 1);    -- fora da janela de risco
+  (1, 'pulverizacao', 1, 0.3, now() + interval '20 hours', 1, 1),   -- a OS do cenário (0,3 L/ha)
+  (2, 'pulverizacao', 1, 0.3, now() + interval '6 days',  1, 1);    -- fora da janela de risco
 
 INSERT INTO erp.leituras_solo (talhao_id, ts, umidade_pct)
 SELECT 1, now() - (h || ' hours')::interval, 28 + random() * 4
@@ -273,7 +273,7 @@ Ou seja, você escreve funções Python normais com um decorator. Escreva docstr
 
 ### 7.2 Esqueleto
 
-`erp_mcp/erp_mcp/db.py`:
+`erp_mcp/db.py`:
 
 ```python
 import os
@@ -284,7 +284,7 @@ def conectar():
     return psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
 ```
 
-`erp_mcp/erp_mcp/server.py`:
+`erp_mcp/server.py`:
 
 ```python
 from mcp.server.fastmcp import FastMCP
@@ -416,7 +416,7 @@ Escreva também testes com `pytest` para as ferramentas de escrita, chamando as 
 
 A ideia: o código do Gustavo não sabe se a mensagem vai pelo Telegram ou pelo painel. Ele chama sempre os mesmos métodos, e a variável `CHANNEL` decide qual implementação é usada. Se o Telegram falhar no palco, trocamos `CHANNEL=painel` e nada mais muda.
 
-`channels/channels/base.py`:
+`channels/base.py`:
 
 ```python
 from abc import ABC, abstractmethod
@@ -526,7 +526,7 @@ POST {AGENTS_URL}/incidentes/{incidente_id}/resposta
 
 FastAPI com páginas HTML (Jinja2). Para atualizar ao vivo sem escrever JavaScript, use **HTMX**: um atributo no HTML que pede um pedaço da página a cada N segundos.
 
-`painel/painel/templates/os.html` (trecho):
+`painel/templates/os.html` (trecho):
 
 ```html
 <script src="/static/htmx.min.js"></script>
@@ -537,7 +537,7 @@ FastAPI com páginas HTML (Jinja2). Para atualizar ao vivo sem escrever JavaScri
 </table>
 ```
 
-Baixe o `htmx.min.js` uma vez para `painel/painel/static/` e sirva-o pelo FastAPI (`app.mount("/static", StaticFiles(...))`), em vez de carregá-lo de um CDN. Se a internet do evento cair, o painel continua funcionando.
+Baixe o `htmx.min.js` uma vez para `painel/static/` e sirva-o pelo FastAPI (`app.mount("/static", StaticFiles(...))`), em vez de carregá-lo de um CDN. Se a internet do evento cair, o painel continua funcionando.
 
 A rota `/parcial/os` devolve só as `<tr>` da tabela, renderizando `_linhas_os.html`. É um CRUD de listagem que se atualiza sozinho.
 
@@ -568,7 +568,7 @@ services:
       POSTGRES_USER: terramind
       POSTGRES_PASSWORD: terramind
       POSTGRES_DB: terramind
-    ports: ["5432:5432"]
+    ports: ["${POSTGRES_PORT:-5432}:5432"]   # 5433 no host se o Postgres do Windows ocupar a 5432
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
@@ -582,14 +582,18 @@ services:
     ports: ["6333:6333"]
 
   erp-mcp:
-    build: ./erp_mcp
+    build:
+      context: .
+      dockerfile: erp_mcp/Dockerfile
     env_file: .env
     ports: ["8030:8030"]
     depends_on:
       postgres: { condition: service_healthy }
 
   painel:
-    build: ./painel
+    build:
+      context: .
+      dockerfile: painel/Dockerfile
     env_file: .env
     ports: ["8080:8080"]
     depends_on:
@@ -605,16 +609,24 @@ volumes:
 
 ```
 DATABASE_URL=postgresql://terramind:terramind@postgres:5432/terramind
-TELEGRAM_BOT_TOKEN=
-GERENTE_CHAT_ID=
-CHANNEL=telegram            # telegram | painel
-MONITOR_MODE=replay         # live | replay
-APPROVAL_TIMEOUT_MIN=30
-MODEL_NAME=
+QDRANT_URL=http://qdrant:6333
 AGENTS_URL=http://agents:8000
+CONHECIMENTO_URL=http://conhecimento:8010
 MONITOR_URL=http://monitor:8020
 ERP_MCP_URL=http://erp-mcp:8030/mcp
+OPENAI_API_KEY=
+MODEL_AVALIADOR=openai/gpt-4o-mini       # A3: OpenAI direto, uma variável por agente
+MODEL_AGRONOMICO=openai/gpt-4o-mini
+MODEL_OPERACIONAL=openai/gpt-4o-mini
+MODEL_SUPERVISOR=openai/gpt-4o-mini
+CHANNEL=telegram            # telegram | painel
+TELEGRAM_BOT_TOKEN=
+GERENTE_CHAT_ID=
+APPROVAL_TIMEOUT_MIN=30
+MONITOR_MODE=replay         # live | replay
+PYTHONUTF8=1
 ```
+(Versão completa, com `EMBEDDING_MODEL` e `MONITOR_INTERVAL_MIN`: `.env.example` na raiz.)
 
 > ⚠️ **Dentro do Docker, `localhost` é o próprio container.** Entre containers, use o nome do serviço (`postgres`, `erp-mcp`). Do seu PC, fora do Docker, use `localhost:5432`. Esse é o erro número 1 de quem começa com compose.
 
@@ -622,12 +634,16 @@ ERP_MCP_URL=http://erp-mcp:8030/mcp
 
 ```dockerfile
 FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.25 /uv /usr/local/bin/uv
+ENV PYTHONUTF8=1 PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app
+# contexto de build = raiz do monorepo (D3); o Dockerfile fica em <servico>/Dockerfile
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
-COPY . .
-CMD ["uv", "run", "python", "-m", "erp_mcp.server"]   # no painel: uvicorn painel.main:app --host 0.0.0.0 --port 8080
+COPY erp_mcp ./erp_mcp
+CMD ["uv", "run", "--no-sync", "python", "-m", "erp_mcp.server"]
+# painel: COPY painel ./painel e CMD uvicorn painel.main:app --host 0.0.0.0 --port 8080
+# channels roda dentro do processo agents; o Dockerfile do agents deve copiar também `channels/`
 ```
 
 Comandos do dia a dia:
@@ -747,7 +763,7 @@ Peça ajuda se ficar **mais de 1 hora travado** no mesmo problema. Peça sempre 
 | **uv** | Gerenciador de pacotes Python rápido (`uv add`, `uv run`) |
 | **VM** | Máquina virtual na nuvem (GCP) onde a demo também vai rodar |
 | **Talhão** | Pedaço da fazenda com uma cultura, a unidade de manejo |
-| **Insumo** | O que é aplicado: adubo, herbicida, fungicida |
+| **Insumo** | O que é aplicado: fungicida, herbicida, inseticida (defensivos; D2) |
 | **Bula** | Documento oficial do produto com as condições de uso (vento máximo, chuva...) |
 | **Estágio fenológico** | Fase de desenvolvimento da planta (V6 = 6 folhas, R1 = início da floração...) |
 | **Ordem de serviço (OS)** | Tarefa agendada: aplicar X no talhão Y, com a máquina Z, na hora H |

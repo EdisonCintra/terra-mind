@@ -1,0 +1,15 @@
+{% for e in eventos %}
+<article class="evento">
+  <div class="quando">{{ e.ts|hms }}</div>
+  <div class="corpo">
+    <div class="quem"><strong>{{ e.no }}</strong> · {{ e.acao }}</div>
+    {% if e.texto %}<div class="texto">{{ e.texto }}</div>{% endif %}
+    {% for fonte, pagina in e.citacoes %}
+    <span class="citacao">📖 {{ fonte }}, p. {{ pagina }}</span>
+    {% endfor %}
+    {% for m in e.mudancas %}<div class="mudanca">{{ m }}</div>{% endfor %}
+  </div>
+</article>
+{% else %}
+<p class="vazio">Sem eventos de auditoria para este incidente.</p>
+{% endfor %}

@@ -8,6 +8,8 @@ __pycache__/
 
 # Ambiente
 .env
+.env.*
+!.env.example
 
 # Ferramentas
 .superpowers/
@@ -16,3 +18,6 @@ __pycache__/
 
 # Sessões locais do adk web / adk run
 .adk/
+
+# Claude
+.claude

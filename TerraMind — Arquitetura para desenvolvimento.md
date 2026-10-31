@@ -4,7 +4,7 @@ Oct 27, 2026 · @Gustavo Barbosa · revisado em 29/10/2026 (decisões A1–A7 e 
 
 ## Decisões fechadas
 
-O TerraMind será entregue como um protótipo funcional de ponta a ponta para um único cenário (chuva intensa × adubação agendada), construído em 7 dias por três pessoas e apresentado ao vivo com vídeo de backup.
+O TerraMind será entregue como um protótipo funcional de ponta a ponta para um único cenário (chuva intensa × pulverização de defensivo agrícola agendada; adubação saiu do escopo, ver D2 em `docs/contratos.md`), construído em 7 dias por três pessoas e apresentado ao vivo com vídeo de backup.
 
 | Tema | Decisão | Motivo |
 | --- | --- | --- |
