@@ -4,7 +4,14 @@ from google.adk import Agent
 from google.adk.agents.readonly_context import ReadonlyContext
 
 from agents import ferramentas as f
-from agents.agentes._comum import REGRAS_GERAIS, criar_agente, j, os_resumidas, previsao, raiz_para_adk
+from agents.agentes._comum import (
+    REGRAS_GERAIS,
+    criar_agente,
+    j,
+    os_resumidas,
+    previsao_por_os,
+    raiz_para_adk,
+)
 from agents.deps import Dependencias
 from agents.modelos import AvaliacaoRisco
 
@@ -20,11 +27,17 @@ Como trabalhar:
 1. Para cada OS, chame buscar_trechos com o `produto` da OS e SEM `secao` (cada bula põe o limite de
    chuva numa seção diferente). Faça consultas como "chuva após a aplicação", "umidade relativa",
    "temperatura", "velocidade do vento".
-2. Ache no trecho o limite que a previsão ultrapassa no período da aplicação (início previsto + duração e,
-   para chuva, as horas seguintes que o documento indicar).
-3. Só marque viola=true se o trecho trouxer o limite. Copie em `trecho` o texto literal do documento e use
-   `fonte_doc` e `pagina` exatamente como vieram da ferramenta. Converta unidades para as do sistema.
-4. Se nenhum trecho trouxer o limite, viola=false e explique na justificativa.
+2. Compare cada limite do trecho com a "Previsão no horário de cada OS" (já calculada em código):
+   - vento, umidade e temperatura: só os valores de `aplicacao` (durante a aplicação). Previsão fora
+     desse horário não conta;
+   - chuva: `aplicacao.chuva_mm` e, se o documento fala em horas após a aplicação, o acumulado de
+     `chuva_acumulada_apos_fim_mm` com o número de horas mais próximo do que o documento indica.
+   Em `valor_previsto` use exatamente o número da previsão que você comparou.
+3. Só marque viola=true se o trecho trouxer o limite E a previsão o ultrapassar. Copie em `trecho` o texto
+   literal do documento e use `fonte_doc` e `pagina` exatamente como vieram da ferramenta. Converta unidades
+   para as do sistema.
+4. Se nenhum trecho trouxer o limite, ou a previsão ficar dentro dele, viola=false e explique na
+   justificativa. Faça no máximo uma busca por parâmetro; não repita buscas.
 
 Campos de cada item: os_id, viola, parametro ("chuva"|"vento"|"umidade"|"temperatura"), limite, unidade,
 janela_h (horas DEPOIS do fim da aplicação em que o limite vale), valor_previsto,
@@ -38,8 +51,8 @@ Ordens de serviço em risco:
 Gatilhos do monitor:
 {j(estado["incidente"]["gatilhos"])}
 
-Previsão em blocos de 6 h:
-{j(previsao(estado))}"""
+Previsão no horário de cada OS (por os_id):
+{j(previsao_por_os(estado))}"""
 
 
 def criar(deps: Dependencias) -> Agent:

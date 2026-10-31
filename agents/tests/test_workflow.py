@@ -166,6 +166,33 @@ async def test_avaliador_na_ultima_rodada_so_pode_responder():
     assert c.erp.status(1) == "suspensa_preventiva"
 
 
+async def test_supervisor_responde_pelo_set_model_response_com_data():
+    """Com a OpenAI o plano chega por `set_model_response`; `novo_inicio` é datetime no schema."""
+
+    def responder(req):
+        janelas = ultima_resposta_de(req, "janelas_validas")
+        if janelas is None:
+            return chamar("janelas_validas", os_id=1)
+        escolhida = janelas["janelas"][0]
+        return chamar(
+            "set_model_response",
+            opcoes=[
+                {
+                    "os_id": 1,
+                    "novo_inicio": escolhida["inicio"],
+                    "maquina_id": escolhida["maquinas_livres"][0],
+                    "justificativa": "primeira janela sem chuva",
+                }
+            ],
+            mensagem="Chuva forte prevista; pulverização suspensa.",
+        )
+
+    c = montar_cenario(modelos_padrao(supervisor=[responder]))
+    await iniciar(c)
+    assert "runner:falha_interna" not in c.repo.acoes()
+    assert len(c.canal.aprovacoes) == 1
+
+
 async def test_sem_violacao_encerra_sem_mexer_na_os():
     nao_viola = {"violacoes": [{"os_id": 1, "viola": False, "justificativa": "documento não traz limite"}]}
     c = montar_cenario(modelos_padrao(avaliador=roteiro_avaliador(nao_viola)))

@@ -164,6 +164,26 @@ def test_resumo_da_previsao():
     assert sum(b["chuva_mm"] for b in blocos[:6]) == pytest.approx(80, abs=0.5)  # blocos arredondados
 
 
+def test_previsao_da_os_olha_so_o_horario_da_aplicacao():
+    from agents.modelos import HoraPrevisao
+    from agents.rules.previsao import previsao_da_os
+
+    horas = [
+        HoraPrevisao(ts=AGORA + timedelta(hours=i), chuva_mm=0, vento_kmh=8, umidade_pct=70, temp_c=25)
+        for i in range(48)
+    ]
+    horas[1].vento_kmh = 30  # antes da aplicação (02 h–10 h): não conta
+    horas[5].vento_kmh = 12
+    horas[11].chuva_mm = 3  # 1ª hora depois do fim
+    horas[14].chuva_mm = 5  # 4ª hora depois do fim
+    p = previsao_da_os(horas, AGORA + timedelta(hours=2), duracao_h=8)
+    assert p["aplicacao"]["vento_max_kmh"] == 12 and p["aplicacao"]["chuva_mm"] == 0
+    assert p["chuva_acumulada_apos_fim_mm"]["1h"] == 0  # 10 h–11 h
+    assert p["chuva_acumulada_apos_fim_mm"]["2h"] == 3
+    assert p["chuva_acumulada_apos_fim_mm"]["4h"] == 3
+    assert p["chuva_acumulada_apos_fim_mm"]["6h"] == 8
+
+
 def test_mensagem_tem_rodape_conferido():
     impacto = Impacto(
         os_id=1,

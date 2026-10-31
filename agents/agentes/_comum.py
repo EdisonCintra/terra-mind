@@ -16,7 +16,7 @@ from agents.config import NomeAgente
 from agents.deps import Dependencias
 from agents.modelos import Incidente, para_datetime
 from agents.rules.janelas import FUSO
-from agents.rules.previsao import resumir
+from agents.rules.previsao import previsao_da_os
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +39,13 @@ def j(valor: Any) -> str:
     return json.dumps(valor, ensure_ascii=False, indent=1, default=str)
 
 
-def previsao(estado: Any) -> list[dict]:
-    incidente = Incidente.model_validate(estado["incidente"])
-    if not incidente.horas:
-        return []
-    return resumir(incidente.horas, min(h.ts for h in incidente.horas))
+def previsao_por_os(estado: Any) -> dict[int, dict]:
+    """A previsão no horário de cada OS em risco (extremos na aplicação e chuva depois do fim)."""
+    horas = Incidente.model_validate(estado["incidente"]).horas
+    return {
+        o["os_id"]: previsao_da_os(horas, para_datetime(o["inicio_previsto"]), o["duracao_horas"])
+        for o in estado.get("os_em_risco") or []
+    }
 
 
 def os_resumidas(estado: Any) -> list[dict]:
@@ -96,6 +98,7 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
       agentes de texto só seguem com a `saida_vazia`.
     - Loop de ferramentas (`before_model_callback`): depois de `MAX_RODADAS_FERRAMENTA` rodadas o
       modelo só pode responder; se ainda chamar ferramenta, vira `saida_vazia` como acima.
+    - Resposta por `set_model_response` (`after_tool_callback`): convertida para JSON pelo `schema`.
     """
     chave = chave_falha(nome_agente)
 
@@ -148,8 +151,19 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
             return _marcar(callback_context, f"saída fora do schema: {e.errors()[0]['msg']}")
         return None
 
+    async def saida_em_json(tool, args, tool_context, tool_response):
+        # O `set_model_response` do ADK guarda `model_dump()` sem `mode="json"` e depois faz
+        # `json.dumps`, que quebra com o `datetime` do `PlanoProposto` (e a sessão no Postgres também).
+        resultado = tool_context.actions.set_model_response
+        if schema is None or tool.name != SAIDA_FINAL or not isinstance(resultado, dict):
+            return None
+        em_json = schema.model_validate(resultado).model_dump(mode="json", exclude_none=True)
+        tool_context.actions.set_model_response = em_json
+        return em_json
+
     return {
         "before_model_callback": limitar_rodadas,
+        "after_tool_callback": saida_em_json,
         "on_tool_error_callback": ferramenta_errou,
         "on_model_error_callback": modelo_errou,
         "after_model_callback": conferir_resposta,
