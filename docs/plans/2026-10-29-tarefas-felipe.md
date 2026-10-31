@@ -96,8 +96,8 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 - [x] T10.2 (P) Dia 2: `erp-mcp` e `qdrant`. Dia 3: `painel`. Os três no compose; `qdrant` com volume `qdrantdata` (porta 6333).
 - [x] T10.3 (P) Deixar comentários para `agents`, `conhecimento` e `monitor`; cada dono acrescenta o seu bloco.
 - [x] T10.4 (P) `.env.example` com `DATABASE_URL`, `ERP_MCP_URL`, `CONHECIMENTO_URL`, `AGENTS_URL`, `MONITOR_URL`, `QDRANT_URL`, `OPENAI_API_KEY` (A3 do Gustavo, padrão `openai/gpt-4o-mini` nas quatro `MODEL_*`), `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID`, `CHANNEL`, `MONITOR_MODE`, `APPROVAL_TIMEOUT_MIN`, `PYTHONUTF8=1` (entregue junto com a T5.2).
-- [~] T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço. Prontos `erp_mcp`, `painel` e `agents` (pinados em `uv:0.11.25`); `monitor` e `base_agricola` (Edison) usam `uv:latest` sem versão fixa. Falta validar o build e a subida dos cinco serviços juntos.
-- [ ] T10.6 (M) Dia 6: deploy na VM do GCP com o Edison; cópia local idêntica; `docker compose up` do zero nas duas.
+- [-] ~~T10.5 (P) Dockerfile padrão com `uv sync --frozen` e o `CMD` de cada serviço.~~ **Cancelada**: o Edison resolve sozinho (Dockerfiles dele).
+- [-] ~~T10.6 (M) Dia 6: deploy na VM do GCP com o Edison; cópia local idêntica; `docker compose up` do zero nas duas.~~ **Cancelada**: o Edison resolve sozinho (deploy na VM).
 
 ## 11. Plano dia a dia
 | Dia | Tarefas |
@@ -110,11 +110,11 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 | 6 | T10.6, T11.4, T11.5 |
 | 7 | T11.6 |
 
-- [ ] T11.1 (G) BMC com o time.
-- [ ] T11.3 (M) Ajustes do painel pedidos pelo time; a OS fica amarela segundos depois de "Simular chuva".
+- [-] ~~T11.1 (G) BMC com o time.~~ **Cancelada** a pedido do Felipe (31/10).
+- [-] ~~T11.3 (M) Ajustes do painel pedidos pelo time; a OS fica amarela segundos depois de "Simular chuva".~~ **Cancelada** a pedido do Felipe (31/10).
 - [x] T11.4 (M) Seção do README: mini-ERP, MCP, canal, painel e como subir (`README.md`, seção "frente do Felipe").
-- [ ] T11.5 (M) Casos de borda: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual`.
-- [ ] T11.6 (M) Dia 7: sem código novo; ensaio cronometrado de 3 min e apoio ao vídeo de backup.
+- [-] ~~T11.5 (M) Casos de borda: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual`.~~ **Cancelada** a pedido do Felipe (31/10).
+- [-] ~~T11.6 (M) Dia 7: sem código novo; ensaio cronometrado de 3 min e apoio ao vídeo de backup.~~ **Cancelada** a pedido do Felipe (31/10).
 
 **Marcos:** dia 2, SIM no Telegram retoma a sessão num processo reiniciado; dia 3, fluxo com fakes; dia 6, demo na VM e local.
 
@@ -143,13 +143,16 @@ Itens de `contratos.md` que o plano do Felipe ainda não reflete. Cada um virou 
 
 Concluídas em 31/10: T4.1, T4.2, T4.8 e T7.4.
 
-Legenda: `[ ]` não feita · `[~]` meia feita. Tudo o que não aparece aqui está `[x]`.
+Legenda: `[ ]` não feita · `[~]` meia feita · `[-]` cancelada. Tudo o que não aparece aqui está `[x]`.
 
 ### Meia feitas `[~]`
 
-| Tarefa | O que já foi feito | O que falta | Depende de |
-|---|---|---|---|
-| T10.5 (P) Dockerfiles | `erp_mcp`, `painel`, `agents` prontos; build dos cinco serviços validado em 31/10 | `monitor` e `base_agricola` usam `uv:latest`; validar o build dos cinco juntos | Edison |
+Nenhuma.
+
+### Canceladas `[-]` (31/10)
+
+- **T10.5 e T10.6** (Dockerfiles do Edison e deploy na VM): o Edison resolve sozinho.
+- **T11.1, T11.3, T11.5 e T11.6** (BMC, ajustes do painel, casos de borda de ponta a ponta e ensaio cronometrado): canceladas a pedido do Felipe. A T11.2 (pitch) já havia saído da lista.
 
 ### Não feitas `[ ]`
 
@@ -159,11 +162,6 @@ A T11.2 (roteiro do pitch) saiu da lista do Felipe: o pitch não é com ele.
 | Tarefa | Resumo | Quando | Depende de |
 |---|---|---|---|
 | T8.5 (G) | SIM no Telegram retoma a sessão num processo reiniciado (**maior risco técnico**) | Atrasada (dia 2) | Gustavo; `OPENAI_API_KEY` (ou `DEMO_LLM=fake`) |
-| T10.6 (M) | Deploy na VM do GCP, cópia local idêntica, `docker compose up` do zero nas duas | Dia 6 | Edison |
-| T11.1 (G) | BMC com o time | Dia 5 | Time |
-| T11.3 (M) | Ajustes do painel; conferir que a OS fica amarela segundos depois de "Simular chuva" | Dia 5 | Pilha inteira de pé |
-| T11.5 (M) | Casos de borda de ponta a ponta: NÃO, sem resposta (escalonamento uma vez), SIM tardio, Ver opções 2×, clique duplo (409), Telegram fora, `aguardando_decisao_manual` | Dia 6 | Pilha inteira de pé |
-| T11.6 (M) | Dia 7: sem código novo; ensaio cronometrado de 3 min e apoio ao vídeo de backup | Dia 7 | Tudo pronto |
 | T12.1 | Prática contínua (testes junto, nomes conferidos contra `contratos.md`, conferir no banco); marcar ao fechar o projeto | Contínua | — |
 
 ### Resolvido em 31/10 (pendências deixadas pelo Edison no contrato)
