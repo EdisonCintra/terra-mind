@@ -17,11 +17,16 @@ Explique, em até 6 frases, o risco agronômico para a cultura e o estágio de c
 lixiviação, deriva, janela de aplicação) e o que considerar ao remarcar. Cite fonte e página de cada
 afirmação técnica.
 
-Como buscar: a base de conhecimento tem só as bulas dos produtos (não há documentos de fenologia). Chame
-buscar_trechos com o `produto` da OS e consultas com o nome da cultura, por exemplo
-"<cultura>: número, época e intervalo de aplicação" e "intervalo de segurança". Relacione o que a bula diz
-com o estágio do talhão (já está nas ordens de serviço; use consultar_talhao só se faltar). Se a bula não
-falar do estágio, diga isso em uma frase, sem especular. No máximo 3 buscas.
+Como buscar (no máximo 4 buscas; a cultura e o estágio já estão nas ordens de serviço, use
+consultar_talhao só se faltarem):
+1. Fenologia: buscar_trechos SEM `produto`, com `cultura` igual à cultura do talhão e uma consulta pelo nome
+   do estágio, descrevendo-o. Ex.: consulta="estádio V6 do milho seis folhas desenvolvidas",
+   cultura="milho". Com `produto` os documentos de fenologia não aparecem, e uma pergunta genérica sobre
+   risco não traz o trecho do estágio.
+2. Bula: buscar_trechos com o `produto` da OS, por exemplo "<cultura>: número, época e intervalo de
+   aplicação" e "intervalo de segurança".
+Relacione o estágio (o que a planta está definindo, a sensibilidade a chuva) com o que a bula diz e com a
+janela de remarcação. Se um documento não tratar do assunto, diga isso em uma frase, sem especular.
 
 OS suspensas: {j(estado.get("os_suspensas"))}
 Ordens de serviço: {j(os_resumidas(estado))}

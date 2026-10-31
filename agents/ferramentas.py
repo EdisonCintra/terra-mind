@@ -15,12 +15,16 @@ from agents.rules.validador import janelas_validas as _janelas_validas
 
 
 def criar_buscar_trechos(deps: Dependencias):
-    async def buscar_trechos(consulta: str, produto: str | None = None, secao: str | None = None) -> dict:
-        """Busca trechos das bulas dos defensivos na base de conhecimento, com fonte e página.
+    async def buscar_trechos(
+        consulta: str, produto: str | None = None, cultura: str | None = None, secao: str | None = None
+    ) -> dict:
+        """Busca trechos das bulas e dos documentos de fenologia na base de conhecimento, com fonte e página.
 
         Args:
             consulta: o que procurar, em português (ex.: "chuva após a aplicação", "velocidade do vento").
-            produto: nome exato do produto, como aparece na OS. Informe sempre, para achar limites.
+            produto: nome exato do produto, como aparece na OS. Informe para achar limites na bula.
+                Não informe para fenologia: os documentos de fenologia não têm produto.
+            cultura: cultura do talhão (ex.: "milho"). Use para fenologia, sem `produto`.
             secao: opcional. Não filtre por seção para achar limites: cada bula põe o limite de chuva
                 numa seção diferente.
 
@@ -28,7 +32,9 @@ def criar_buscar_trechos(deps: Dependencias):
             {"ok": true, "trechos": [{"texto", "fonte_doc", "pagina", "secao", "produto"}]}. Lista vazia
             significa que o documento não traz esse assunto: não invente um limite.
         """
-        trechos = await deps.conhecimento.buscar_trechos(consulta, produto=produto, secao=secao)
+        trechos = await deps.conhecimento.buscar_trechos(
+            consulta, produto=produto, secao=secao, cultura=cultura
+        )
         return {
             "ok": True,
             "trechos": [
