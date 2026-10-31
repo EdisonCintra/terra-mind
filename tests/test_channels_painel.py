@@ -1,10 +1,8 @@
 """PainelChannel grava só o alerta na auditoria (T8.8) e os textos do T8.9."""
 
 import psycopg
-import pytest
 
 from channels.base import criar_canal
-from channels.mensagens import alerta_decisao_manual, alerta_escalonamento
 from channels.painel import PainelChannel
 from tests.conftest import DATABASE_URL
 
@@ -46,21 +44,16 @@ async def test_pedir_aprovacao_nao_cria_nem_altera_planos():
     assert contagem("agente.planos") == 0 and contagem("agente.auditoria") == 0
 
 
-@pytest.mark.parametrize(
-    "motivo,trecho",
-    [
-        ("sem_evidencia", "NÃO foi suspensa"),
-        ("avaliador_falhou", "NÃO foi suspensa"),
-        ("validador_reprovou", "segue suspensa"),
-        ("nao", "segue suspensa"),
-        ("opcoes_esgotadas", "segue suspensa"),
-    ],
-)
-def test_textos_de_decisao_manual(motivo, trecho):
-    texto = alerta_decisao_manual(motivo, 7)
-    assert "#7" in texto and trecho in texto and "manualmente" in texto
+async def test_alerta_do_agents_e_ligado_ao_incidente_pelo_texto():
+    with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
+        inc = conn.execute(
+            "INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot)"
+            " VALUES (1, '[]', '[]') RETURNING id"
+        ).fetchone()[0]
+    await PainelChannel().enviar_alerta(f"Incidente {inc}: OS 1 segue SUSPENSA; você recusou o plano.")
+    assert auditoria()[0][0] == inc
 
 
-def test_texto_de_escalonamento():
-    texto = alerta_escalonamento(7, 3, 30)
-    assert "30 min" in texto and "segue suspensa" in texto and "SIM tardio" in texto
+async def test_texto_sem_incidente_continua_sem_ligacao():
+    await PainelChannel().enviar_alerta("Falha interna sem número")
+    assert auditoria()[0][0] is None

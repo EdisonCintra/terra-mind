@@ -8,6 +8,7 @@ a tela de aprovação lê os planos com `respondido_em IS NULL` e chama `POST /i
 
 import asyncio
 import logging
+import re
 
 from channels.base import AoResponder, NotificationChannel
 from erp_mcp.db import conectar, registrar_auditoria
@@ -15,6 +16,8 @@ from erp_mcp.db import conectar, registrar_auditoria
 log = logging.getLogger(__name__)
 
 NO = "painel"
+# Os alertas do `agents` começam com "Incidente {id}:" mas não passam o `incidente_id` (agents/canal.py).
+INCIDENTE_NO_TEXTO = re.compile(r"^\s*Incidente\s+#?(\d+)\b")
 
 
 def _gravar(incidente_id: int | None, acao: str, depois: dict | None, texto: str) -> None:
@@ -28,6 +31,8 @@ class PainelChannel(NotificationChannel):
         self.ao_responder = ao_responder
 
     async def enviar_alerta(self, texto: str, incidente_id: int | None = None) -> None:
+        if incidente_id is None and (m := INCIDENTE_NO_TEXTO.match(texto)):
+            incidente_id = int(m.group(1))  # liga o alerta ao incidente (linha do tempo e faixa vermelha)
         await asyncio.to_thread(_gravar, incidente_id, "enviar_alerta", None, texto)
 
     async def pedir_aprovacao(self, incidente_id: int, plano_id: int, texto: str) -> None:
