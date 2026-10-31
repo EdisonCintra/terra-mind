@@ -6,7 +6,7 @@ import pytest
 from google.adk.apps import App
 from google.adk.cli.utils.agent_loader import AgentLoader
 
-PASTA = Path(__file__).resolve().parents[1] / "agents" / "agentes"
+PASTA = Path(__file__).resolve().parents[1] / "agentes"
 AGENTES = ["agronomico", "avaliador_risco", "operacional", "supervisor"]
 
 
@@ -37,7 +37,7 @@ def test_no_grafo_os_agentes_rodam_em_single_turn():
     from google.adk.workflow._llm_agent_wrapper import _effective_llm_agent_mode
 
     from agents.agentes.avaliador_risco.agent import criar
-    from tests.fakes import montar_cenario
+    from agents.tests.fakes import montar_cenario
 
     agente = criar(montar_cenario().deps)
     assert agente.mode is None and _effective_llm_agent_mode(agente) == "single_turn"

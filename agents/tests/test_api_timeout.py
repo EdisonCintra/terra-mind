@@ -4,8 +4,8 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 
 from agents.api import Servicos, criar_api
+from agents.tests.fakes import AGORA, FakeCanal, FakeRepo, incidente_chuva
 from agents.timeout import verificar_timeouts
-from tests.fakes import AGORA, FakeCanal, FakeRepo, incidente_chuva
 
 
 class FakeOrquestrador:

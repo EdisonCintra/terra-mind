@@ -11,7 +11,7 @@ from typing import Literal, Self
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 Parametro = Literal["chuva", "vento", "umidade", "temperatura"]
-TipoInsumo = Literal["defensivo", "fertilizante"]
+TipoInsumo = Literal["fungicida", "herbicida", "inseticida"]  # D2, contrato 15
 RespostaTipo = Literal["SIM", "NAO", "OPCOES"]
 StatusIncidente = Literal["aberto", "aguardando_aprovacao", "aguardando_decisao_manual", "encerrado"]
 

@@ -56,12 +56,14 @@ O Telegram não passa pela API: o `TelegramChannel` do Felipe roda neste process
 
 ## Rodar
 
+Tudo da raiz do monorepo, no ambiente único (D3):
+
 ```bash
-cd agents
 uv sync
-uv run pytest                                 # 67 testes; os de Postgres precisam do Docker
+uv run pytest agents                          # 84 testes; os de Postgres sobem um container (Docker)
 uv run python -m agents.verificar_modelos     # confere tools + output_schema de cada MODEL_* na OpenAI
-uv run uvicorn agents.api:app --port 8000     # lê ../.env, .env e as variáveis do ambiente
+uv run uvicorn agents.api:app --port 8000     # lê o .env da raiz, agents/.env e as variáveis do ambiente
+docker compose up -d --build agents           # o serviço no compose, com o canal do Felipe dentro
 ```
 
 No Windows, defina `PYTHONUTF8=1` (exigência do LiteLLM).
@@ -82,14 +84,13 @@ agents/agentes/
 ```
 
 ```powershell
-cd agents
 $env:PYTHONUTF8 = "1"
 uv run adk web agents/agentes                 # abra http://localhost:8000 e escolha o agente no canto superior esquerdo
 uv run adk run agents/agentes/terramind       # o fluxo inteiro, no terminal
 uv run adk run agents/agentes/supervisor      # um agente sozinho
 ```
 
-- **terramind:** digite um número de incidente, por exemplo `1`. Cada número novo recria a fazenda simulada: 80 mm de chuva nas próximas 36 h e uma OS de ureia daqui a 20 h.
+- **terramind:** digite um número de incidente, por exemplo `1`. Cada número novo recria a fazenda simulada: 80 mm de chuva nas próximas 36 h e a pulverização de Abacus HC (fungicida, seed do Felipe) daqui a 20 h.
 - Um agente sozinho começa com o estado do cenário de chuva já preenchido (OS suspensa, avaliação, análises); qualquer mensagem dispara a tarefa.
 - Na pausa do `terramind`, responda com `{"resposta": "SIM", "respondido_por": "gustavo"}` (ou `"NAO"`, `"OPCOES"`).
 - Com `OPENAI_API_KEY` definida, usa os modelos `MODEL_*` de verdade; serve para ensaiar os prompts. Sem chave, ou com `$env:DEMO_LLM = "fake"`, usa LLMs roteirizados.
@@ -108,20 +109,11 @@ uv run adk run agents/agentes/supervisor      # um agente sozinho
 | `MAX_REPLANEJAMENTOS`, `MAX_VOLTAS_VALIDADOR` | `2`, `2` | Limites do fluxo |
 | `TIMEOUT_LLM_S`, `TENTATIVAS_LLM` | `90`, `2` | Timeout e novas tentativas de cada chamada à OpenAI (no cliente LiteLLM) |
 
-## Bloco para o `docker-compose.yml` (Felipe)
+## No `docker-compose.yml`
 
-```yaml
-  agents:
-    build: ./agents
-    env_file: .env
-    ports: ["8000:8000"]
-    depends_on:
-      postgres: { condition: service_healthy }
-      erp-mcp: { condition: service_started }
-      conhecimento: { condition: service_started }
-```
-
-Quando `channels/` existir, ele precisa entrar na imagem: troque o `build` para `{context: ., dockerfile: agents/Dockerfile}` e acrescente `uv pip install ./channels` no Dockerfile. Enquanto o pacote não está instalado, o serviço usa `CanalLog`, que só escreve no log; o painel continua vendo a pendência em `agente.planos`.
+O serviço `agents` está no compose da raiz, com contexto de build na raiz (D3). A imagem leva `agents`,
+`channels` e `erp_mcp`, porque o canal do Felipe (`CHANNEL=telegram` ou `painel`) roda dentro deste
+processo (contrato 7).
 
 ## O que este serviço espera das outras frentes
 

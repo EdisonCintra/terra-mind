@@ -16,12 +16,13 @@ from agents.rules.validador import janelas_validas as _janelas_validas
 
 def criar_buscar_trechos(deps: Dependencias):
     async def buscar_trechos(consulta: str, produto: str | None = None, secao: str | None = None) -> dict:
-        """Busca trechos de bulas (Agrofit) e referências técnicas (Embrapa) na base de conhecimento.
+        """Busca trechos das bulas dos defensivos na base de conhecimento, com fonte e página.
 
         Args:
             consulta: o que procurar, em português (ex.: "chuva após a aplicação", "velocidade do vento").
             produto: nome exato do produto, como aparece na OS. Informe sempre, para achar limites.
-            secao: em bulas, use "condicoes_climaticas" para limites de clima; referências usam "geral".
+            secao: opcional. Não filtre por seção para achar limites: cada bula põe o limite de chuva
+                numa seção diferente.
 
         Returns:
             {"ok": true, "trechos": [{"texto", "fonte_doc", "pagina", "secao", "produto"}]}. Lista vazia
@@ -64,7 +65,7 @@ def criar_disponibilidade_maquinas(deps: Dependencias):
     async def disponibilidade_maquinas(inicio: str, fim: str, tipo: str | None = None) -> dict:
         """Máquinas livres (sem OS agendada ou reagendada) no intervalo, em ISO 8601 com fuso.
 
-        `tipo` filtra, ex.: "distribuidor".
+        `tipo` filtra, ex.: "pulverizador".
         """
         maquinas = await deps.erp.disponibilidade_maquinas(para_datetime(inicio), para_datetime(fim), tipo)
         return {"ok": True, "maquinas": maquinas}

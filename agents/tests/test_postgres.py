@@ -9,7 +9,7 @@ import pytest
 from agents.clientes.repositorio import RepositorioPostgres
 from agents.modelos import Resposta, como_json
 from agents.runner import Orquestrador, criar_session_service
-from tests.fakes import AGORA, incidente_chuva, montar_cenario
+from agents.tests.fakes import AGORA, incidente_chuva, montar_cenario
 
 pytestmark = pytest.mark.pg
 

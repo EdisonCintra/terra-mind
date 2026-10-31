@@ -9,7 +9,7 @@ from agents.rules.janelas import janelas_climaticas, motivo_invalida
 from agents.rules.mensagem import compor_mensagem
 from agents.rules.previsao import resumir
 from agents.rules.validador import ContextoPlano, janelas_validas, validar
-from tests.fakes import AGORA, FakeConhecimento, montar_cenario, os_ureia, previsao_chuva
+from agents.tests.fakes import AGORA, FakeConhecimento, montar_cenario, os_abacus, previsao_chuva
 
 CHUVA_30_24H = ViolacaoOs(
     os_id=1,
@@ -26,7 +26,7 @@ JANELA_1 = AGORA.replace(hour=7) + timedelta(days=1)
 
 
 def os_em_risco(**extra) -> OsEmRisco:
-    dados = {**os_ureia(), **extra}
+    dados = {**os_abacus(), **extra}
     return OsEmRisco(os_id=dados.pop("id"), talhao="Talhão 1", area_ha=120, **dados)
 
 
@@ -63,10 +63,10 @@ async def test_impacto_sem_fator_nao_inventa_numero():
 
 async def test_impacto_com_fator_citado():
     conhecimento = FakeConhecimento(
-        fatores={("fertilizante", "chuva"): {"fator": 0.3, "fonte_ou_estimativa": "x:p.4"}}
+        fatores={("fungicida", "chuva"): {"fator": 0.5, "fonte_ou_estimativa": "x:p.7"}}
     )
     impacto = await calcular_impacto(os_em_risco(), "chuva", conhecimento)
-    assert impacto.perda_rs == 23040.00 and impacto.fonte_fator == "x:p.4"
+    assert impacto.perda_rs == 3330.00 and impacto.fonte_fator == "x:p.7"  # 120 ha × 0,3 L/ha × R$ 185 × 0,5
 
 
 # ---------------------------------------------------------------- janelas
@@ -137,7 +137,7 @@ async def test_validador_aprova_janela_valida():
 
 async def test_validador_reprova_maquina_ocupada():
     erp = await erp_com_os_suspensa()
-    erp.os[3] = os_ureia(id=3, inicio_previsto=JANELA_1, maquina_id=1)
+    erp.os[3] = os_abacus(id=3, inicio_previsto=JANELA_1, maquina_id=1)
     veredito = await validar(plano(JANELA_1), contexto_da_demo(), erp, AGORA)
     assert not veredito.aprovado and "máquina 1 ocupada" in veredito.motivos[0]
 
@@ -220,8 +220,8 @@ async def test_validador_reprova_mesma_maquina_para_duas_os():
 
 async def test_maquina_de_outro_tipo_nao_conta():
     contexto = contexto_da_demo()
-    contexto.os_por_id[1] = os_em_risco(tipo_maquina="pulverizador")
-    erp = await erp_com_os_suspensa()  # as duas máquinas da fazenda são distribuidores
+    contexto.os_por_id[1] = os_em_risco(tipo_maquina="distribuidor")
+    erp = await erp_com_os_suspensa()  # as duas máquinas da fazenda são pulverizadores
     assert await janelas_validas(contexto, 1, erp, AGORA) == []
     assert not (await validar(plano(JANELA_1), contexto, erp, AGORA)).aprovado
 

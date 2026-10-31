@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI, HTTPException, Request, status
 
-from agents.canal import CanalLog, criar_canal, iniciar_canal, parar_canal
+from agents.canal import CanalLog, criar_canal
 from agents.clientes.conhecimento import ConhecimentoHttp
 from agents.clientes.erp import ErpMcp
 from agents.clientes.repositorio import RepositorioPostgres
@@ -39,7 +39,7 @@ async def montar_servicos(settings: Settings) -> Servicos:
     )
     orquestrador = Orquestrador(deps, criar_session_service(settings.database_url))
     deps.canal = criar_canal(settings.channel, orquestrador.responder)
-    await iniciar_canal(deps.canal)
+    await deps.canal.iniciar()
     timeouts = asyncio.create_task(
         laco_timeouts(
             deps.repo,
@@ -54,7 +54,7 @@ async def montar_servicos(settings: Settings) -> Servicos:
         timeouts.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await timeouts
-        await parar_canal(deps.canal)
+        await deps.canal.parar()
         await conhecimento.fechar()
         await deps.repo.engine.dispose()
 

@@ -1,7 +1,8 @@
 """Fazenda simulada: ERP, conhecimento, canal, repositório e LLM em memória, e o cenário da demo.
 
 Usada pelos testes e pelo modo de demonstração do `adk web` (`agents/agentes/`).
-O cenário: 80 mm de chuva nas próximas 36 h e uma OS de ureia agendada para daqui a 20 h.
+O cenário (D2 e seed do Felipe): 80 mm de chuva nas próximas 36 h e a pulverização de Abacus HC
+(fungicida) no Talhão 1 agendada para daqui a 20 h.
 """
 
 import json
@@ -21,7 +22,12 @@ from agents.modelos import Gatilho, HoraPrevisao, Incidente
 from agents.rules.janelas import FUSO
 
 AGORA = datetime(2026, 11, 3, 8, 0, tzinfo=FUSO)
-PRODUTO = "Ureia 46%"
+PRODUTO = "Abacus HC"
+# Texto real da bula do Abacus HC (BASF), p. 7, indexada pelo Edison.
+TRECHO_BULA = (
+    "A ocorrência de chuvas dentro de um período de quatro (4) horas após a aplicação pode afetar o"
+    " desempenho do produto."
+)
 
 
 # ---------------------------------------------------------------- LLM
@@ -68,7 +74,7 @@ def ultima_resposta_de(req: LlmRequest, ferramenta: str) -> dict | None:
     return None
 
 
-def avaliacao_violando(os_id: int = 1, limite: float = 30, janela_h: float = 24, **extra) -> dict:
+def avaliacao_violando(os_id: int = 1, limite: float = 0, janela_h: float = 4, **extra) -> dict:
     v = {
         "os_id": os_id,
         "viola": True,
@@ -77,11 +83,10 @@ def avaliacao_violando(os_id: int = 1, limite: float = 30, janela_h: float = 24,
         "unidade": "mm",
         "janela_h": janela_h,
         "valor_previsto": 80,
-        "trecho": "Evitar a aplicação de ureia quando houver previsão de chuva acima de 30 mm"
-        " nas 24 horas seguintes.",
-        "fonte_doc": "embrapa-ureia",
-        "pagina": 4,
-        "justificativa": "80 mm previstos nas 36 h seguintes, acima do limite de 30 mm em 24 h.",
+        "trecho": TRECHO_BULA,
+        "fonte_doc": "bula-abacus-hc",
+        "pagina": 7,
+        "justificativa": "80 mm previstos nas 36 h seguintes; a bula pede 4 h sem chuva após a aplicação.",
     }
     v.update(extra)
     return {"violacoes": [v]}
@@ -95,7 +100,7 @@ def roteiro_avaliador(avaliacao: dict | Exception | None = None) -> list:
 
 
 def supervisor_que_escolhe(
-    indice: int = 0, mensagem: str = "Chuva forte prevista; adubação suspensa."
+    indice: int = 0, mensagem: str = "Chuva forte prevista; pulverização suspensa."
 ) -> Callable:
     """Chama janelas_validas para a OS 1 e propõe a janela `indice` com a primeira máquina livre."""
 
@@ -131,8 +136,8 @@ def supervisor_invalido(novo_inicio: datetime) -> dict:
 def modelos_padrao(**sobrescritos: list) -> dict:
     roteiros = {
         "avaliador": roteiro_avaliador(),
-        "agronomico": ["Milho em V6: a chuva lixivia o nitrogênio da ureia (embrapa-ureia, p. 4)."],
-        "operacional": ["Distribuidor A livre amanhã às 07:00."],
+        "agronomico": ["Milho em V6: chuva logo após a aplicação lava o fungicida (bula-abacus-hc, p. 7)."],
+        "operacional": ["Pulverizador A livre depois da chuva, a partir das 06:00."],
         # Duas chamadas por proposta (ferramenta + plano); a função decide pelo que já veio na requisição.
         "supervisor": [supervisor_que_escolhe()],
     }
@@ -372,17 +377,17 @@ def incidente_chuva(incidente_id: int = 7, agora: datetime = AGORA) -> Incidente
     )
 
 
-def os_ureia(agora: datetime = AGORA, **extra) -> dict:
+def os_abacus(agora: datetime = AGORA, **extra) -> dict:
     os = {
         "id": 1,
         "talhao_id": 1,
-        "tipo_operacao": "adubacao",
+        "tipo_operacao": "pulverizacao",
         "insumo_id": 1,
         "produto": PRODUTO,
-        "tipo_insumo": "fertilizante",
-        "dose_por_ha": 200,
-        "unidade": "kg",
-        "preco_unitario": 3.2,
+        "tipo_insumo": "fungicida",
+        "dose_por_ha": 0.3,
+        "unidade": "L",
+        "preco_unitario": 185.0,
         "inicio_previsto": agora + timedelta(hours=20),
         "duracao_horas": 8,
         "maquina_id": 1,
@@ -404,8 +409,8 @@ class Cenario:
 
 def os_da_fazenda(agora: datetime = AGORA) -> dict[int, dict]:
     return {
-        1: os_ureia(agora),
-        2: os_ureia(agora, id=2, inicio_previsto=agora + timedelta(days=6)),  # fora da janela de risco
+        1: os_abacus(agora),
+        2: os_abacus(agora, id=2, inicio_previsto=agora + timedelta(days=6)),  # fora da janela de risco
     }
 
 
@@ -430,21 +435,26 @@ def montar_cenario(
             }
         },
         maquinas={
-            1: {"id": 1, "nome": "Distribuidor A", "tipo": "distribuidor", "status": "disponivel"},
-            2: {"id": 2, "nome": "Distribuidor B", "tipo": "distribuidor", "status": "disponivel"},
+            1: {"id": 1, "nome": "Pulverizador A", "tipo": "pulverizador", "status": "disponivel"},
+            2: {"id": 2, "nome": "Pulverizador B", "tipo": "pulverizador", "status": "disponivel"},
         },
         operadores=[{"id": 1, "nome": "João", "telegram_chat_id": 999}],
-        estoque={1: 30000.0},
+        estoque={1: 500.0},  # litros, como no seed
         planos_aprovados=repo.aprovado,
     )
     conhecimento = FakeConhecimento(
-        fatores={("fertilizante", "chuva"): {"fator": 0.3, "fonte_ou_estimativa": "embrapa-ureia:p.4"}},
+        fatores={
+            ("fungicida", "chuva"): {
+                "fator": 0.5,
+                "fonte_ou_estimativa": "estimativa: chuva até 4 h após a aplicação lava parte do produto",
+            }
+        },
         trechos=[
             {
-                "texto": "Evitar a aplicação de ureia com chuva acima de 30 mm nas 24 horas seguintes.",
-                "fonte_doc": "embrapa-ureia",
-                "pagina": 4,
-                "secao": "geral",
+                "texto": TRECHO_BULA,
+                "fonte_doc": "bula-abacus-hc",
+                "pagina": 7,
+                "secao": "condicoes_climaticas",
                 "produto": PRODUTO,
             }
         ],

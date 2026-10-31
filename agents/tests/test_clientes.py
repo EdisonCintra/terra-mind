@@ -3,10 +3,12 @@ import pytest
 import respx
 from mcp.types import CallToolResult, TextContent
 
-from agents.canal import CanalLog, criar_canal, normalizar_resposta
+from agents.canal import criar_canal, normalizar_resposta
 from agents.clientes.conhecimento import ConhecimentoHttp, ConhecimentoIndisponivel
 from agents.clientes.erp import interpretar_resultado
 from agents.clientes.repositorio import url_asyncpg
+from channels.base import DecisaoJaRegistrada, Resposta
+from channels.painel import PainelChannel
 
 URL = "http://conhecimento:8010"
 
@@ -14,9 +16,9 @@ URL = "http://conhecimento:8010"
 @respx.mock
 async def test_buscar_trechos_envia_filtros():
     rota = respx.post(f"{URL}/trechos/busca").respond(200, json=[{"texto": "x", "pagina": 4}])
-    trechos = await ConhecimentoHttp(URL).buscar_trechos("chuva", produto="Ureia 46%")
+    trechos = await ConhecimentoHttp(URL).buscar_trechos("chuva", produto="Abacus HC")
     assert trechos[0]["pagina"] == 4
-    assert rota.calls.last.request.content == b'{"consulta":"chuva","limite":3,"produto":"Ureia 46%"}'
+    assert rota.calls.last.request.content == b'{"consulta":"chuva","limite":3,"produto":"Abacus HC"}'
 
 
 @respx.mock
@@ -59,11 +61,19 @@ def test_url_asyncpg():
     assert url_asyncpg("sqlite+aiosqlite:///x.db") == "sqlite+aiosqlite:///x.db"
 
 
-def test_sem_pacote_channels_usa_canal_de_log():
-    async def ao_responder(r):
-        return None
+async def test_canal_do_felipe_e_resposta_repetida():
+    recebidas = []
 
-    assert isinstance(criar_canal("telegram", ao_responder), CanalLog)
+    async def ao_responder(r):
+        recebidas.append(r)
+        return "repetida" if len(recebidas) > 1 else "ok"
+
+    canal = criar_canal("painel", ao_responder)
+    assert isinstance(canal, PainelChannel)
+    await canal.ao_responder(Resposta(7, 1, "SIM", "gerente"))
+    with pytest.raises(DecisaoJaRegistrada):
+        await canal.ao_responder(Resposta(7, 1, "SIM", "gerente"))
+    assert recebidas[0].incidente_id == 7
 
 
 def test_normaliza_resposta_do_felipe():
@@ -79,8 +89,8 @@ def test_workflow_monta_com_litellm_da_openai():
 
     from agents.config import Settings
     from agents.deps import criar_modelo
+    from agents.tests.fakes import montar_cenario
     from agents.workflow import criar_app
-    from tests.fakes import montar_cenario
 
     settings = Settings(_env_file=None, openai_api_key="sk-teste", model_supervisor="openai/gpt-4o-mini")
     modelo = criar_modelo(settings, "supervisor")

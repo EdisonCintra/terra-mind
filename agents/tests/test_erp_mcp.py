@@ -9,7 +9,7 @@ import uvicorn
 from mcp.server.fastmcp import FastMCP
 
 from agents.clientes.erp import ErpIndisponivel, ErpMcp
-from tests.fakes import AGORA
+from agents.tests.fakes import AGORA
 
 OS = {"id": 1, "talhao_id": 1, "status": "agendada", "inicio_previsto": "2026-11-04T04:00:00-03:00"}
 

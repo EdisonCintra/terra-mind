@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_SERVICO = Path(__file__).resolve().parents[1]  # agents/
+_SERVICO = Path(__file__).resolve().parent  # agents/ (o pacote é a pasta do serviço, D3)
 
 NomeAgente = Literal["avaliador", "agronomico", "operacional", "supervisor"]
 

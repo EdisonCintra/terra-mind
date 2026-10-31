@@ -72,7 +72,7 @@ def _montar() -> Cenario:
 
     def reiniciar_fazenda():
         cenario.erp.os = os_da_fazenda(agora)
-        cenario.erp.estoque = {1: 30000.0}
+        cenario.erp.estoque = {1: 500.0}
         for modelo in cenario.deps.modelos.values():
             modelo.chamadas = 0
 
@@ -117,8 +117,8 @@ def estado_do_cenario(cenario: Cenario) -> dict:
         "avaliacao": como_json(AvaliacaoRisco.model_validate(avaliacao_violando())),
         "os_suspensas": [1],
         "impactos": [como_json(impacto)],
-        "analise_agronomica": "Milho em V6: a chuva lixivia o nitrogênio da ureia (embrapa-ureia, p. 4).",
-        "analise_operacional": "Distribuidor A livre depois da chuva, a partir de 06:00.",
+        "analise_agronomica": "Milho em V6: chuva após a aplicação lava o fungicida (bula-abacus-hc, p. 7).",
+        "analise_operacional": "Pulverizador A livre depois da chuva, a partir das 06:00.",
     }
 
 

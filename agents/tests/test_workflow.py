@@ -1,25 +1,27 @@
 from datetime import timedelta
 
+import pytest
 from google.adk.sessions import InMemorySessionService
 
 from agents.modelos import Resposta
 from agents.runner import Orquestrador
-from agents.workflow import APP_NAME
-from tests.fakes import (
+from agents.tests.fakes import (
     AGORA,
     FakeLlm,
     avaliacao_violando,
     chamar,
     modelos_padrao,
     montar_cenario,
-    os_ureia,
+    os_abacus,
     roteiro_avaliador,
     supervisor_invalido,
     supervisor_que_escolhe,
     ultima_resposta_de,
 )
+from agents.workflow import APP_NAME
 
-JANELA_1 = AGORA.replace(hour=7) + timedelta(days=1)  # 04/11 07:00, primeira hora sem chuva demais em 24 h
+# 05/11 06:00: a chuva vai até 04/11 19:00 e a bula pede 4 h sem chuva depois das 8 h de aplicação.
+JANELA_1 = AGORA.replace(hour=6) + timedelta(days=2)
 
 
 async def iniciar(cenario):
@@ -48,16 +50,16 @@ async def test_fluxo_completo_com_sim():
     assert c.repo.incidentes[7].status == "aguardando_aprovacao"
     [(incidente_id, plano_id, texto)] = c.canal.aprovacoes
     assert (incidente_id, plano_id) == (7, 1)
-    assert "R$ 23.040,00" in texto  # 120 ha × 200 kg/ha × R$ 3,20 × 0,3, montado em código
-    assert "embrapa-ureia, p. 4" in texto
-    assert "04/11 às 07:00" in texto
-    assert c.conhecimento.buscas and c.conhecimento.buscas[0][1] == "Ureia 46%"
+    assert "R$ 3.330,00" in texto  # 120 ha × 0,3 L/ha × R$ 185 × 0,5, montado em código
+    assert "bula-abacus-hc, p. 7" in texto
+    assert "05/11 às 06:00" in texto
+    assert c.conhecimento.buscas and c.conhecimento.buscas[0][1] == "Abacus HC"
 
     assert await responder(orq, 1, "SIM") == "ok"
 
     assert c.erp.status(1) == "reagendada"
     assert c.erp.os[1]["inicio_previsto"] == JANELA_1
-    assert c.erp.estoque[1] == 30000 - 120 * 200
+    assert c.erp.estoque[1] == pytest.approx(500 - 120 * 0.3)  # 36 L de Abacus HC reservados
     assert c.canal.operadores and c.canal.operadores[0][0] == 999
     assert c.repo.incidentes[7].status == "encerrado"
     assert "executor:executar_plano" in c.repo.acoes()
@@ -69,8 +71,8 @@ async def test_rodape_usa_numeros_do_codigo_e_nao_do_llm():
     )
     await iniciar(c)
     texto = c.canal.aprovacoes[0][2]
-    assert "Perda evitada: R$ 23.040,00" in texto
-    assert "p. 4" in texto
+    assert "Perda evitada: R$ 3.330,00" in texto
+    assert "p. 7" in texto
 
 
 async def test_resposta_repetida_nao_reexecuta():
@@ -141,7 +143,7 @@ async def test_sem_violacao_encerra_sem_mexer_na_os():
 
 async def test_sem_os_na_janela_encerra_sem_chamar_llm():
     c = montar_cenario()
-    c.erp.os[1] = os_ureia(inicio_previsto=AGORA + timedelta(days=5))
+    c.erp.os[1] = os_abacus(inicio_previsto=AGORA + timedelta(days=5))
     await iniciar(c)
     assert c.repo.incidentes[7].status == "encerrado"
     assert c.deps.modelos["avaliador"].chamadas == 0
@@ -188,7 +190,7 @@ async def test_sim_atrasado_com_maquina_ocupada_replaneja():
     c = montar_cenario()
     orq = await iniciar(c)
     # Enquanto o gerente não respondia, outra OS ocupou a máquina 1 na janela aprovada.
-    c.erp.os[3] = os_ureia(id=3, talhao_id=1, inicio_previsto=JANELA_1, maquina_id=1)
+    c.erp.os[3] = os_abacus(id=3, talhao_id=1, inicio_previsto=JANELA_1, maquina_id=1)
     c.erp.os[3]["status"] = "agendada"
     await responder(orq, 1, "SIM")
     assert any("não vale mais" in a for a in c.canal.alertas)
@@ -222,16 +224,16 @@ async def test_avaliador_recebe_resposta_da_ferramenta():
     vistos = []
 
     def decide(req):
-        from tests.fakes import ultima_resposta_de
+        from agents.tests.fakes import ultima_resposta_de
 
         vistos.append(ultima_resposta_de(req, "buscar_trechos"))
         return avaliacao_violando()
 
     c = montar_cenario(
-        modelos_padrao(avaliador=[chamar("buscar_trechos", consulta="chuva", produto="Ureia 46%"), decide])
+        modelos_padrao(avaliador=[chamar("buscar_trechos", consulta="chuva", produto="Abacus HC"), decide])
     )
     await iniciar(c)
-    assert vistos[0]["trechos"][0]["pagina"] == 4
+    assert vistos[0]["trechos"][0]["pagina"] == 7
 
 
 async def test_llm_fake_unico_por_agente():
