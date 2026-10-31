@@ -16,7 +16,7 @@
 
 **Escopo da frente (spec, Divisão do time):** coleta das bulas; pipeline de ingest; Qdrant com chunking e metadados por produto e seção; ferramenta `buscar_trechos` e fatores de perda; depois, Monitor com Open-Meteo e modo replay (snapshot de 120 h). `consultar_regras`, extração e validação manual **saíram do plano** (29/10, Gustavo: "vamos decidir só por RAG").
 
-**Estado:** Task 1 concluída (`437f3b6`, branch `feat/conhecimento-base`).
+**Estado:** ver o checklist no fim deste arquivo.
 
 ## Global Constraints
 
@@ -149,6 +149,7 @@ terra-mind/
 ├── pyproject.toml / uv.lock            # ambiente único do monorepo
 ├── base_agricola/                      # serviço :8010 + pipeline offline
 │   ├── main.py                         # FastAPI: /health, rotas
+│   ├── dependencias.py                 # get_repo (injeção do repositório nas rotas)
 │   ├── rotas_fatores.py                # GET /fatores-perda
 │   ├── rotas_trechos.py                # POST /trechos/busca
 │   ├── db.py                           # criar_engine()
@@ -188,13 +189,13 @@ Testes, sempre da raiz: `uv run pytest base_agricola`, `uv run pytest monitor`, 
 
 ---
 
-## Fase 1 — Base do serviço (branch `feat/conhecimento-base`, dia 1)
+## Fase 1 — Base do serviço (branch `feat/base-agricola`, dia 1)
 
-### Task 1: Esqueleto do serviço ✅ concluída (`437f3b6`)
+### Task 1: Esqueleto do serviço ✅ concluída (`00fb5f0`)
 
 `pyproject.toml` e `uv.lock` na raiz, `base_agricola/main.py` com `GET /health` e teste. Tasks seguintes usam `os.environ` em vez de `Settings`.
 
-### Task 2: Schema `conhecimento` e repositório
+### Task 2: Schema `conhecimento` e repositório ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `db/migrations/010_conhecimento.sql`, `base_agricola/db.py`, `base_agricola/modelos.py`, `base_agricola/repositorio.py`, `base_agricola/tests/test_repositorio.py`
@@ -239,11 +240,12 @@ def test_documentos_registrados(repo):
 - [ ] **Step 4:** `uv run pytest base_agricola -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(db): adiciona schema conhecimento"` (migration) e `git commit -m "feat(base_agricola): adiciona repositório de documentos e fatores de perda"`
 
-### Task 3: `GET /fatores-perda`
+### Task 3: `GET /fatores-perda` ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `base_agricola/rotas_fatores.py`, `base_agricola/tests/test_api_fatores.py`
-- Modify: `base_agricola/main.py` (dependência `get_repo`, incluir o router)
+- Create: `base_agricola/dependencias.py` (`get_repo`; fora do `main.py` para evitar import circular entre `main` e as rotas)
+- Modify: `base_agricola/main.py` (incluir o router e reexportar `get_repo`)
 
 **Interfaces:**
 - Consumes: `RepositorioConhecimento` (Task 2).
@@ -271,13 +273,13 @@ def test_condicao_invalida_422(client_com_fatores):
 - [ ] **Step 4:** `uv run pytest base_agricola -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(base_agricola): expõe fatores de perda"`
 
-**Fim da fase:** PR `feat/conhecimento-base` → revisão do Gustavo (e do Felipe, pela migration).
+**Fim da fase:** PR `feat/base-agricola` → revisão do Gustavo (e do Felipe, pela migration).
 
 ---
 
 ## Fase 2 — Ingest e Qdrant (branch `feat/ingest-qdrant`, dia 2)
 
-### Task 4: Manifesto de fontes e texto por página
+### Task 4: Manifesto de fontes e texto por página ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `base_agricola/manifesto.py`, `base_agricola/pdf.py`, `base_agricola/dados/fontes.yaml` (exemplo comentado), `base_agricola/tests/test_manifesto.py`, `base_agricola/tests/test_pdf.py`
@@ -319,7 +321,7 @@ def test_id_repetido_invalido(tmp_path):
 - [ ] **Step 4:** `uv run pytest base_agricola -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(base_agricola): lê manifesto de fontes e extrai texto por página"`
 
-### Task 5: Chunking por seção
+### Task 5: Chunking por seção ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `base_agricola/chunking.py`, `base_agricola/tests/test_chunking.py`
@@ -327,14 +329,16 @@ def test_id_repetido_invalido(tmp_path):
 
 **Interfaces:**
 - Produces:
-  - `Trecho(BaseModel)`: `doc_id`, `produto: str | None`, `tipo_doc`, `culturas: list[str]`, `pagina: int`, `secao: Literal["condicoes_climaticas","modo_aplicacao","intervalo_seguranca","outra","geral"]`, `ordem: int`, `texto: str`.
-  - `dividir_em_trechos(fonte: Fonte, paginas: list[PaginaTexto], max_chars: int = 1200) -> list[Trecho]`.
+  - `Trecho(BaseModel)`: `doc_id`, `produto: str | None`, `tipo_doc`, `culturas: list[str]`, `pagina: int`, `secao: Literal["condicoes_climaticas","modo_aplicacao","intervalo_seguranca","limitacoes_uso","outra","geral"]`, `ordem: int`, `texto: str`.
+  - `dividir_em_trechos(fonte: Fonte, paginas: list[PaginaTexto], max_chars: int = 500) -> list[Trecho]`. **500, não 1200:** com trechos de 1200 caracteres, a frase do limite de chuva se dilui e sai do top 3 em 3 das 4 bulas reais; com 500, fica em 1º nas quatro (medido em 30/10).
 
 Regras de corte:
 - Em bula, os cabeçalhos são reconhecidos sem diferenciar maiúsculas nem acentos:
-  - "CONDIÇÕES CLIMÁTICAS" ou "CONDIÇÕES DE APLICAÇÃO" → `condicoes_climaticas`;
+  - "CONDIÇÕES CLIMÁTICAS", "CONDIÇÕES METEOROLÓGICAS" ou "CONDIÇÕES DE APLICAÇÃO" → `condicoes_climaticas` (a bula do Abacus HC usa "METEOROLÓGICAS", com o intervalo de chuva na p. 7);
   - "MODO DE APLICAÇÃO" → `modo_aplicacao`;
   - "INTERVALO DE SEGURANÇA" → `intervalo_seguranca`;
+  - "LIMITAÇÕES DE USO" → `limitacoes_uso`;
+  - qualquer outra linha em maiúsculas com 10 letras ou mais e sem dígitos é cabeçalho desconhecido → `outra` (encerra a seção anterior);
   - texto antes do primeiro cabeçalho → `outra`.
 - A seção vale até o próximo cabeçalho, inclusive na página seguinte.
 - O corte é por parágrafo, até `max_chars`, sem atravessar página.
@@ -370,7 +374,7 @@ def test_bula_guarda_produto_em_todos_os_trechos(fonte_bula, paginas_simples):
 - [ ] **Step 4:** `uv run pytest base_agricola -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(base_agricola): divide documentos em trechos por seção sem cruzar páginas"`
 
-### Task 6: Embeddings, indexação idempotente e comando `indexar`
+### Task 6: Embeddings, indexação idempotente e comando `indexar` ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `base_agricola/embeddings.py`, `base_agricola/qdrant.py`, `base_agricola/ingest.py`, `base_agricola/tests/test_qdrant.py`, `base_agricola/tests/test_ingest_indexar.py`
@@ -408,7 +412,7 @@ def test_cli_documento_com_falha_nao_para_os_outros(cli, manifesto_um_pdf_quebra
 - [ ] **Step 4:** `uv run pytest base_agricola -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(base_agricola): indexa trechos no Qdrant de forma idempotente"`
 
-### Task 7: Busca de trechos (`POST /trechos/busca`)
+### Task 7: Busca de trechos (`POST /trechos/busca`) ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `base_agricola/busca.py`, `base_agricola/rotas_trechos.py`, `base_agricola/tests/test_busca.py`
@@ -458,7 +462,7 @@ Extração de regras com LLM e API de revisão manual saíram do plano: a decis�
 
 ## Fase 3 — Ferramenta para os agentes (branch `feat/tools-conhecimento`, dia 2–3, PR para o Gustavo)
 
-### Task 11: `buscar_trechos` para o ADK
+### Task 11: `buscar_trechos` para o ADK ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `agents/tools/__init__.py`, `agents/tools/conhecimento.py`, `agents/tests/test_tools_conhecimento.py`
@@ -467,7 +471,7 @@ Extração de regras com LLM e API de revisão manual saíram do plano: a decis�
 - Consumes: `POST /trechos/busca` (Task 7), em `CONHECIMENTO_URL`.
 - Produces: `buscar_trechos(consulta: str, produto: str | None = None, secao: str | None = None) -> dict` → `{"trechos": [{"texto", "fonte_doc", "pagina", "secao", "produto"}]}`.
   - É a ferramenta do caminho crítico: o Avaliador decide com ela e o Agronômico cita com ela.
-  - A docstring, em português, diz que para achar limites de aplicação a consulta vai filtrada por `produto` e, em bula, por `secao="condicoes_climaticas"`; e que lista vazia significa "o documento não traz esse limite".
+  - A docstring, em português, diz que para achar limites de aplicação a consulta vai filtrada **só por `produto`**, sem `secao`: nas bulas reais o limite de chuva aparece em seções diferentes (Abacus HC e Ativum em "Condições meteorológicas", Brucia em "Limitações de uso", Amplexus em "Modo de aplicação"). Lista vazia significa "o documento não traz esse limite".
   - Erro de rede, timeout (5 s) ou 5xx → `{"trechos": [], "erro": "servico_conhecimento_indisponivel"}`. Nunca levanta exceção.
   - Alinhar com o Gustavo se ela vira um wrapper do `ConhecimentoHttp` dele, para não haver dois clientes HTTP.
 
@@ -500,7 +504,7 @@ def test_servico_fora_do_ar():
 
 ## Fase 4 — Fatores de perda (branch `feat/fatores-perda`, dia 3)
 
-### Task 10: Carga dos fatores de perda
+### Task 10: Carga dos fatores de perda ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `base_agricola/fatores.py`, `base_agricola/dados/fatores_perda.yaml`, `base_agricola/tests/test_fatores.py`
@@ -550,7 +554,7 @@ def test_rejeita_condicao_fora_do_contrato(tmp_path):
 
 ## Fase 5 — Monitor de clima (branch `feat/monitor`, dia 4)
 
-### Task 12: Modelos e fonte Open-Meteo
+### Task 12: Modelos e fonte Open-Meteo ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `monitor/__init__.py`, `monitor/modelos.py`, `monitor/fontes.py`, `monitor/tests/__init__.py`, `monitor/tests/fixtures/open_meteo.json`, `monitor/tests/test_open_meteo.py`
@@ -584,7 +588,7 @@ def test_erro_http_vira_indisponivel(fonte):
 - [ ] **Step 4:** `uv run pytest monitor -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(monitor): adiciona cliente Open-Meteo com horários no fuso local"`
 
-### Task 13: Modo replay e `chuva_80mm.json`
+### Task 13: Modo replay e `chuva_80mm.json` ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `monitor/gravar.py`, `monitor/scenarios/chuva_80mm.json`, `monitor/tests/test_replay.py`
@@ -616,7 +620,7 @@ def test_cenario_soma_80mm_em_36h_e_tem_120h():
 - [ ] **Step 4:** `uv run pytest monitor -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(monitor): adiciona modo replay e cenário de chuva de 80 mm"`
 
-### Task 14: Avaliação dos limiares
+### Task 14: Avaliação dos limiares ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `monitor/avaliacao.py`, `monitor/tests/test_avaliacao.py`
@@ -654,7 +658,7 @@ def test_sem_horas_nao_dispara():
 - [ ] **Step 4:** `uv run pytest monitor -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(monitor): avalia previsão contra limiares de chuva, vento e umidade"`
 
-### Task 15: Ciclo, incidentes sem duplicar e aviso aos agentes
+### Task 15: Ciclo, incidentes sem duplicar e aviso aos agentes ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `monitor/repositorio.py`, `monitor/notificador.py`, `monitor/ciclo.py`, `monitor/tests/test_ciclo.py`, `monitor/tests/test_repositorio_pg.py`, `monitor/tests/sql/contrato_minimo.sql`
@@ -712,7 +716,7 @@ def test_incidente_encerrado_nao_bloqueia(repo_pg, talhao_id):  # Postgres
 - [ ] **Step 4:** `uv run pytest monitor -v && uv run ruff check .` → PASS
 - [ ] **Step 5:** `git commit -m "feat(monitor): abre incidentes sem duplicar e avisa o runner"`
 
-### Task 16: API do monitor e loop em background
+### Task 16: API do monitor e loop em background ✅ implementada (commit pendente)
 
 **Files:**
 - Create: `monitor/main.py`, `monitor/tests/test_api.py`
@@ -754,7 +758,7 @@ def test_modo_replay_nao_inicia_loop(client_replay):
 
 ## Fase 6 — Containers e README (branch `chore/infra-conhecimento-monitor`, dia 5)
 
-### Task 17: Dockerfiles, serviços no compose e README
+### Task 17: Dockerfiles, serviços no compose e README ✅ implementada (commit pendente; blocos do compose no README, para o Felipe colar)
 
 **Files:**
 - Create: `base_agricola/Dockerfile`, `monitor/Dockerfile`
@@ -792,7 +796,7 @@ git checkout -b <branch da fase>
 # PR para main → revisão → merge
 ```
 
-- Uma branch por fase: `feat/conhecimento-base`, `feat/ingest-qdrant`, `feat/tools-conhecimento`, `feat/fatores-perda`, `feat/monitor`, `chore/infra-conhecimento-monitor`.
+- Uma branch por fase: `feat/base-agricola`, `feat/ingest-qdrant`, `feat/tools-conhecimento`, `feat/fatores-perda`, `feat/monitor`, `chore/infra-conhecimento-monitor`.
 - Um commit por task (dois quando a task indica). Cada commit passa em `uv run pytest <pasta>` e `uv run ruff check .`.
 - PR para `main` ao fim de cada fase, com o Gustavo como revisor (e o Felipe nos que tocam migration, `agente.incidentes` ou compose).
 - Se o `main` andar no meio da fase, trazer com `git merge main` na branch.
@@ -804,3 +808,61 @@ git checkout -b <branch da fase>
 3. Fase 4 (Task 10, fatores): perda em R$ na mensagem.
 4. Fase 5 (Tasks 12–16, Monitor): o gatilho da demo; até lá, o Gustavo dispara incidentes à mão.
 5. Fase 6 (Task 17, infra).
+
+---
+
+## ✅ Checklist do Edison (onde estamos)
+
+> Atualize marcando `[x]`. Branch atual: **`feat/base-agricola`**.
+
+### Agora (30/10)
+
+> **Código da minha parte: pronto.** Todas as tasks (1–7, 10–17) implementadas e revisadas. RAG: 57 testes de `base_agricola` + `agents` passando (4 lentos pulados, passam com `RODAR_LENTOS=1`); suíte completa 89 passando. Falta o merge do PR e as entregas do time.
+
+- [x] Task 1: esqueleto da API com `/health` (`00fb5f0`)
+- [x] Task 2: tabelas `documentos` e `fatores_perda` + repositório (commit pendente)
+- [x] Task 3: rota `GET /fatores-perda` (commit pendente)
+- [x] Commit e PR único da `feat/base-agricola` (30/10)
+
+### Depende do time (cobrar no grupo)
+
+- [ ] Gustavo e Felipe aprovam D2 (só defensivos) e D3 (ambiente na raiz)
+- [ ] Gustavo completa o `docs/contratos.md` (A1–A3, A6, A7 e confirma os contratos 1, 2 e 4)
+- [ ] Fechar a lista de `tipo_insumo`: fungicida, herbicida, inseticida (contrato 15)
+- [x] Defensivo da demo escolhido: **Abacus HC** (BASF, p. 7: "chuvas dentro de um período de quatro (4) horas após a aplicação pode afetar o desempenho"), registrado como D5 no contrato
+- [ ] Felipe confirma o D5 e troca `Fungicida X` por `Abacus HC` no seed (contrato 1)
+- [ ] Gustavo: Avaliador busca só com `produto`, sem `secao` (contrato 10), e expõe `POST /incidentes/{id}/iniciar` (contrato 3)
+- [ ] Time revisa o fator de perda 0,5 (estimativa) antes do pitch (contrato 11)
+
+### Dia 2: documentos e busca
+
+- [x] Triagem das bulas (30/10): **Abacus HC** (fungicida, "4 h" p. 7, principal), **Ativum** (fungicida BASF, soja, "4 h" p. 6, reserva), **Brucia** (herbicida, "4 h" e "48 h" p. 9), **Amplexus** (herbicida, "4 h" p. 5), **Soprano 125 SC** e **Aproach Premium** (fungicidas sem número de chuva, negativos)
+- [x] 4 bulas com limite de chuva em `base_agricola/dados/docs/` e no `fontes.yaml`: Abacus HC, Ativum, Brucia, Amplexus (negativos descartados, 30/10)
+- [ ] Manual de fenologia de soja e milho (opcional, para o Agronômico)
+- [x] Task 4: ler o `fontes.yaml` e extrair o texto por página (commit pendente)
+- [x] Task 5: dividir em trechos por seção da bula (commit pendente) — 27 testes passando; o limite de chuva das 4 bulas reais cai no trecho e na página certos
+- [x] Task 6: indexar no Qdrant sem duplicar (commit pendente)
+- [x] Task 7: busca de trechos (commit pendente) — **aceitação com as 4 bulas reais passou**: o trecho do limite de chuva fica no top 3 com a página certa (`RODAR_LENTOS=1 uv run pytest base_agricola/tests/test_busca.py -k aceitacao`)
+- [x] Task 11: ferramenta `buscar_trechos` (commit pendente) — docstring orienta filtrar só por `produto`
+
+### Dia 3: perda em R$
+
+- [x] Task 10: carregar os fatores de perda (commit pendente) — `fungicida/chuva` e `herbicida/chuva` = 0,5, **declarados como estimativa** (as bulas não quantificam a perda): revisar o valor com o time
+
+### Dia 4: Monitor
+
+- [x] Task 12: cliente Open-Meteo (commit pendente) — fixture real de Rio Verde/GO
+- [x] Task 13: modo replay + `chuva_80mm.json` (commit pendente) — 80 mm entre a 14ª e a 33ª hora, cobre a OS do seed (+20 h); seco depois da 34ª
+- [x] Task 14: avaliar os limiares (commit pendente)
+- [x] Task 15: abrir incidente sem duplicar e avisar o Gustavo (commit pendente) — incidente não encerrado bloqueia duplicata mesmo dias depois (testado no Postgres)
+- [x] Task 16: API do monitor (`/replay` para o botão do Felipe) (commit pendente) — suíte completa: 86 testes passando
+
+### Dias 5 a 7
+
+- [x] Task 17: Dockerfiles e README (commit pendente) — testado num compose temporário: os 4 containers sobem, `indexar` gera 513 trechos, a busca acha o limite de chuva em 1º nas 4 bulas, o replay abre 1 incidente com 120 h e não duplica
+- [ ] Felipe colar os blocos `conhecimento` e `monitor` (README) no `docker-compose.yml` dele
+- [x] Revisão final (auto-revisão, 30/10): corrigidos Qdrant fora do ar → 503 e modelo de embeddings baixado no build e carregado na subida (antes, a 1ª busca levava ~10 s e estourava o timeout de 5 s da ferramenta); 89 testes passando
+- [x] Commit e PR único da `feat/base-agricola` (30/10)
+- [ ] Ensaiar o replay com o Gustavo: o Avaliador cita a bula certa?
+- [ ] Rodar tudo na VM
+- [ ] Gravar o vídeo de backup
