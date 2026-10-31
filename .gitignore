@@ -13,3 +13,6 @@ __pycache__/
 .superpowers/
 .idea/
 .vscode/
+
+#Claude
+.claude 
