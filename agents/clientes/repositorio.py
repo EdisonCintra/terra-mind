@@ -43,7 +43,10 @@ class RepositorioAgente(Protocol):
         self, plano_id: int, incidente_id: int, resposta: str, respondido_por: str
     ) -> ResultadoResposta: ...
     async def plano_aprovado(self, plano_id: int) -> bool: ...
-    async def planos_para_escalar(self, agora: datetime, timeout_min: int) -> list[dict]: ...
+    async def planos_para_escalar(self, agora: datetime, timeout_min: int) -> list[dict]:
+        """`[{plano_id, incidente_id, criado_em, opcoes_json}]` dos planos sem resposta nem escalonamento."""
+        ...
+
     async def marcar_escalado(self, plano_id: int, agora: datetime) -> None: ...
     async def auditar(
         self,
@@ -150,7 +153,7 @@ class RepositorioPostgres:
                 (
                     await conn.execute(
                         text(
-                            "SELECT id AS plano_id, incidente_id, criado_em FROM agente.planos"
+                            "SELECT id AS plano_id, incidente_id, criado_em, opcoes_json FROM agente.planos"
                             " WHERE respondido_em IS NULL AND escalado_em IS NULL AND criado_em <= :limite"
                             " ORDER BY id"
                         ),
@@ -160,7 +163,7 @@ class RepositorioPostgres:
                 .mappings()
                 .all()
             )
-        return [dict(linha) for linha in linhas]
+        return [dict(linha) | {"opcoes_json": _carregar(linha["opcoes_json"])} for linha in linhas]
 
     async def marcar_escalado(self, plano_id, agora):
         async with self.engine.begin() as conn:

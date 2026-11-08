@@ -304,3 +304,137 @@ def test_mensagem_nao_mostra_motivo_contradito_pelos_numeros():
     temperatura = _violacao("temperatura", 30, 22.2)
     texto = compor_mensagem(plano(JANELA_1), {1: os_em_risco()}, {1: [chuva, temperatura]}, {1: impacto})
     assert "chuva em até 4 h" in texto and "22.2" not in texto and "30 °C" not in texto
+
+
+# ---------------------------------------------------------------- G6: além da chuva
+
+
+def _hora_seca(i: int, **campos):
+    from agents.modelos import HoraPrevisao
+
+    base = {"chuva_mm": 0, "vento_kmh": 6, "umidade_pct": 70, "temp_c": 25}
+    return HoraPrevisao(ts=AGORA + timedelta(hours=i), **{**base, **campos})
+
+
+def _limite(parametro, limite, sentido=None, **extra) -> ViolacaoOs:
+    return ViolacaoOs(
+        os_id=1,
+        viola=True,
+        parametro=parametro,
+        sentido=sentido,
+        limite=limite,
+        trecho="Velocidade do vento entre 2 e 10 km/h",
+        fonte_doc="bula-abacus-hc",
+        pagina=7,
+        justificativa="x",
+        **extra,
+    )
+
+
+def test_sentido_do_limite_na_conferencia():
+    from agents.rules.violacao import violacao_sustentada
+
+    assert violacao_sustentada(_limite("vento", 2, "minimo", valor_previsto=1))  # calmaria
+    assert not violacao_sustentada(_limite("vento", 2, "minimo", valor_previsto=3))
+    assert violacao_sustentada(_limite("delta_t", 8, valor_previsto=11))
+    assert not violacao_sustentada(_limite("delta_t", 8, valor_previsto=6))
+    assert violacao_sustentada(_limite("inversao", 0, valor_previsto=1))
+    assert not violacao_sustentada(_limite("inversao", 0, valor_previsto=0))
+    assert violacao_sustentada(_limite("rajada", 20, valor_previsto=35))
+    assert _limite("umidade", 60).sentido_efetivo == "minimo"  # padrão do parâmetro
+
+
+def test_parametros_novos_validam_faixa_e_inversao():
+    with pytest.raises(ValidationError):
+        _limite("delta_t", 45)  # Delta T de 45 °C não existe: unidade trocada ou número inventado
+    with pytest.raises(ValidationError):
+        _limite("inversao", 1)  # inversão só tem o limite 0 ("deve ser evitada")
+
+
+def test_gatilho_de_tipo_novo_nao_impede_carregar_o_incidente():
+    from agents.modelos import Gatilho
+
+    g = Gatilho(tipo="delta_t", valor=11, limiar=8, inicio=AGORA, fim=AGORA + timedelta(hours=3))
+    assert g.tipo == "delta_t"
+
+
+def test_janela_respeita_delta_t_maximo():
+    horas = [_hora_seca(i, delta_t_c=11 if i < 30 else 5) for i in range(120)]
+    v = _limite("delta_t", 8)
+    assert "Delta T de 11 °C acima do limite de 8 °C" in motivo_invalida(JANELA_1, horas, v, 8, AGORA)
+    janelas = janelas_climaticas(horas, v, 8, AGORA)
+    assert janelas[0] == AGORA + timedelta(hours=30)  # 04/11 14:00, quando o Delta T cai para 5
+
+
+def test_janela_sem_o_dado_novo_nao_e_aceita():
+    horas = [_hora_seca(i) for i in range(120)]  # Monitor sem Delta T (contrato 21: opcional)
+    assert motivo_invalida(JANELA_1, horas, _limite("delta_t", 8), 8, AGORA) == (
+        "sem previsão de Delta T para o intervalo"
+    )
+    assert janelas_climaticas(horas, _limite("delta_t", 8), 8, AGORA) == []
+
+
+def test_janela_respeita_vento_minimo_e_maximo():
+    horas = [_hora_seca(i, vento_kmh=1 if i < 30 else 6) for i in range(120)]
+    faixa = [_limite("vento", 10), _limite("vento", 2, "minimo")]
+    assert "vento de 1 km/h abaixo do mínimo de 2 km/h" in motivo_invalida(JANELA_1, horas, faixa, 8, AGORA)
+    assert janelas_climaticas(horas, faixa, 8, AGORA)[0] == AGORA + timedelta(hours=30)
+
+
+def test_janela_evita_inversao_e_rajada():
+    horas = [_hora_seca(i, inversao=i in range(24, 27), rajada_kmh=40 if i == 40 else 15) for i in range(120)]
+    inversao = _limite("inversao", 0)
+    assert motivo_invalida(JANELA_1, horas, inversao, 8, AGORA) == "inversão térmica prevista no intervalo"
+    assert motivo_invalida(AGORA.replace(hour=11) + timedelta(days=1), horas, inversao, 8, AGORA) is None
+    rajada = _limite("rajada", 25)
+    assert "rajada de 40 km/h" in motivo_invalida(AGORA + timedelta(hours=34), horas, rajada, 8, AGORA)
+
+
+def test_previsao_da_os_traz_campos_novos_so_com_dado_completo():
+    from agents.rules.previsao import previsao_da_os
+
+    completas = [_hora_seca(i, rajada_kmh=20, delta_t_c=4 + i % 3, inversao=i == 3) for i in range(24)]
+    p = previsao_da_os(completas, AGORA + timedelta(hours=2), duracao_h=8)["aplicacao"]
+    assert p["rajada_max_kmh"] == 20 and p["delta_t_min_c"] == 4 and p["delta_t_max_c"] == 6
+    assert p["inversao"] is True and p["vento_min_kmh"] == 6
+
+    parciais = [_hora_seca(i, delta_t_c=5 if i % 2 else None) for i in range(24)]
+    p = previsao_da_os(parciais, AGORA + timedelta(hours=2), duracao_h=8)["aplicacao"]
+    assert not {"delta_t_max_c", "rajada_max_kmh", "inversao"} & p.keys()
+
+
+def test_mensagem_dos_parametros_novos():
+    impactos = {}
+    calmaria = _limite("vento", 2, "minimo", valor_previsto=1)
+    texto = compor_mensagem(plano(JANELA_1), {1: os_em_risco()}, {1: [calmaria]}, impactos)
+    assert texto.startswith("VENTO FRACO DEMAIS") and "pede o vento de no mínimo 2 km/h" in texto
+    assert "A previsão é de 1 km/h." in texto and "Perda evitada: não calculada" in texto
+
+    inversao = _limite("inversao", 0, valor_previsto=1)
+    texto = compor_mensagem(plano(JANELA_1), {1: os_em_risco()}, {1: [inversao]}, impactos)
+    assert texto.startswith("INVERSÃO TÉRMICA PREVISTA") and "evitar a aplicação com inversão" in texto
+
+    delta = _limite("delta_t", 8, valor_previsto=11)
+    texto = compor_mensagem(plano(JANELA_1), {1: os_em_risco()}, {1: [delta]}, impactos)
+    assert "A bula (p. 7) limita o Delta T a 8 °C. A previsão é de 11 °C." in texto
+    assert not any(ord(c) > 0x2600 for c in texto)
+
+
+async def test_validador_aceita_janela_que_respeita_o_vento():
+    horas = [_hora_seca(i, vento_kmh=18 if i < 40 else 6) for i in range(120)]
+    contexto = ContextoPlano(
+        horas=horas,
+        os_por_id={1: os_em_risco()},
+        violacoes_por_os={1: [_limite("vento", 10, valor_previsto=18)]},
+        os_suspensas=[1],
+    )
+    erp = await erp_com_os_suspensa()
+    ventando = await validar(plano(JANELA_1), contexto, erp, AGORA)
+    assert not ventando.aprovado and "vento de 18 km/h acima do limite de 10 km/h" in ventando.motivos[0]
+    calmo = AGORA.replace(hour=6) + timedelta(days=2)  # 05/11 06:00, depois que o vento cai
+    assert (await validar(plano(calmo), contexto, erp, AGORA)).aprovado
+
+
+async def test_impacto_de_condicao_sem_fator_fica_em_branco():
+    impacto = await calcular_impacto(os_em_risco(), "delta_t", FakeConhecimento())
+    assert impacto.perda_rs is None and impacto.fonte_fator == "sem fator cadastrado"

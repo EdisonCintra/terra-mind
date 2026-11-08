@@ -231,6 +231,98 @@ def test_tela_e_so_de_acompanhamento_sem_botoes_de_decisao(cliente):
     novo_plano(inc, "Remarcar OS 1 para sexta")
     for rota in ("/os", "/timeline", "/aprovacao"):
         html = cliente.get(rota).text
-        assert "Remarcar OS 1 para sexta" not in html and "hx-post=\"/aprovacao/" not in html
+        assert "Remarcar OS 1 para sexta" not in html and 'hx-post="/aprovacao/' not in html
         assert "Decisão" not in html and 'id="status-incidente"' in html
         assert 'hx-post="/simular/chuva"' in html
+
+
+# --- G5: custo da demora na decisão ------------------------------------------------------------
+CUSTO_ATRASO = {
+    "os_id": 1,
+    "talhao": "Talhão 1 - Sede",
+    "valor_aplicacao_rs": 6660.0,
+    "fator_dia": 0.02,
+    "fonte_fator": "estimativa: x",
+    "janela_proposta": "2099-11-05T06:00:00-03:00",
+    "vence_em": "2099-11-05T16:00:00-03:00",
+    "proxima_janela": "2099-11-06T06:00:00-03:00",
+    "custo_perder_janela_rs": 133.2,
+}
+
+
+def test_linhas_atraso_recalcula_o_vence_em():
+    from datetime import datetime
+
+    agora = datetime.fromisoformat("2099-11-05T11:00:00-03:00")
+    [linha] = dados.linhas_atraso([CUSTO_ATRASO], agora)
+    assert linha == (
+        "OS 1: janela de 05/11 06:00 vence em 5 h · perdê-la custa R$ 133,20 (estimativa)"
+        " · próxima janela: 06/11 06:00"
+    )
+    depois = datetime.fromisoformat("2099-11-05T17:00:00-03:00")
+    assert "já venceu" in dados.linhas_atraso(json.dumps([CUSTO_ATRASO]), depois)[0]
+    assert dados.linhas_atraso(None, agora) == []
+
+
+def test_pendente_mostra_quanto_custa_perder_a_janela(cliente):
+    inc = novo_incidente("aguardando_aprovacao")
+    sql(
+        "INSERT INTO agente.planos (incidente_id, opcoes_json) VALUES (%s, %s)",
+        (inc, json.dumps({"opcoes": [], "mensagem": "Remarcar", "custos_atraso": [CUSTO_ATRASO]})),
+    )
+    html = cliente.get("/parcial/pendentes").text
+    assert 'class="atraso"' in html and "perdê-la custa R$ 133,20 (estimativa)" in html
+
+
+def test_timeline_mostra_o_custo_so_enquanto_espera_o_gerente(cliente):
+    inc = novo_incidente("aguardando_aprovacao")
+    depois = json.dumps({"plano_id": 1, "custos_atraso": [CUSTO_ATRASO]})
+    sql(
+        "INSERT INTO agente.auditoria (incidente_id, no, acao, depois)"
+        " VALUES (%s, 'aprovacao', 'pedir_aprovacao', %s::jsonb)",
+        (inc, depois),
+    )
+    assert "perdê-la custa R$ 133,20" in cliente.get(f"/parcial/timeline?incidente={inc}").text
+    sql("UPDATE agente.incidentes SET status = 'encerrado' WHERE id = %s", (inc,))
+    assert "perdê-la custa" not in cliente.get(f"/parcial/timeline?incidente={inc}").text
+
+
+# --- G4: Pergunte à bula -----------------------------------------------------------------------
+def test_tela_da_bula_lista_os_produtos_do_erp(cliente):
+    html = cliente.get("/bula").text
+    assert 'hx-post="/bula/perguntar"' in html and "Abacus HC" in html
+    assert 'href="/bula"' in cliente.get("/os").text
+
+
+def test_pergunta_vai_ao_agents_e_mostra_trecho_fonte_e_pagina(cliente, monkeypatch):
+    resultado = {
+        "encontrou": True,
+        "resposta": "Não. A bula pede vento entre 2 e 10 km/h.",
+        "citacoes": [
+            {"trecho": "Velocidade do vento entre 2 e 10 km/h", "fonte_doc": "bula-abacus-hc", "pagina": 7}
+        ],
+    }
+    vistas = http_falso(monkeypatch, lambda req: httpx.Response(200, json=resultado))
+    html = cliente.post(
+        "/bula/perguntar", data={"pergunta": "Posso aplicar com 12 km/h?", "produto": "Abacus HC"}
+    ).text
+    assert json.loads(vistas[0].content) == {"pergunta": "Posso aplicar com 12 km/h?", "produto": "Abacus HC"}
+    assert str(vistas[0].url).endswith("/bula/perguntar")
+    assert "bula-abacus-hc, p. 7" in html and "entre 2 e 10 km/h" in html and "sem-trecho" not in html
+
+
+def test_resposta_sem_trecho_e_falhas_aparecem_sem_quebrar(cliente, monkeypatch):
+    nao = {"encontrou": False, "resposta": "A bula não traz isso.", "citacoes": []}
+    http_falso(monkeypatch, lambda req: httpx.Response(200, json=nao))
+    html = cliente.post("/bula/perguntar", data={"pergunta": "Qual o preço?"}).text
+    assert "A bula não traz isso." in html and "sem-trecho" in html
+
+    http_falso(monkeypatch, lambda req: httpx.Response(503))
+    assert "HTTP 503" in cliente.post("/bula/perguntar", data={"pergunta": "Qual o preço?"}).text
+
+    def fora(req):
+        raise httpx.ConnectError("fora")
+
+    http_falso(monkeypatch, fora)
+    assert "Não consegui falar" in cliente.post("/bula/perguntar", data={"pergunta": "Qual o preço?"}).text
+    assert "Escreva a pergunta" in cliente.post("/bula/perguntar", data={"pergunta": " "}).text

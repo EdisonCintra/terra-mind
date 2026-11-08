@@ -116,3 +116,83 @@ def test_sem_token_ou_chat_id_o_erro_manda_usar_o_painel(monkeypatch):
     monkeypatch.setenv("GERENTE_CHAT_ID", "")
     with pytest.raises(RuntimeError, match="CHANNEL=painel"):
         criar_canal("telegram", AsyncMock())
+
+
+# --- G4: pergunta livre à bula ------------------------------------------------------------------
+def mensagem(texto, chat_id=42):
+    """Update de mensagem de texto; `tarefas` guarda o que o canal mandou rodar em segundo plano."""
+    msg = SimpleNamespace(text=texto, reply_text=AsyncMock())
+    update = SimpleNamespace(
+        effective_message=msg,
+        effective_chat=SimpleNamespace(id=chat_id),
+        effective_user=SimpleNamespace(full_name="Gerente Teste"),
+    )
+    tarefas = []
+    contexto = SimpleNamespace(application=SimpleNamespace(create_task=tarefas.append))
+    return update, contexto, msg, tarefas
+
+
+async def test_pergunta_do_gerente_roda_em_segundo_plano_e_responde_com_a_pagina():
+    c = canal()
+    ao_perguntar = AsyncMock(return_value="Não. Vento entre 2 e 10 km/h.\n\nFonte: bula Abacus HC, p. 7")
+    c.definir_ao_perguntar(ao_perguntar)
+    update, contexto, msg, tarefas = mensagem("Posso aplicar Abacus HC com vento de 12 km/h?")
+    await c._ao_escrever(update, contexto)
+    assert len(tarefas) == 1  # o handler volta na hora: os botões de aprovação não ficam travados
+    ao_perguntar.assert_not_awaited()
+    await tarefas[0]
+    ao_perguntar.assert_awaited_once_with("Posso aplicar Abacus HC com vento de 12 km/h?", "Gerente Teste")
+    textos = [chamada.args[0] for chamada in msg.reply_text.await_args_list]
+    assert textos[0] == "Consultando as bulas…" and "p. 7" in textos[1]
+
+
+async def test_chat_desconhecido_nao_gasta_llm():
+    c = canal()
+    ao_perguntar = AsyncMock()
+    c.definir_ao_perguntar(ao_perguntar)
+    update, contexto, msg, tarefas = mensagem("Qual a carência do Brucia?", chat_id=777)
+    await c._ao_escrever(update, contexto)
+    assert tarefas == [] and "não está liberado" in msg.reply_text.await_args.args[0]
+
+
+async def test_chats_extras_podem_perguntar():
+    c = TelegramChannel(AsyncMock(), token="123456:TOKEN-DE-TESTE", gerente_chat_id=42, chats_bula="7, 8")
+    c.definir_ao_perguntar(AsyncMock(return_value="ok"))
+    update, contexto, _, tarefas = mensagem("Qual a carência do Brucia?", chat_id=8)
+    await c._ao_escrever(update, contexto)
+    assert len(tarefas) == 1
+    assert c.chats_pergunta == {42, 7, 8}
+
+
+async def test_sem_pergunta_ligada_ou_texto_curto_explica():
+    c = canal()
+    update, contexto, msg, tarefas = mensagem("Qual a carência do Brucia?")
+    await c._ao_escrever(update, contexto)
+    assert tarefas == [] and "não estão ligadas" in msg.reply_text.await_args.args[0]
+    c.definir_ao_perguntar(AsyncMock())
+    update, contexto, msg, tarefas = mensagem("oi")
+    await c._ao_escrever(update, contexto)
+    assert tarefas == [] and "Pergunte à bula" in msg.reply_text.await_args.args[0]
+
+
+async def test_falha_na_pergunta_avisa_sem_estourar():
+    c = canal()
+    c.definir_ao_perguntar(AsyncMock(side_effect=RuntimeError("boom")))
+    update, contexto, msg, tarefas = mensagem("Qual a carência do Brucia?")
+    await c._ao_escrever(update, contexto)
+    await tarefas[0]
+    assert "Tente de novo" in msg.reply_text.await_args.args[0]
+
+
+async def test_ajuda_mostra_exemplos():
+    update, _, msg, _ = mensagem("/ajuda")
+    await canal()._ao_pedir_ajuda(update, None)
+    assert "Posso aplicar Abacus HC" in msg.reply_text.await_args.args[0]
+
+
+def test_handlers_de_texto_e_ajuda_registrados():
+    from telegram.ext import CommandHandler, MessageHandler
+
+    handlers = canal().app.handlers[0]
+    assert any(isinstance(h, MessageHandler) for h in handlers)
+    assert any(isinstance(h, CommandHandler) and "ajuda" in h.commands for h in handlers)

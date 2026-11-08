@@ -7,7 +7,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import FastAPI, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
+from agents.bula import PergunteBula
 from agents.canal import CanalLog, criar_canal
 from agents.clientes.conhecimento import ConhecimentoHttp
 from agents.clientes.erp import ErpMcp
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 class Servicos:
     orquestrador: Orquestrador
     desligar: Callable[[], Awaitable[None]] | None = None
+    bula: PergunteBula | None = None  # G4
 
 
 async def montar_servicos(settings: Settings) -> Servicos:
@@ -38,7 +41,9 @@ async def montar_servicos(settings: Settings) -> Servicos:
         canal=CanalLog(),
     )
     orquestrador = Orquestrador(deps, criar_session_service(settings.database_url))
+    bula = PergunteBula(deps)
     deps.canal = criar_canal(settings.channel, orquestrador.responder)
+    deps.canal.definir_ao_perguntar(bula.responder_no_canal)  # G4: pergunta livre no Telegram
     await deps.canal.iniciar()
     timeouts = asyncio.create_task(
         laco_timeouts(
@@ -58,12 +63,17 @@ async def montar_servicos(settings: Settings) -> Servicos:
         await conhecimento.fechar()
         await deps.repo.engine.dispose()
 
-    return Servicos(orquestrador=orquestrador, desligar=desligar)
+    return Servicos(orquestrador=orquestrador, desligar=desligar, bula=bula)
 
 
 class CorpoResposta(RespostaGerente):
     plano_id: int
     respondido_por: str = "painel"
+
+
+class CorpoPergunta(BaseModel):
+    pergunta: str = Field(min_length=3, max_length=500)
+    produto: str | None = None
 
 
 def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastAPI:
@@ -103,6 +113,18 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
         if resultado == "desconhecida":
             raise HTTPException(status.HTTP_404_NOT_FOUND, "plano_desconhecido")
         return {"incidente_id": incidente_id, "plano_id": corpo.plano_id, "status": "registrada"}
+
+    @app.post("/bula/perguntar")
+    async def perguntar_a_bula(corpo: CorpoPergunta, request: Request) -> dict:
+        """G4: resposta com trecho, fonte e página, conferida em código.
+
+        Sem trecho conferido, a resposta é "A bula não traz isso."
+        """
+        bula = request.app.state.servicos.bula
+        if bula is None:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "pergunte_bula_indisponivel")
+        resultado = await bula.perguntar(corpo.pergunta.strip(), (corpo.produto or "").strip() or None)
+        return resultado.model_dump(mode="json")
 
     return app
 

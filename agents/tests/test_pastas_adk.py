@@ -7,7 +7,7 @@ from google.adk.apps import App
 from google.adk.cli.utils.agent_loader import AgentLoader
 
 PASTA = Path(__file__).resolve().parents[1] / "agentes"
-AGENTES = ["agronomico", "avaliador_risco", "operacional", "supervisor"]
+AGENTES = ["agronomico", "avaliador_risco", "operacional", "pergunte_bula", "supervisor"]
 
 
 @pytest.fixture

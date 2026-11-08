@@ -16,13 +16,26 @@ TITULOS = {
     "vento": "VENTO FORTE PREVISTO",
     "umidade": "UMIDADE FORA DO LIMITE",
     "temperatura": "TEMPERATURA FORA DO LIMITE",
+    "rajada": "RAJADAS DE VENTO PREVISTAS",
+    "delta_t": "DELTA T FORA DA FAIXA",
+    "inversao": "INVERSÃO TÉRMICA PREVISTA",
+}
+# Título quando o limite violado é um mínimo (ex.: "vento entre 2 e 10 km/h" com previsão de calmaria).
+TITULOS_MINIMO = {"vento": "VENTO FRACO DEMAIS", "temperatura": "TEMPERATURA FORA DO LIMITE"}
+# Parâmetro → (nome na frase, unidade) para os limites que não são chuva nem inversão.
+GRANDEZAS = {
+    "vento": ("o vento", "km/h"),
+    "umidade": ("a umidade relativa", "%"),
+    "temperatura": ("a temperatura", "°C"),
+    "rajada": ("as rajadas de vento", "km/h"),
+    "delta_t": ("o Delta T", "°C"),
 }
 OPERACOES = {"pulverizacao": "Pulverização"}
 LIMITE_MOTIVO = 200
 
 
 def formatar_data_longa(t) -> str:
-    """"segunda, 02/11 às 06:00" (hora de Brasília)."""
+    """ "segunda, 02/11 às 06:00" (hora de Brasília)."""
     local = t.astimezone(FUSO)
     return f"{DIAS[local.weekday()]}, {local:%d/%m} às {local:%H:%M}"
 
@@ -43,18 +56,35 @@ def _motivo(v: ViolacaoOs) -> str:
         else:
             regra = "diz que chuva na aplicação prejudica o produto"
         previsao = f" A previsão traz {previsto:g} mm nesse período." if previsto is not None else ""
-    elif v.parametro == "vento":
+    elif v.parametro == "vento" and v.sentido_efetivo == "maximo":
         regra = f"limita o vento a {v.limite:g} km/h na aplicação"
         previsao = f" A previsão chega a {previsto:g} km/h." if previsto is not None else ""
-    elif v.parametro == "umidade":
+    elif v.parametro == "umidade" and v.sentido_efetivo == "minimo":
         regra = f"indica {v.limite:g}% de umidade relativa como limite"
         previsao = f" A previsão é de {previsto:g}%." if previsto is not None else ""
-    elif v.parametro == "temperatura":
+    elif v.parametro == "temperatura" and v.sentido_efetivo == "maximo":
         regra = f"indica {v.limite:g} °C como limite"
         previsao = f" A previsão é de {previsto:g} °C." if previsto is not None else ""
+    elif v.parametro == "inversao":
+        regra = "pede para evitar a aplicação com inversão térmica"
+        previsao = " A previsão indica inversão no horário da aplicação."
+    elif v.parametro in GRANDEZAS:
+        nome, unidade = GRANDEZAS[v.parametro]
+        sep = "" if unidade == "%" else " "
+        if v.sentido_efetivo == "minimo":
+            regra = f"pede {nome} de no mínimo {v.limite:g}{sep}{unidade}"
+        else:
+            regra = f"limita {nome} a {v.limite:g}{sep}{unidade}"
+        previsao = f" A previsão é de {previsto:g}{sep}{unidade}." if previsto is not None else ""
     else:
         return " ".join(v.justificativa.split())[:LIMITE_MOTIVO]
     return f"{bula} {regra}.{previsao}"
+
+
+def _titulo(v: ViolacaoOs) -> str:
+    if v.sentido_efetivo == "minimo" and v.parametro in TITULOS_MINIMO:
+        return TITULOS_MINIMO[v.parametro]
+    return TITULOS.get(v.parametro, "RISCO CLIMÁTICO")
 
 
 def _perda(impacto: Impacto | None) -> str:
@@ -74,13 +104,13 @@ def compor_mensagem(
 ) -> str:
     """`maquinas`: id → nome (sem o nome, mostra "Máquina N"). `opcao`: (atual, total) das propostas."""
     maquinas = maquinas or {}
-    parametros = [
-        v.parametro
+    sustentadas = [
+        v
         for o in plano.opcoes
         for v in violacoes_por_os.get(o.os_id, [])
         if v.viola and v.parametro and violacao_sustentada(v)
     ]
-    titulo = TITULOS.get(parametros[0], "RISCO CLIMÁTICO") if parametros else "RISCO CLIMÁTICO"
+    titulo = _titulo(sustentadas[0]) if sustentadas else "RISCO CLIMÁTICO"
     linhas = [f"{titulo} - AÇÃO NECESSÁRIA"]
     if opcao:
         linhas.append(f"Opção {opcao[0]} de {opcao[1]}")

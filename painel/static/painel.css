@@ -116,6 +116,7 @@ tr:has(.status.reagendada) .perda { color: var(--bom); }
 .no, .quando { color: var(--suave); font: .73rem var(--mono); }
 .acao { font-size: .9rem; font-weight: 500; }
 .evento .texto { margin-top: .15rem; color: #bcc8c3; font-size: .82rem; overflow-wrap: anywhere; }
+.evento .texto.atraso, .plano .atraso { color: var(--atencao); font-weight: 600; }
 .citacao { display: inline-block; margin: .3rem .35rem 0 0; padding: .02rem .5rem; color: var(--ceu); border: 1px solid rgba(93, 169, 238, .4); border-radius: 999px; font: .71rem var(--mono); }
 
 /* Avisos */
@@ -141,3 +142,17 @@ tr:has(.status.reagendada) .perda { color: var(--bom); }
   .kpis { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .ao-vivo::before { animation: none; } button { transition: none; } }
+
+/* Pergunte à bula (G4): pergunta em cima, respostas mais novas primeiro, sempre com o trecho citado. */
+.bula { max-width: 760px; margin: 0 auto; padding: 1rem 16px; display: grid; gap: 1rem; }
+.pergunta-bula { display: grid; gap: .4rem; padding: 1rem; background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px; }
+.pergunta-bula label { color: var(--suave); font-size: .8rem; }
+.pergunta-bula select, .pergunta-bula textarea { font: inherit; color: var(--tinta); background: var(--superficie-2); border: 1px solid var(--linha-forte); border-radius: 8px; padding: .5rem .6rem; }
+.pergunta-bula button { justify-self: start; }
+.conversa { display: grid; gap: .8rem; }
+.resposta-bula { padding: .8rem 1rem; background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px; }
+.resposta-bula.sem-trecho { border-color: rgba(233, 174, 63, .4); }
+.resposta-bula .pergunta-feita { margin: 0 0 .3rem; font-weight: 600; }
+.resposta-bula .texto { margin: 0; }
+.resposta-bula .trecho { margin: .6rem 0 0; padding-left: .7rem; border-left: 3px solid var(--ceu); color: var(--suave); font-size: .85rem; overflow-wrap: anywhere; }
+.voltar, .link-bula { color: var(--ceu); text-decoration: none; }

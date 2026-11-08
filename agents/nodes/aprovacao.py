@@ -33,7 +33,13 @@ def criar_aprovacao(deps: Dependencias):
         except Exception:  # noqa: BLE001 - o plano continua pendente no painel
             logger.exception("falha ao pedir aprovação pelo canal")
             await alertar(deps, f"Não consegui enviar o plano {plano_id}; aprove pelo painel.")
-        await auditar(deps, ctx, "aprovacao", "pedir_aprovacao", depois={"plano_id": plano_id})
+        await auditar(
+            deps,
+            ctx,
+            "aprovacao",
+            "pedir_aprovacao",
+            depois={"plano_id": plano_id, "custos_atraso": ctx.state.get("custos_atraso") or []},
+        )
         yield RequestInput(
             interrupt_id=interrupt_id(plano_id),
             message=ctx.state["mensagem"],

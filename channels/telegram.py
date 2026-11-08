@@ -1,5 +1,8 @@
 """Canal Telegram com botões inline e long polling (T8.3, contratos 6 e 7).
 
+Mensagem de texto do gerente (ou de um chat em TELEGRAM_CHATS_BULA) é uma pergunta à bula (G4):
+vai para o `ao_perguntar` do `agents` e a resposta volta com a bula e a página.
+
 Roda dentro do processo `agents`: o lifespan chama `await canal.iniciar()` e, no desligamento,
 `await canal.parar()`. Só pode existir um processo fazendo polling por token (erro `Conflict`).
 """
@@ -9,11 +12,27 @@ import os
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import Conflict
-from telegram.ext import Application, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from channels.base import AoResponder, DecisaoJaRegistrada, NotificationChannel, Resposta
 
 log = logging.getLogger(__name__)
+
+AJUDA = (
+    "Pergunte à bula: escreva sua dúvida citando o produto.\n"
+    "Ex.: Posso aplicar Abacus HC com vento de 12 km/h?\n"
+    "Ex.: Qual a carência do Brucia no milho?\n"
+    "Toda resposta vem com a bula e a página. Se a bula não trouxer o assunto, eu aviso."
+)
+NAO_AUTORIZADO = "Este número ainda não está liberado para perguntas. Peça ao gerente da fazenda."
+SEM_PERGUNTA = "As perguntas à bula ainda não estão ligadas neste bot."
 
 PREFIXO = "r"  # callback_data: r:{incidente_id}:{plano_id}:{resposta}  (limite do Telegram: 64 bytes)
 ROTULOS = {"SIM": "Aceitar Proposta", "OPCOES": "Ver próxima opção", "NAO": "Recusar Proposta"}
@@ -47,7 +66,11 @@ def montar_teclado(incidente_id: int, plano_id: int) -> InlineKeyboardMarkup:
 
 class TelegramChannel(NotificationChannel):
     def __init__(
-        self, ao_responder: AoResponder, token: str | None = None, gerente_chat_id: int | None = None
+        self,
+        ao_responder: AoResponder,
+        token: str | None = None,
+        gerente_chat_id: int | None = None,
+        chats_bula: str | None = None,
     ):
         self.ao_responder = ao_responder
         gerente = gerente_chat_id if gerente_chat_id is not None else os.environ.get("GERENTE_CHAT_ID", "")
@@ -58,8 +81,14 @@ class TelegramChannel(NotificationChannel):
                 "sem eles use CHANNEL=painel"
             )
         self.gerente = int(gerente)
+        # Quem pode fazer pergunta livre: o gerente e os chats extras de TELEGRAM_CHATS_BULA
+        # ("123,456"). Cada pergunta custa uma chamada de LLM; desconhecido não é atendido.
+        extras = chats_bula if chats_bula is not None else os.environ.get("TELEGRAM_CHATS_BULA", "")
+        self.chats_pergunta = {self.gerente, *(int(c) for c in str(extras).replace(" ", "").split(",") if c)}
         self.app = Application.builder().token(token).build()
         self.app.add_handler(CallbackQueryHandler(self._ao_clicar, pattern=f"^{PREFIXO}:"))
+        self.app.add_handler(CommandHandler(["start", "ajuda"], self._ao_pedir_ajuda))
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._ao_escrever))
         self.app.add_error_handler(self._ao_errar)
 
     async def _ao_errar(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -101,6 +130,38 @@ class TelegramChannel(NotificationChannel):
             await query.message.reply_text("Não consegui registrar a resposta. Tente pelo painel.")
         else:
             await query.message.reply_text(f"{ECO[resposta.resposta]} por {quem}.")
+
+    async def _ao_pedir_ajuda(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.effective_chat and update.effective_chat.id in self.chats_pergunta:
+            await update.effective_message.reply_text(AJUDA)
+
+    async def _ao_escrever(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Mensagem de texto = pergunta à bula. Roda em segundo plano para não travar os botões."""
+        mensagem, chat = update.effective_message, update.effective_chat
+        if mensagem is None or chat is None or not (mensagem.text or "").strip():
+            return
+        if chat.id not in self.chats_pergunta:
+            log.warning("pergunta de chat não autorizado ignorada: %s", chat.id)
+            await mensagem.reply_text(NAO_AUTORIZADO)
+            return
+        if self.ao_perguntar is None:
+            await mensagem.reply_text(SEM_PERGUNTA)
+            return
+        pergunta = mensagem.text.strip()
+        if len(pergunta) < 3:
+            await mensagem.reply_text(AJUDA)
+            return
+        quem = update.effective_user.full_name if update.effective_user else str(chat.id)
+        context.application.create_task(self._responder_pergunta(mensagem, pergunta, quem))
+
+    async def _responder_pergunta(self, mensagem, pergunta: str, quem: str) -> None:
+        await mensagem.reply_text("Consultando as bulas…")
+        try:
+            texto = await self.ao_perguntar(pergunta, quem)
+        except Exception:
+            log.exception("falha ao responder a pergunta à bula")
+            texto = "Não consegui consultar as bulas agora. Tente de novo em instantes."
+        await mensagem.reply_text(texto)
 
     async def iniciar(self) -> None:
         """Liga o long polling sem travar o resto do programa."""

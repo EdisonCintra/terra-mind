@@ -18,6 +18,7 @@ from agents.agentes._comum import ENTRADA_LLM, chave_falha
 from agents.deps import Dependencias
 from agents.modelos import Impacto, PlanoProposto, como_json
 from agents.nodes.comum import auditar
+from agents.rules.atraso import calcular_custos_atraso
 from agents.rules.mensagem import compor_mensagem
 from agents.rules.validador import ContextoPlano, validar
 
@@ -38,6 +39,21 @@ async def nomes_das_maquinas(deps: Dependencias, plano: PlanoProposto, os_por_id
             continue
         nomes.update({m["id"]: m["nome"] for m in livres if "id" in m and "nome" in m})
     return nomes
+
+
+async def custos_de_atraso(deps: Dependencias, plano: PlanoProposto, contexto: ContextoPlano) -> list[dict]:
+    """G5: custo de o gerente demorar, gravado no plano para o lembrete e o painel.
+
+    É informação extra: se o cálculo falhar, o plano segue sem ela.
+    """
+    try:
+        custos = await calcular_custos_atraso(
+            plano, contexto, deps.conhecimento, deps.settings, deps.relogio()
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("não consegui calcular o custo do atraso")
+        return []
+    return como_json(custos)
 
 
 def criar_preparar_plano(deps: Dependencias):
@@ -89,9 +105,12 @@ def criar_validador(deps: Dependencias):
         mensagem = compor_mensagem(
             aprovado, contexto.os_por_id, contexto.violacoes_por_os, impactos, maquinas, opcao
         )
+        custos = await custos_de_atraso(deps, aprovado, contexto)
         plano_id = await deps.repo.criar_plano(
-            ctx.state["incidente_id"], {"opcoes": como_json(aprovado)["opcoes"], "mensagem": mensagem}
+            ctx.state["incidente_id"],
+            {"opcoes": como_json(aprovado)["opcoes"], "mensagem": mensagem, "custos_atraso": custos},
         )
+        ctx.state["custos_atraso"] = custos
         oferecidas = dict(ctx.state.get("datas_oferecidas") or {})
         for opcao in aprovado.opcoes:
             oferecidas[str(opcao.os_id)] = [

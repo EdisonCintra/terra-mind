@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _SERVICO = Path(__file__).resolve().parent  # agents/ (o pacote é a pasta do serviço, D3)
 
-NomeAgente = Literal["avaliador", "agronomico", "operacional", "supervisor"]
+NomeAgente = Literal["avaliador", "agronomico", "operacional", "supervisor", "bula"]
 
 
 class Settings(BaseSettings):
@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     model_agronomico: str = "openai/gpt-6-luna"
     model_operacional: str = "openai/gpt-6-luna"
     model_supervisor: str = "openai/gpt-6-luna"
+    model_bula: str = "openai/gpt-6-luna"  # G4: Pergunte à bula
     # Esforço de raciocínio dos quatro agentes. O gpt-6-luna não aceita "minimal": o menor é "low"
     # ("none" desliga o raciocínio). Vazio = o padrão do modelo (para modelos sem raciocínio).
     reasoning_effort: str | None = "low"
@@ -39,6 +40,14 @@ class Settings(BaseSettings):
     timeout_llm_s: float = 90
     tentativas_llm: int = 2
     janela_padrao_h: int = 48
+
+    # G5: fração do valor da aplicação perdida por dia de atraso, enquanto o conhecimento não tiver
+    # `condicao="atraso"` (entrega do E7). Sempre mostrada como estimativa.
+    fator_atraso_dia: float = 0.02
+    fonte_fator_atraso: str = (
+        "estimativa: provisória até o E7; atraso reduz a eficácia do programa de aplicação, e as bulas"
+        " indexadas não quantificam a perda por dia (o Ativum, p. 4, fixa intervalo máximo de 14 dias)"
+    )
 
     def modelo(self, agente: NomeAgente) -> str:
         return getattr(self, f"model_{agente}")
