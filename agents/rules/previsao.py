@@ -9,12 +9,33 @@ HORAS_APOS_FIM = (1, 2, 4, 6, 12, 24)
 
 
 def _agregar(trecho: list[HoraPrevisao]) -> dict:
-    return {
+    agregado = {
         "chuva_mm": round(sum(h.chuva_mm for h in trecho), 1),
         "vento_max_kmh": round(max(h.vento_kmh for h in trecho), 1),
+        "vento_min_kmh": round(min(h.vento_kmh for h in trecho), 1),
         "umidade_min_pct": round(min(h.umidade_pct for h in trecho), 1),
         "temp_max_c": round(max(h.temp_c for h in trecho), 1),
     }
+    return agregado | _opcionais(trecho)
+
+
+def _opcionais(trecho: list[HoraPrevisao]) -> dict:
+    """Campos do contrato 21 (E3), só quando o Monitor mandou o dado em todas as horas do trecho.
+
+    Com dado parcial o extremo poderia esconder a hora sem dado; sem a chave, o Avaliador não compara.
+    """
+    resultado: dict = {}
+    rajadas = [h.rajada_kmh for h in trecho]
+    if None not in rajadas:
+        resultado["rajada_max_kmh"] = round(max(rajadas), 1)
+    deltas = [h.delta_t_c for h in trecho]
+    if None not in deltas:
+        resultado["delta_t_min_c"] = round(min(deltas), 1)
+        resultado["delta_t_max_c"] = round(max(deltas), 1)
+    inversoes = [h.inversao for h in trecho]
+    if None not in inversoes:
+        resultado["inversao"] = any(inversoes)
+    return resultado
 
 
 def previsao_da_os(horas: list[HoraPrevisao], inicio: datetime, duracao_h: float) -> dict:

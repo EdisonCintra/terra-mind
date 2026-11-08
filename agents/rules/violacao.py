@@ -4,14 +4,12 @@ O LLM às vezes marca `viola=true` num item cuja própria justificativa diz "nã
 previsão não passa do limite). Como a suspensão da OS depende dessa marca, os números são conferidos
 aqui: uma violação só vale se o valor previsto ultrapassa o limite citado.
 
-Sentido dos limites: chuva, vento e temperatura violam ao passar do máximo da bula; umidade viola ao
-ficar abaixo do mínimo. Limites mínimos de vento ou temperatura (raros) não são reconhecidos e a
-violação é descartada, o que é o lado seguro: sem evidência a OS não é suspensa (decisão A5).
+Sentido dos limites (`ViolacaoOs.sentido_efetivo`): limite máximo viola acima dele (chuva, vento,
+temperatura, rajada, Delta T, inversão), mínimo viola abaixo (umidade; e vento ou Delta T quando a bula
+dá uma faixa, como "vento entre 2 e 10 km/h"). Inversão térmica: limite 0 e valor previsto 1.
 """
 
 from agents.modelos import ViolacaoOs
-
-PARAMETROS_COM_MINIMO = {"umidade"}
 
 
 def violacao_sustentada(v: ViolacaoOs) -> bool:
@@ -20,6 +18,6 @@ def violacao_sustentada(v: ViolacaoOs) -> bool:
         return True
     if v.parametro is None or v.limite is None or v.valor_previsto is None:
         return True
-    if v.parametro in PARAMETROS_COM_MINIMO:
+    if v.sentido_efetivo == "minimo":
         return v.valor_previsto < v.limite
     return v.valor_previsto > v.limite

@@ -2,9 +2,13 @@
 
 import json
 import re
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from erp_mcp.db import conectar
+
+FUSO = ZoneInfo("America/Sao_Paulo")  # contrato 12
 
 # O `agents` escreve a citação no motivo da suspensão: "<justificativa> (fonte: <doc>, p. <n>)".
 CITACAO = re.compile(r"\(fonte:\s*(.+?),\s*p\.\s*(\d+)\)")
@@ -53,7 +57,8 @@ def planos_pendentes() -> list[dict]:
         return conn.execute(
             """
             SELECT p.id, p.incidente_id, p.criado_em, p.escalado_em,
-                   p.opcoes_json->>'mensagem' AS mensagem, t.nome AS talhao
+                   p.opcoes_json->>'mensagem' AS mensagem, t.nome AS talhao,
+                   p.opcoes_json->'custos_atraso' AS custos_atraso
             FROM agente.planos p
             JOIN agente.incidentes i ON i.id = p.incidente_id
             JOIN erp.talhoes t ON t.id = i.talhao_id
@@ -61,6 +66,14 @@ def planos_pendentes() -> list[dict]:
             ORDER BY p.criado_em, p.id
             """
         ).fetchall()
+
+
+def listar_produtos() -> list[str]:
+    """Produtos cadastrados no ERP, para o Pergunte à bula (contrato 1: mesmo nome da bula)."""
+    with conectar() as conn:
+        return [
+            linha["produto"] for linha in conn.execute("SELECT produto FROM erp.insumos ORDER BY produto")
+        ]
 
 
 def incidentes_decisao_manual() -> list[dict]:
@@ -85,6 +98,51 @@ def separar_citacoes(texto: str | None) -> tuple[str, list[tuple[str, str]]]:
     citacoes = [(m.group(1), m.group(2)) for m in CITACAO.finditer(texto)]
     limpo = re.sub(r"\s{2,}", " ", CITACAO.sub("", texto)).strip(" ;")
     return limpo, citacoes
+
+
+def _reais(valor: float) -> str:
+    inteiro, centavos = f"{valor:,.2f}".split(".")
+    return f"R$ {inteiro.replace(',', '.')},{centavos}"
+
+
+def _duracao(segundos: float) -> str:
+    minutos = max(0, int(segundos // 60))
+    if minutos < 60:
+        return f"{minutos} min"
+    horas = minutos // 60
+    if horas < 24:
+        return f"{horas} h"
+    dias, resto = divmod(horas, 24)
+    return f"{dias} dia{'s' if dias > 1 else ''}" + (f" e {resto} h" if resto else "")
+
+
+def linhas_atraso(custos: Any, agora: datetime) -> list[str]:
+    """G5: uma linha por OS com quando a janela proposta vence e quanto custa perdê-la.
+
+    Os números vêm prontos do `agents` (`opcoes_json["custos_atraso"]`); aqui só o "vence em" é
+    recalculado, a cada atualização da tela.
+    """
+    if isinstance(custos, str):
+        custos = json.loads(custos)
+    linhas = []
+    for c in custos or []:
+        janela = datetime.fromisoformat(c["janela_proposta"]).astimezone(FUSO)
+        vence = datetime.fromisoformat(c["vence_em"])
+        inicio = f"OS {c['os_id']}: janela de {janela:%d/%m %H:%M}"
+        if agora >= vence:
+            linhas.append(f"{inicio} já venceu; peça outra opção.")
+            continue
+        partes = [f"{inicio} vence em {_duracao((vence - agora).total_seconds())}"]
+        if c.get("custo_perder_janela_rs") is not None:
+            estimativa = " (estimativa)" if str(c.get("fonte_fator", "")).startswith("estimativa") else ""
+            partes.append(f"perdê-la custa {_reais(c['custo_perder_janela_rs'])}{estimativa}")
+        if c.get("proxima_janela"):
+            proxima = datetime.fromisoformat(c["proxima_janela"]).astimezone(FUSO)
+            partes.append(f"próxima janela: {proxima:%d/%m %H:%M}")
+        else:
+            partes.append("sem outra janela na previsão")
+        linhas.append(" · ".join(partes))
+    return linhas
 
 
 def _curto(valor: Any) -> str:

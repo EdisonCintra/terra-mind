@@ -138,8 +138,25 @@ def supervisor_invalido(novo_inicio: datetime) -> dict:
     }
 
 
+def bula_que_cita(trecho: str = TRECHO_BULA, pagina: int = 7, resposta: str | None = None) -> Callable:
+    """Pergunte à bula roteirizado: busca no Abacus HC e responde citando `trecho` na `pagina`."""
+
+    def responder(req: LlmRequest):
+        if ultima_resposta_de(req, "buscar_na_bula") is None:
+            return chamar("buscar_na_bula", consulta="chuva após a aplicação", produto=PRODUTO)
+        return {
+            "encontrou": True,
+            "resposta": resposta
+            or "A bula diz que chuva em até 4 horas após a aplicação pode afetar o produto.",
+            "citacoes": [{"trecho": trecho, "fonte_doc": "bula-abacus-hc", "pagina": pagina}],
+        }
+
+    return responder
+
+
 def modelos_padrao(**sobrescritos: list) -> dict:
     roteiros = {
+        "bula": [bula_que_cita()],
         "avaliador": roteiro_avaliador(),
         "agronomico": ["Milho em V6: chuva logo após a aplicação lava o fungicida (bula-abacus-hc, p. 7)."],
         "operacional": ["Pulverizador A livre depois da chuva, a partir das 06:00."],
@@ -336,7 +353,12 @@ class FakeRepo:
 
     async def planos_para_escalar(self, agora, timeout_min):
         return [
-            {"plano_id": p["id"], "incidente_id": p["incidente_id"], "criado_em": p["criado_em"]}
+            {
+                "plano_id": p["id"],
+                "incidente_id": p["incidente_id"],
+                "criado_em": p["criado_em"],
+                "opcoes_json": p["opcoes_json"],
+            }
             for p in self.planos.values()
             if p["respondido_em"] is None
             and p["escalado_em"] is None

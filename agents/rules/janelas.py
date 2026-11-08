@@ -4,13 +4,17 @@ Um início `t` é válido quando:
 - é hora cheia, começa entre `HORA_MIN` e `HORA_MAX` (horário local) e está a pelo menos
   `ANTECEDENCIA` de `agora`;
 - o parâmetro violado respeita o limite citado pelo Avaliador no intervalo em que o limite vale:
-  chuva somada em `[t, t + janela_h)` ≤ limite; vento e temperatura (máximos) ≤ limite; umidade
-  (mínima) ≥ limite, todos em `[t, t + duracao)` ou `[t, t + janela_h)`, o que for maior;
-- o intervalo inteiro cabe na previsão (não extrapola além do snapshot de 120 h).
+  chuva somada em `[t, t + janela_h)` ≤ limite; nos outros parâmetros, o pico fica ≤ limite máximo
+  ou o vale fica ≥ limite mínimo (`ViolacaoOs.sentido_efetivo`), em `[t, t + duracao)` ou
+  `[t, t + janela_h)`, o que for maior. Inversão térmica: nenhuma hora com inversão no intervalo;
+- o intervalo inteiro cabe na previsão (não extrapola além do snapshot de 120 h) e traz o dado do
+  parâmetro em todas as horas: sem Delta T, rajada ou inversão do Monitor (contrato 21, opcionais), a
+  janela não é aceita, porque não há como mostrar que ela respeita o limite.
 
 A disponibilidade da máquina é checada à parte (`agents.rules.validador`), porque exige o ERP.
 """
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,6 +24,21 @@ FUSO = ZoneInfo("America/Sao_Paulo")
 HORA_MIN = 6
 HORA_MAX = 18
 ANTECEDENCIA = timedelta(hours=2)
+
+
+def _inversao(h: HoraPrevisao) -> float | None:
+    return None if h.inversao is None else float(h.inversao)
+
+
+# Parâmetro (exceto chuva, que é somada) → (valor da hora, nome na mensagem, unidade).
+SERIES: dict[str, tuple[Callable[[HoraPrevisao], float | None], str, str]] = {
+    "vento": (lambda h: h.vento_kmh, "vento", " km/h"),
+    "umidade": (lambda h: h.umidade_pct, "umidade", "%"),
+    "temperatura": (lambda h: h.temp_c, "temperatura", " °C"),
+    "rajada": (lambda h: h.rajada_kmh, "rajada", " km/h"),
+    "delta_t": (lambda h: h.delta_t_c, "Delta T", " °C"),
+    "inversao": (_inversao, "inversão térmica", ""),
+}
 
 
 def formatar_data(t: datetime) -> str:
@@ -80,19 +99,33 @@ def _motivo_um_limite(
         total = sum(h.chuva_mm for h in trecho)
         if total > limite:
             return f"chuva prevista de {total:.1f} mm acima do limite de {limite:g} mm"
-    elif violacao.parametro == "vento":
-        pico = max(h.vento_kmh for h in trecho)
-        if pico > limite:
-            return f"vento de {pico:.0f} km/h acima do limite de {limite:g} km/h"
-    elif violacao.parametro == "umidade":
-        minimo = min(h.umidade_pct for h in trecho)
-        if minimo < limite:
-            return f"umidade de {minimo:.0f}% abaixo do mínimo de {limite:g}%"
-    elif violacao.parametro == "temperatura":
-        pico = max(h.temp_c for h in trecho)
-        if pico > limite:
-            return f"temperatura de {pico:.0f} °C acima do limite de {limite:g} °C"
+        return None
+    valor_da_hora, nome, unidade = SERIES[violacao.parametro]
+    valores = [valor_da_hora(h) for h in trecho]
+    if any(v is None for v in valores):
+        return f"sem previsão de {nome} para o intervalo"
+    if violacao.parametro == "inversao":
+        return "inversão térmica prevista no intervalo" if max(valores) > limite else None
+    if violacao.sentido_efetivo == "minimo":
+        vale = min(valores)
+        if vale < limite:
+            return f"{nome} de {vale:.0f}{unidade} abaixo do mínimo de {limite:g}{unidade}"
+        return None
+    pico = max(valores)
+    if pico > limite:
+        return f"{nome} de {pico:.0f}{unidade} acima do limite de {limite:g}{unidade}"
     return None
+
+
+def blocos(inicios: list[datetime]) -> list[list[datetime]]:
+    """Agrupa inícios válidos em blocos de horas seguidas (cada bloco é uma "janela" para o gerente)."""
+    resultado: list[list[datetime]] = []
+    for t in sorted(inicios):
+        if resultado and t - resultado[-1][-1] == timedelta(hours=1):
+            resultado[-1].append(t)
+        else:
+            resultado.append([t])
+    return resultado
 
 
 def candidatos(horas: list[HoraPrevisao], agora: datetime) -> list[datetime]:

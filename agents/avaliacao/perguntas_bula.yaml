@@ -1,0 +1,134 @@
+# G4 · 20 perguntas de teste do Pergunte à bula, com a resposta esperada.
+# Gabarito conferido no PDF de cada bula (base_agricola/dados/docs) em 08/11/2026.
+#
+# Cada pergunta passa quando:
+# - `encontra: true`: a resposta tem ao menos uma citação da `fonte` numa das `paginas`, e todos os
+#   padrões de `deve_conter` (regex, sem acento e sem diferenciar maiúsculas) aparecem na resposta;
+# - `encontra: false`: a resposta é "A bula não traz isso." e não tem citação.
+#
+# Rodar (precisa do conhecimento em CONHECIMENTO_URL e de OPENAI_API_KEY):
+#   uv run python -m agents.avaliar_bula
+perguntas:
+  # Abacus HC (BASF, fungicida)
+  - pergunta: Posso aplicar Abacus HC com vento de 12 km/h?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [7]
+    deve_conter: ['\b10\b', '\bnao\b']
+    gabarito: "p. 7: velocidade do vento entre 2 e 10 km/h; 12 km/h passa do limite"
+  - pergunta: Qual a umidade relativa mínima para aplicar Abacus HC?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [7]
+    deve_conter: ['\b60\b']
+    gabarito: "p. 7: umidade relativa do ar > 60%"
+  - pergunta: Qual a temperatura máxima para aplicar Abacus HC?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [7]
+    deve_conter: ['\b30\b']
+    gabarito: "p. 7: temperatura < 30 °C"
+  - pergunta: Quanto tempo sem chuva o Abacus HC precisa depois da aplicação?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [7]
+    deve_conter: ['\b(4|quatro)\b']
+    gabarito: "p. 7: chuvas dentro de quatro (4) horas após a aplicação podem afetar o desempenho"
+  - pergunta: Qual o intervalo de segurança do Abacus HC na soja?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [8]
+    deve_conter: ['\b60\b']
+    gabarito: "p. 8: soja 60 dias"
+  - pergunta: Qual a carência do Abacus HC no milho?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [8]
+    deve_conter: ['\b45\b']
+    gabarito: "p. 8: milho 45 dias"
+  - pergunta: Depois de aplicar Abacus HC, quando as pessoas podem entrar na área?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [8]
+    deve_conter: ['\b24\b']
+    gabarito: "p. 8: só depois da secagem completa da calda, no mínimo 24 horas"
+  - pergunta: Quantas aplicações de Abacus HC posso fazer por ciclo na soja?
+    produto: Abacus HC
+    fonte: bula-abacus-hc
+    paginas: [3, 4]
+    deve_conter: ['\b(2|duas)\b']
+    gabarito: "p. 4: intervalos de 15 a 20 dias, não ultrapassando 2 aplicações por ciclo"
+  # Brucia (ISK, herbicida)
+  - pergunta: Qual a temperatura máxima para aplicar Brucia?
+    produto: Brucia
+    fonte: bula-brucia
+    paginas: [7]
+    deve_conter: ['\b30\b']
+    gabarito: "p. 7: temperatura igual ou inferior a 30 °C"
+  - pergunta: Qual a umidade mínima do ar para aplicar Brucia?
+    produto: Brucia
+    fonte: bula-brucia
+    paginas: [7]
+    deve_conter: ['\b50\b']
+    gabarito: "p. 7: umidade relativa do ar acima de 50%"
+  - pergunta: Posso aplicar Brucia quando não tem vento nenhum?
+    produto: Brucia
+    fonte: bula-brucia
+    paginas: [7, 8]
+    deve_conter: ['\bnao\b']
+    gabarito: "p. 7: não aplicar se houver rajadas ou ausência de ventos (p. 8: inversão térmica)"
+  - pergunta: Aplicar Brucia em plantas com estresse hídrico funciona?
+    produto: Brucia
+    fonte: bula-brucia
+    paginas: [5]
+    deve_conter: ['eficacia']
+    gabarito: "p. 5: a aplicação em plantas sob estresse hídrico pode reduzir a eficácia"
+  - pergunta: Qual o intervalo de segurança do Brucia no milho?
+    produto: Brucia
+    fonte: bula-brucia
+    paginas: [8]
+    deve_conter: ['\b60\b']
+    gabarito: "p. 8: milho 60 dias"
+  # Amplexus (BASF, herbicida)
+  - pergunta: Qual a faixa de vento ideal para aplicar Amplexus?
+    produto: Amplexus
+    fonte: bula-amplexus
+    paginas: [5]
+    deve_conter: ['\b0?3\b', '\b10\b']
+    gabarito: "p. 5: ventos entre 03 e 10 km/h"
+  - pergunta: Chuva quanto tempo depois da aplicação prejudica o Amplexus?
+    produto: Amplexus
+    fonte: bula-amplexus
+    paginas: [5]
+    deve_conter: ['\b(4|quatro)\b']
+    gabarito: "p. 5: chuvas dentro de quatro (4) horas após a aplicação"
+  - pergunta: Qual o intervalo de segurança do Amplexus no milho?
+    produto: Amplexus
+    fonte: bula-amplexus
+    paginas: [7]
+    deve_conter: ['\b96\b']
+    gabarito: "p. 7: milho 96 dias"
+  # Ativum (BASF, fungicida)
+  - pergunta: Quantas aplicações de Ativum posso fazer na soja contra ferrugem-asiática?
+    produto: Ativum
+    fonte: bula-ativum
+    paginas: [4]
+    deve_conter: ['\b(2|duas)\b']
+    gabarito: "p. 4: número máximo de 2 aplicações por ciclo (FRAC)"
+  - pergunta: Qual o intervalo máximo entre aplicações de Ativum para ferrugem na soja?
+    produto: Ativum
+    fonte: bula-ativum
+    paginas: [4]
+    deve_conter: ['\b14\b']
+    gabarito: "p. 4: intervalo máximo de 14 dias"
+  - pergunta: Qual o intervalo de segurança do Ativum na soja?
+    produto: Ativum
+    fonte: bula-ativum
+    paginas: [7]
+    deve_conter: ['\b14\b']
+    gabarito: "p. 7: soja 14 dias"
+  # Fora da bula: tem que responder que a bula não traz
+  - pergunta: Qual o preço do litro do Abacus HC?
+    produto: Abacus HC
+    encontra: false
+    gabarito: "a bula não traz preço"

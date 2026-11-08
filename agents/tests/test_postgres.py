@@ -66,10 +66,12 @@ async def test_repositorio_resposta_idempotente(pg_url):
 async def test_repositorio_timeout_e_auditoria(pg_url):
     repo = RepositorioPostgres.de_url(pg_url)
     incidente_id = await inserir_incidente(pg_url)
-    plano_id = await repo.criar_plano(incidente_id, {"opcoes": []})
+    plano_id = await repo.criar_plano(incidente_id, {"opcoes": [], "custos_atraso": [{"os_id": 1}]})
     [linha] = await consultar(pg_url, "SELECT criado_em FROM agente.planos WHERE id = $1", plano_id)
     depois = linha["criado_em"] + timedelta(minutes=31)
-    assert [p["plano_id"] for p in await repo.planos_para_escalar(depois, 30)] == [plano_id]
+    [pendente] = await repo.planos_para_escalar(depois, 30)
+    assert pendente["plano_id"] == plano_id
+    assert pendente["opcoes_json"]["custos_atraso"] == [{"os_id": 1}]  # G5: o lembrete lê daqui
     await repo.marcar_escalado(plano_id, depois)
     assert await repo.planos_para_escalar(depois, 30) == []
     await repo.auditar(

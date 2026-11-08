@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pergunte à bula · TerraMind</title>
+  <link rel="stylesheet" href="/static/painel.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <div>
+        <h1>Pergunte à bula</h1>
+        <p>Toda resposta mostra o trecho, a bula e a página. Sem trecho, não há resposta.</p>
+      </div>
+    </div>
+    <div class="acoes"><a class="voltar" href="/os">Voltar ao painel</a></div>
+  </header>
+
+  <main class="bula">
+    <form class="pergunta-bula" hx-post="/bula/perguntar" hx-target="#conversa" hx-swap="afterbegin"
+          hx-disabled-elt="find button" hx-indicator="#pensando">
+      <label for="produto">Produto</label>
+      <select id="produto" name="produto">
+        <option value="">Qualquer produto</option>
+        {% for p in produtos %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+      <label for="pergunta">Pergunta</label>
+      <textarea id="pergunta" name="pergunta" rows="3" maxlength="500" required
+                placeholder="Ex.: posso aplicar Abacus HC com vento de 12 km/h?"></textarea>
+      <button type="submit" class="grande">Perguntar</button>
+      <span id="pensando" class="htmx-indicator nota">Consultando as bulas…</span>
+    </form>
+    <section id="conversa" class="conversa" aria-live="polite"></section>
+  </main>
+</body>
+</html>

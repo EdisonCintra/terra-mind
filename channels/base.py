@@ -41,9 +41,19 @@ class DecisaoJaRegistrada(Exception):
 # Se o plano já foi respondido, lança `DecisaoJaRegistrada`.
 AoResponder = Callable[[Resposta], Awaitable[None]]
 
+# G4 nos canais: recebe (pergunta, quem perguntou) e devolve o texto pronto da resposta, com a
+# página da bula. O `agents` liga com `definir_ao_perguntar`; canal sem pergunta livre ignora.
+AoPerguntar = Callable[[str, str], Awaitable[str]]
+
 
 class NotificationChannel(ABC):
     """Molde comum do Telegram e do painel."""
+
+    ao_perguntar: AoPerguntar | None = None
+
+    def definir_ao_perguntar(self, ao_perguntar: AoPerguntar) -> None:
+        """Liga a pergunta livre (Pergunte à bula). Sem isso o canal só notifica e aprova."""
+        self.ao_perguntar = ao_perguntar
 
     @abstractmethod
     async def enviar_alerta(self, texto: str, incidente_id: int | None = None) -> None:

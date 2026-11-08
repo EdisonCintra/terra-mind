@@ -418,3 +418,94 @@ async def test_so_violacao_contradita_nao_suspende_a_os():
     assert c.erp.status(1) == "agendada"
     assert c.repo.incidentes[7].status == "encerrado"
     assert "avaliador:violacao_descartada" in c.repo.acoes()
+
+
+# ---------------------------------------------------------------- G6: vento forte e sem chuva
+
+# Texto real da bula do Abacus HC (BASF), p. 7.
+TRECHO_VENTO = (
+    "condições meteorológicas para pulverização devem ser as seguintes: Temperatura < 30°C, Umidade"
+    " relativa do ar > 60%, Velocidade do vento entre 2 e 10 km/h."
+)
+
+
+def cenario_de_vento():
+    from agents.modelos import Gatilho, HoraPrevisao, Incidente
+
+    avaliacao = {
+        "violacoes": [
+            {
+                "os_id": 1,
+                "viola": True,
+                "parametro": "vento",
+                "sentido": "maximo",
+                "limite": 10,
+                "unidade": "km/h",
+                "valor_previsto": 18,
+                "trecho": TRECHO_VENTO,
+                "fonte_doc": "bula-abacus-hc",
+                "pagina": 7,
+                "justificativa": "Vento de 18 km/h na aplicação; a bula pede vento entre 2 e 10 km/h.",
+            }
+        ]
+    }
+    c = montar_cenario(
+        modelos_padrao(
+            avaliador=[
+                chamar("buscar_trechos", consulta="velocidade do vento", produto="Abacus HC"),
+                avaliacao,
+            ]
+        )
+    )
+    # Sem chuva nenhuma; vento de 18 km/h até 05/11 00:00, depois 6 km/h.
+    horas = [
+        HoraPrevisao(
+            ts=AGORA + timedelta(hours=i),
+            chuva_mm=0,
+            vento_kmh=18 if i < 40 else 6,
+            umidade_pct=70,
+            temp_c=25,
+        )
+        for i in range(120)
+    ]
+    c.repo.incidentes[7] = Incidente(
+        id=7,
+        talhao_id=1,
+        status="aberto",
+        gatilhos=[Gatilho(tipo="vento", valor=18, limiar=15, inicio=AGORA, fim=AGORA + timedelta(hours=39))],
+        horas=horas,
+        criado_em=AGORA,
+    )
+    c.conhecimento.trechos.append(
+        {
+            "texto": TRECHO_VENTO,
+            "fonte_doc": "bula-abacus-hc",
+            "pagina": 7,
+            "secao": "condicoes_climaticas",
+            "produto": "Abacus HC",
+            "culturas": ["soja", "milho"],
+        }
+    )
+    return c
+
+
+async def test_vento_forte_sem_chuva_suspende_e_propoe_janela_que_respeita_o_limite():
+    c = cenario_de_vento()
+    orq = await iniciar(c)
+
+    assert c.erp.status(1) == "suspensa_preventiva"
+    [avaliada] = [a["depois"] for a in c.repo.auditoria if a["acao"] == "avaliar_risco"]
+    [v] = avaliada["violacoes"]
+    assert (v["parametro"], v["limite"], v["fonte_doc"], v["pagina"]) == ("vento", 10, "bula-abacus-hc", 7)
+    [(_, plano_id, texto)] = c.canal.aprovacoes
+    assert texto.startswith("VENTO FORTE PREVISTO")
+    assert "A bula (p. 7) limita o vento a 10 km/h na aplicação. A previsão chega a 18 km/h." in texto
+    assert "05/11 às 06:00" in texto  # primeira janela de 8 h com vento de 6 km/h dentro do horário
+
+    proposto = c.repo.planos[plano_id]["opcoes_json"]["opcoes"][0]["novo_inicio"]
+    inicio = __import__("datetime").datetime.fromisoformat(proposto)
+    durante = [h for h in c.repo.incidentes[7].horas if inicio <= h.ts < inicio + timedelta(hours=8)]
+    assert durante and max(h.vento_kmh for h in durante) <= 10
+
+    await responder(orq, plano_id, "SIM")
+    assert c.erp.status(1) == "reagendada"

@@ -37,6 +37,9 @@ O workflow é um grafo do Google ADK. Quatro nós são agentes LLM e o resto é 
 | Agronômico | Depois da suspensão, junto com o Operacional | `buscar_trechos`, `consultar_talhao` | Texto de até 6 frases, com fonte e página |
 | Operacional | Depois da suspensão, junto com o Agronômico | `janelas_validas`, `listar_os`, `disponibilidade_maquinas`, `listar_operadores` | Texto de até 8 frases, com datas e ids |
 | Supervisor | Depois das análises, e de novo quando o Validador reprova ou o gerente pede outras opções | `janelas_validas`, `calcular_impacto` | `PlanoProposto`: uma opção (novo início e máquina) por OS suspensa e a mensagem ao gerente |
+| Pergunte à bula | Fora do incidente, quando alguém pergunta no painel (`/bula`), no Telegram (qualquer mensagem de texto do gerente ou de um chat em `TELEGRAM_CHATS_BULA`) ou em `POST /bula/perguntar` | `buscar_na_bula` | `RespostaBula`: resposta curta com trecho literal, fonte e página |
+
+O Pergunte à bula tem a mesma garantia do Avaliador. O código confere que cada citação é literal de um trecho que a busca devolveu, com a mesma fonte e página. Sem citação conferida, a resposta é "A bula não traz isso." As 20 perguntas de teste estão em [agents/avaliacao/perguntas_bula.yaml](agents/avaliacao/perguntas_bula.yaml) e rodam contra o LLM e a base reais com `uv run python -m agents.avaliar_bula`.
 
 O Avaliador de Risco procura na bula de cada produto os limites de chuva, vento, umidade e temperatura. Depois compara com a previsão no horário da OS, que já chega calculada em código: os extremos durante a aplicação e a chuva acumulada depois do fim. Ele só marca violação se o trecho trouxer o limite e a previsão passar dele. O schema exige o texto literal do trecho, a fonte e a página, e rejeita a saída que vier sem isso.
 
@@ -52,6 +55,8 @@ O Supervisor junta as duas análises num plano. Ele só pode escolher datas e m�
 - A perda evitada é `área × dose × preço × fator`. O fator vem da base de conhecimento, com página citada ou estimativa declarada. Se não houver fator, a perda fica em branco; o LLM não chuta um valor.
 - O Validador reprova o plano quando falta opção para alguma OS suspensa, quando a data já foi oferecida ao gerente, quando a janela não passa no clima ou quando a máquina está ocupada, não existe ou é de outro tipo. Cada motivo volta para o Supervisor.
 - Antes de gravar, o Executor confere a janela de novo. Se ela deixou de valer, o fluxo volta para um novo plano.
+- Além da chuva, as janelas tratam vento (máximo e mínimo), umidade, temperatura, rajada, Delta T e inversão térmica. Os três últimos vêm dos campos opcionais do Monitor (contrato 21). Sem o dado, a janela não é aceita.
+- Custo da demora: ao propor o plano, o código grava quando a janela proposta vence e quanto custa perdê-la: `valor da aplicação × fator de atraso por dia × dias até a próxima janela boa`. O lembrete do timeout e o painel mostram esses números. O fator vem do conhecimento (`condicao=atraso`) ou, até o E7, da estimativa declarada em `FATOR_ATRASO_DIA`. Se o Avaliador falhou e a OS não foi suspensa, a decisão manual mostra a perda inteira de aplicar com o tempo previsto.
 
 ### Quando um agente falha
 

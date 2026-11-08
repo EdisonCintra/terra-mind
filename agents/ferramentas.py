@@ -111,7 +111,8 @@ def criar_calcular_impacto(deps: Dependencias):
 
         Args:
             os_id: a OS.
-            condicao: "chuva", "vento", "umidade" ou "temperatura".
+            condicao: o parâmetro violado ("chuva", "vento", "umidade", "temperatura", "rajada",
+                "delta_t" ou "inversao"). Sem fator cadastrado para a condição, a perda vem nula.
         """
         os = ContextoPlano.do_estado(tool_context.state).os_por_id.get(os_id)
         if os is None:

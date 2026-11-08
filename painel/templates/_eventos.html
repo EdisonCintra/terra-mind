@@ -28,6 +28,7 @@
   <div class="linha-evento"><span class="no">{{ e.no }}</span><span class="quando">{{ e.ts|hms }}</span></div>
   <div class="acao">{{ "Perda calculada" if e.depois and e.depois.impactos else ACOES.get(e.acao, e.acao) }}</div>
   {% if e.texto %}<div class="texto">{{ e.texto }}</div>{% endif %}
+  {% for linha in e.atraso or [] %}<div class="texto atraso">{{ linha }}</div>{% endfor %}
   {% if reprovado %}<div class="texto">{{ (e.depois.get("motivos") or [])|join("; ") or "Reprovado" }}</div>{% endif %}
   {% for fonte, pagina in e.citacoes %}
   <span class="citacao">{{ fonte }}, p. {{ pagina }}</span>

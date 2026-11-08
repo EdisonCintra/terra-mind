@@ -49,7 +49,8 @@ class ConhecimentoHttp:
             r = await self._http.get(
                 "/fatores-perda", params={"tipo_insumo": tipo_insumo, "condicao": condicao}
             )
-            if r.status_code == 404:
+            # 422: condição que o conhecimento ainda não aceita (rajada, delta_t, atraso antes do E7).
+            if r.status_code in (404, 422):
                 return None
             r.raise_for_status()
         except httpx.HTTPError as e:

@@ -1,0 +1,13 @@
+<article class="resposta-bula{{ ' sem-trecho' if falha or not resultado or not resultado.encontrou else '' }}">
+  <p class="pergunta-feita">{{ pergunta }}{% if produto %} <span class="nota">· {{ produto }}</span>{% endif %}</p>
+  {% if falha %}
+  <p class="texto">{{ falha }}</p>
+  {% else %}
+  <p class="texto">{{ resultado.resposta }}</p>
+  {% for c in resultado.citacoes %}
+  <blockquote class="trecho">“{{ c.trecho }}”
+    <span class="citacao">{{ c.fonte_doc }}, p. {{ c.pagina }}</span>
+  </blockquote>
+  {% endfor %}
+  {% endif %}
+</article>

@@ -2,7 +2,8 @@
 
     uv run uvicorn painel.main:app --port 8080
 
-Telas: 1 ordens de serviço, 2 linha do tempo do incidente, 3 aprovação pendente, 4 simular chuva.
+Telas: 1 ordens de serviço, 2 linha do tempo do incidente, 3 aprovação pendente, 4 simular chuva,
+e Pergunte à bula (G4, `/bula`).
 """
 
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -103,8 +104,18 @@ def _contexto_timeline(incidente: int | None) -> dict:
     for a in dados.auditoria_do_incidente(escolhido) if escolhido is not None else []:
         texto, citacoes = dados.separar_citacoes(a["justificativa"])
         mudancas = dados.resumo(a["antes"], a["depois"])
-        eventos.append({**a, "texto": texto, "citacoes": citacoes, "mudancas": mudancas})
+        eventos.append({**a, "texto": texto, "citacoes": citacoes, "mudancas": mudancas, "atraso": []})
+    # G5: enquanto o gerente não responde, o último pedido de aprovação mostra quando a janela
+    # vence e quanto custa perdê-la (recalculado a cada atualização).
+    status = next((i["status"] for i in incidentes if i["id"] == escolhido), None)
+    pedidos = [e for e in eventos if e["acao"] == "pedir_aprovacao" and isinstance(e["depois"], dict)]
+    if status == "aguardando_aprovacao" and pedidos:
+        pedidos[-1]["atraso"] = dados.linhas_atraso(pedidos[-1]["depois"].get("custos_atraso"), _agora())
     return {"incidentes": incidentes, "escolhido": escolhido, "eventos": eventos}
+
+
+def _agora() -> datetime:
+    return datetime.now(FUSO)
 
 
 @app.get("/timeline", response_class=HTMLResponse)
@@ -129,7 +140,11 @@ def tela_aprovacao(request: Request):
 
 @app.get("/parcial/pendentes", response_class=HTMLResponse)
 def parcial_pendentes(request: Request):
-    return templates.TemplateResponse(request, "_pendentes.html", {"planos": dados.planos_pendentes()})
+    agora = _agora()
+    planos = [
+        {**p, "atraso": dados.linhas_atraso(p["custos_atraso"], agora)} for p in dados.planos_pendentes()
+    ]
+    return templates.TemplateResponse(request, "_pendentes.html", {"planos": planos})
 
 
 @app.post("/aprovacao/{incidente_id}/{plano_id}/{resposta}", response_class=HTMLResponse)
@@ -154,6 +169,38 @@ def responder(request: Request, incidente_id: int, plano_id: int, resposta: str)
         else:
             nivel, texto = "erro", f"O serviço de agentes recusou a resposta (HTTP {r.status_code})."
     return templates.TemplateResponse(request, "_mensagem.html", {"nivel": nivel, "texto": texto})
+
+
+# --- Pergunte à bula (G4) --------------------------------------------------------------------
+TIMEOUT_BULA_S = 150  # o agente pode buscar até 3 vezes e o LLM tem 90 s por chamada
+
+
+@app.get("/bula", response_class=HTMLResponse)
+def tela_bula(request: Request):
+    return templates.TemplateResponse(request, "bula.html", {"produtos": dados.listar_produtos()})
+
+
+@app.post("/bula/perguntar", response_class=HTMLResponse)
+def perguntar_a_bula(request: Request, pergunta: str = Form(""), produto: str = Form("")):
+    """Repassa a pergunta ao `agents` e mostra a resposta com trecho, fonte e página."""
+    pergunta = pergunta.strip()
+    contexto: dict = {"pergunta": pergunta, "produto": produto, "resultado": None, "falha": None}
+    if len(pergunta) < 3:
+        contexto["falha"] = "Escreva a pergunta."
+        return templates.TemplateResponse(request, "_resposta_bula.html", contexto)
+    url = f"{_url('AGENTS_URL', 'http://localhost:8000')}/bula/perguntar"
+    try:
+        with cliente_http() as http:
+            http.timeout = httpx.Timeout(TIMEOUT_BULA_S)
+            r = http.post(url, json={"pergunta": pergunta, "produto": produto or None})
+    except httpx.HTTPError:
+        contexto["falha"] = "Não consegui falar com o serviço de agentes. Tente de novo em instantes."
+    else:
+        if r.is_success:
+            contexto["resultado"] = r.json()
+        else:
+            contexto["falha"] = f"O serviço de agentes recusou a pergunta (HTTP {r.status_code})."
+    return templates.TemplateResponse(request, "_resposta_bula.html", contexto)
 
 
 # --- Tela 4: simular chuva -------------------------------------------------------------------
