@@ -1,13 +1,11 @@
 """Validação automatizada das migrations e do seed (T6.1 a T6.6)."""
 
-import os
-
 import psycopg
 import pytest
 from psycopg.errors import CheckViolation, UniqueViolation
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://terramind:terramind@localhost:5432/terramind")
+from tests.conftest import DATABASE_URL
 
 
 @pytest.fixture

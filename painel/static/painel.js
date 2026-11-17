@@ -48,10 +48,14 @@
     return dados;
   }
 
+  const soma = (xs) => xs.reduce((a, b) => a + b, 0);
+  const idsDoSeletor = () => [...document.querySelectorAll("#seletor a[data-id]")].map((a) => +a.dataset.id);
+  const incidenteAtivo = () => document.querySelector("#seletor a.ativa[data-id]");
+
   /* A auditoria de cada incidente é a fonte do total; incidente encerrado não muda e não é lido de novo. */
   async function sincronizarHistorico() {
     if (sincronizando) return;
-    const ids = [...document.querySelectorAll("#seletor a[data-id]")].map((a) => +a.dataset.id);
+    const ids = idsDoSeletor();
     if (!ids.length) return;
     sincronizando = true;
     try {
@@ -74,7 +78,7 @@
     const ids = Object.keys(historico).map(Number).sort((a, b) => a - b);
     const total = ids.filter((id) => historico[id].executado).reduce((t, id) => t + somaPerdas(historico[id]), 0);
     texto("kpi-perda", reais(total));
-    const ativo = document.querySelector("#seletor a.ativa[data-id]");
+    const ativo = incidenteAtivo();
     const escolhido = ativo ? +ativo.dataset.id : null;
     const comPerda = ids.filter((id) => Object.keys(historico[id].impactos).length);
     const id = comPerda.includes(escolhido) ? escolhido : comPerda[comPerda.length - 1];
@@ -163,7 +167,7 @@
     const caixa = $("grafico");
     const blocos = [];
     for (let i = 0; i < prev.chuva.length; i += BLOCO_H) {
-      blocos.push(prev.chuva.slice(i, i + BLOCO_H).reduce((a, b) => a + b, 0));
+      blocos.push(soma(prev.chuva.slice(i, i + BLOCO_H)));
     }
     const L = 760, A = 190, base = 154, topo = 16, passo = L / blocos.length;
     const maximo = Math.max(...blocos, 1);
@@ -171,7 +175,7 @@
     const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("viewBox", `0 0 ${L} ${A}`);
     svg.setAttribute("role", "img");
-    const total48 = prev.chuva.slice(0, 48).reduce((a, b) => a + b, 0);
+    const total48 = soma(prev.chuva.slice(0, 48));
     svg.setAttribute("aria-label", `Chuva a cada ${BLOCO_H} horas no cenário gravado: ${numero(total48)} mm nas primeiras 48 horas.`);
     const criar = (tag, attrs, conteudo) => {
       const n = document.createElementNS(SVG, tag);
@@ -219,7 +223,7 @@
   function atualizarPrevisao(janela) {
     const prev = previsaoDoIncidente();
     if (!prev) return;
-    const chuva48 = prev.chuva.slice(0, 48).reduce((a, b) => a + b, 0);
+    const chuva48 = soma(prev.chuva.slice(0, 48));
     const vento48 = Math.max(...prev.vento.slice(0, 48));
     texto("kpi-chuva", `${numero(chuva48)} mm`);
     texto("kpi-chuva-nota", `Cenário gravado · limiar padrão do Monitor ${LIMIAR_PADRAO} mm`);
@@ -262,8 +266,6 @@
     }
   }
 
-  const idsDoSeletor = () => [...document.querySelectorAll("#seletor a[data-id]")].map((a) => +a.dataset.id);
-
   function seguirMaisRecente() {
     const ids = idsDoSeletor();
     if (!ids.length) return;
@@ -278,7 +280,7 @@
 
   function atualizar() {
     const atual = lerEventos($("eventos"));
-    const ativo = document.querySelector("#seletor a.ativa[data-id]");
+    const ativo = incidenteAtivo();
     if (ativo) historico[+ativo.dataset.id] = atual;
     const porOs = {};
     Object.values(historico).forEach((h) => Object.assign(porOs, h.impactos));

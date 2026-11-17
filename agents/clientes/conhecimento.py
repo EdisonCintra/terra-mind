@@ -7,6 +7,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+CAMPOS_TRECHO = ("texto", "fonte_doc", "pagina", "secao", "produto")
+
 
 class ConhecimentoIndisponivel(Exception):
     pass

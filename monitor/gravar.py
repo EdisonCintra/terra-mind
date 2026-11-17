@@ -9,13 +9,11 @@ from pathlib import Path
 
 import httpx
 
-from monitor.fontes import CAMPOS, OPEN_METEO
+from monitor.fontes import OPEN_METEO, parametros_open_meteo
 
 
 def gravar(lat: float, lon: float, saida: Path) -> None:
-    params = {"latitude": lat, "longitude": lon, "hourly": ",".join(CAMPOS.values()),
-              "forecast_days": 5, "timezone": "America/Sao_Paulo", "wind_speed_unit": "kmh"}
-    resposta = httpx.get(OPEN_METEO, params=params, timeout=10)
+    resposta = httpx.get(OPEN_METEO, params=parametros_open_meteo(lat, lon), timeout=10)
     resposta.raise_for_status()
     Path(saida).write_text(json.dumps(resposta.json(), ensure_ascii=False, indent=1), encoding="utf-8")
 

@@ -1,11 +1,11 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pytest
 
-SP = ZoneInfo("America/Sao_Paulo")
+from monitor.main import SP
+
 FIXTURES = Path(__file__).parent / "fixtures"
 AGORA = datetime(2026, 10, 30, 8, 0, tzinfo=SP)
 

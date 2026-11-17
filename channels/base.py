@@ -10,10 +10,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Literal
+from typing import Literal, get_args
 
 TipoResposta = Literal["SIM", "NAO", "OPCOES"]
-RESPOSTAS_VALIDAS: tuple[str, ...] = ("SIM", "NAO", "OPCOES")
+RESPOSTAS_VALIDAS: tuple[str, ...] = get_args(TipoResposta)
 
 
 @dataclass(frozen=True)

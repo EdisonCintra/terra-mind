@@ -74,6 +74,7 @@ def criar_contexto(deps: Dependencias, id_da_entrada: bool = False):
         if incidente is None:
             ctx.state["motivo_encerramento"] = "incidente inexistente"
             return Event(route="sem_os")
+        ctx.state["incidente"] = como_json(incidente)
         agora = deps.relogio()
         inicio, fim = janela_de_risco(incidente, agora, deps.settings.janela_padrao_h)
         try:
@@ -82,12 +83,10 @@ def criar_contexto(deps: Dependencias, id_da_entrada: bool = False):
                 deps.erp.consultar_talhao(incidente.talhao_id),
             )
         except ErpIndisponivel as e:
-            ctx.state["incidente"] = como_json(incidente)
             ctx.state["os_em_risco"] = []
             ctx.state["motivo_manual"] = {"codigo": "erp_indisponivel", "detalhe": str(e)}
             return Event(route="falhou")
         em_risco = [para_os_em_risco(linha, talhao) for linha in linhas if linha.get("status") == "agendada"]
-        ctx.state["incidente"] = como_json(incidente)
         ctx.state["os_em_risco"] = como_json(em_risco)
         await auditar(
             deps,

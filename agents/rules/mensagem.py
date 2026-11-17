@@ -5,7 +5,7 @@ Nenhum número ou data vem do texto livre de um LLM.
 """
 
 from agents.modelos import Impacto, OsEmRisco, PlanoProposto, ViolacaoOs
-from agents.rules.impacto import formatar_reais
+from agents.rules.impacto import formatar_reais, sufixo_estimativa
 from agents.rules.janelas import FUSO
 from agents.rules.violacao import violacao_sustentada
 
@@ -21,7 +21,7 @@ TITULOS = {
     "inversao": "INVERSÃO TÉRMICA PREVISTA",
 }
 # Título quando o limite violado é um mínimo (ex.: "vento entre 2 e 10 km/h" com previsão de calmaria).
-TITULOS_MINIMO = {"vento": "VENTO FRACO DEMAIS", "temperatura": "TEMPERATURA FORA DO LIMITE"}
+TITULOS_MINIMO = {"vento": "VENTO FRACO DEMAIS"}
 # Parâmetro → (nome na frase, unidade) para os limites que não são chuva nem inversão.
 GRANDEZAS = {
     "vento": ("o vento", "km/h"),
@@ -90,8 +90,7 @@ def _titulo(v: ViolacaoOs) -> str:
 def _perda(impacto: Impacto | None) -> str:
     if impacto is None or impacto.perda_rs is None:
         return "Perda evitada: não calculada (sem fator cadastrado)"
-    estimativa = " (estimativa)" if impacto.fonte_fator.lower().startswith("estimativa") else ""
-    return f"Perda evitada: {formatar_reais(impacto.perda_rs)}{estimativa}"
+    return f"Perda evitada: {formatar_reais(impacto.perda_rs)}{sufixo_estimativa(impacto.fonte_fator)}"
 
 
 def compor_mensagem(

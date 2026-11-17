@@ -25,3 +25,7 @@ async def alertar(deps: Dependencias, texto: str) -> None:
 
 def ids(lista: list[int]) -> str:
     return ", ".join(str(i) for i in lista)
+
+
+def alvo_das_os(suspensas: list[int]) -> str:
+    return f"OS {ids(suspensas)} segue(m) SUSPENSA(S)" if suspensas else "Nenhuma OS foi alterada"

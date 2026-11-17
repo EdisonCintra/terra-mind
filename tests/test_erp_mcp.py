@@ -4,7 +4,6 @@ Precisam do banco no ar (ver `tests/conftest.py`); cada teste recomeça do seed.
 """
 
 import asyncio
-import os
 import socket
 from datetime import datetime, timedelta
 
@@ -15,8 +14,7 @@ from mcp.client.streamable_http import streamable_http_client
 
 from erp_mcp import escrita, leitura
 from erp_mcp.server import FERRAMENTAS, mcp
-
-DATABASE_URL = os.environ["DATABASE_URL"]
+from tests.conftest import DATABASE_URL
 
 
 def consultar(sql: str, *args):

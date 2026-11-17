@@ -88,17 +88,15 @@ def criar_validador(deps: Dependencias):
             if veredito.aprovado:
                 aprovado = plano
 
+        if aprovado is None and volta < deps.settings.max_voltas_validador:
+            ctx.state["motivo_reprovacao"] = "; ".join(motivos)
+            return Event(route="revisar", output=ENTRADA_LLM)
+        ctx.state["motivo_reprovacao"] = None
+        ctx.state["pedido_gerente"] = None
         if aprovado is None:
-            if volta < deps.settings.max_voltas_validador:
-                ctx.state["motivo_reprovacao"] = "; ".join(motivos)
-                return Event(route="revisar", output=ENTRADA_LLM)
-            ctx.state["motivo_reprovacao"] = None
-            ctx.state["pedido_gerente"] = None
             ctx.state["motivo_manual"] = {"codigo": "plano_reprovado", "detalhe": "; ".join(motivos)}
             return Event(route="reprovado")
 
-        ctx.state["motivo_reprovacao"] = None
-        ctx.state["pedido_gerente"] = None
         impactos = {i["os_id"]: Impacto.model_validate(i) for i in ctx.state.get("impactos") or []}
         maquinas = await nomes_das_maquinas(deps, aprovado, contexto.os_por_id)
         opcao = (ctx.state.get("replanejamentos", 0) + 1, deps.settings.max_replanejamentos + 1)

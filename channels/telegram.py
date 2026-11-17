@@ -9,6 +9,7 @@ Roda dentro do processo `agents`: o lifespan chama `await canal.iniciar()` e, no
 
 import logging
 import os
+from dataclasses import replace
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import Conflict
@@ -120,7 +121,7 @@ class TelegramChannel(NotificationChannel):
         # Remove os botões antes de chamar o agents: evita clique duplo.
         await query.edit_message_reply_markup(reply_markup=None)
         quem = query.from_user.full_name if query.from_user else "gerente"
-        resposta = Resposta(decisao.incidente_id, decisao.plano_id, decisao.resposta, quem)
+        resposta = replace(decisao, respondido_por=quem)
         try:
             await self.ao_responder(resposta)
         except DecisaoJaRegistrada:

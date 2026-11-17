@@ -3537,7 +3537,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "respx" },
@@ -3561,7 +3560,6 @@ requires-dist = [
     { name = "python-telegram-bot", specifier = ">=22.8" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qdrant-client", specifier = ">=1.20.0" },
-    { name = "sqlalchemy", specifier = ">=2.1.6" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.6" },
     { name = "typer", specifier = ">=0.27.3" },
     { name = "tzdata", specifier = ">=2024.1" },
@@ -3570,7 +3568,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "respx", specifier = ">=0.23.1" },

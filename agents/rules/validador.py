@@ -32,17 +32,13 @@ class ContextoPlano:
     def do_estado(cls, estado: Any) -> "ContextoPlano":
         incidente = Incidente.model_validate(estado["incidente"])
         avaliacao = AvaliacaoRisco.model_validate(estado.get("avaliacao") or {"violacoes": []})
-        violacoes: dict[int, list[ViolacaoOs]] = {}
-        for v in avaliacao.violacoes:
-            if v.viola:
-                violacoes.setdefault(v.os_id, []).append(v)
         oferecidas: dict[int, set[datetime]] = {}
         for os_id, datas in (estado.get("datas_oferecidas") or {}).items():
             oferecidas[int(os_id)] = {para_datetime(d) for d in datas}
         return cls(
             horas=incidente.horas,
             os_por_id={o["os_id"]: OsEmRisco.model_validate(o) for o in estado.get("os_em_risco") or []},
-            violacoes_por_os=violacoes,
+            violacoes_por_os=avaliacao.violacoes_por_os(),
             os_suspensas=list(estado.get("os_suspensas") or []),
             datas_oferecidas=oferecidas,
         )

@@ -1,12 +1,9 @@
 import time
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from monitor.main import criar_app
+from monitor.main import CENARIOS, criar_app
 from monitor.tests.test_ciclo import T1, FonteFalsa, NotificadorFalso, RepoFalso
-
-CENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 def cliente(modo="replay", **extra):

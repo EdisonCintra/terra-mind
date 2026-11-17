@@ -9,7 +9,6 @@ e Pergunte à bula (G4, `/bula`).
 import os
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -20,7 +19,8 @@ from fastapi.templating import Jinja2Templates
 from painel import dados
 
 AQUI = Path(__file__).parent
-FUSO = ZoneInfo("America/Sao_Paulo")  # contrato 12
+FUSO = dados.FUSO
+FALHA_AGENTS = "Não consegui falar com o serviço de agentes. Tente de novo em instantes."
 RESPOSTAS = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
 CENARIO = "chuva_80mm.json"  # contrato 14
 TALHAO_DEMO = 1  # a OS do cenário está no Talhão 1; sem isso o replay abre um incidente vazio no Talhão 2
@@ -79,7 +79,7 @@ def raiz() -> RedirectResponse:
 # --- Tela 1: ordens de serviço ---------------------------------------------------------------
 @app.get("/os", response_class=HTMLResponse)
 def tela_os(request: Request):
-    return templates.TemplateResponse(request, "os.html", {"ordens": dados.listar_ordens(), "ativa": "os"})
+    return templates.TemplateResponse(request, "os.html", {"ordens": dados.listar_ordens()})
 
 
 @app.get("/parcial/os", response_class=HTMLResponse)
@@ -121,7 +121,7 @@ def _agora() -> datetime:
 @app.get("/timeline", response_class=HTMLResponse)
 def tela_timeline(request: Request, incidente: int | None = None):
     return templates.TemplateResponse(
-        request, "timeline.html", {**_contexto_timeline(incidente), "ativa": "timeline"}
+        request, "timeline.html", _contexto_timeline(incidente)
     )
 
 
@@ -133,9 +133,7 @@ def parcial_timeline(request: Request, incidente: int | None = None):
 # --- Tela 3: aprovação pendente --------------------------------------------------------------
 @app.get("/aprovacao", response_class=HTMLResponse)
 def tela_aprovacao(request: Request):
-    return templates.TemplateResponse(
-        request, "aprovacao.html", {"planos": dados.planos_pendentes(), "ativa": "aprovacao"}
-    )
+    return templates.TemplateResponse(request, "aprovacao.html")
 
 
 @app.get("/parcial/pendentes", response_class=HTMLResponse)
@@ -158,7 +156,7 @@ def responder(request: Request, incidente_id: int, plano_id: int, resposta: str)
         with cliente_http() as http:
             r = http.post(url, json=corpo)
     except httpx.HTTPError:
-        nivel, texto = "erro", "Não consegui falar com o serviço de agentes. Tente de novo em instantes."
+        nivel, texto = "erro", FALHA_AGENTS
     else:
         if r.status_code == 409:
             nivel, texto = "aviso", "Decisão já registrada para este plano. Nada foi alterado."
@@ -191,10 +189,11 @@ def perguntar_a_bula(request: Request, pergunta: str = Form(""), produto: str = 
     url = f"{_url('AGENTS_URL', 'http://localhost:8000')}/bula/perguntar"
     try:
         with cliente_http() as http:
-            http.timeout = httpx.Timeout(TIMEOUT_BULA_S)
-            r = http.post(url, json={"pergunta": pergunta, "produto": produto or None})
+            r = http.post(
+                url, json={"pergunta": pergunta, "produto": produto or None}, timeout=TIMEOUT_BULA_S
+            )
     except httpx.HTTPError:
-        contexto["falha"] = "Não consegui falar com o serviço de agentes. Tente de novo em instantes."
+        contexto["falha"] = FALHA_AGENTS
     else:
         if r.is_success:
             contexto["resultado"] = r.json()
@@ -206,7 +205,7 @@ def perguntar_a_bula(request: Request, pergunta: str = Form(""), produto: str = 
 # --- Tela 4: simular chuva -------------------------------------------------------------------
 @app.get("/simular", response_class=HTMLResponse)
 def tela_simular(request: Request):
-    return templates.TemplateResponse(request, "simular.html", {"ativa": "simular"})
+    return templates.TemplateResponse(request, "simular.html")
 
 
 @app.post("/simular/chuva", response_class=HTMLResponse)

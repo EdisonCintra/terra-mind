@@ -49,14 +49,14 @@ async def verificar_timeouts(
 
 async def laco_timeouts(
     repo: RepositorioAgente,
-    canal: Callable[[], Canal],
+    canal: Canal,
     relogio: Callable[[], datetime],
     timeout_min: int,
     intervalo_s: float,
 ) -> None:
     while True:
         try:
-            await verificar_timeouts(repo, canal(), relogio(), timeout_min)
+            await verificar_timeouts(repo, canal, relogio(), timeout_min)
         except Exception:  # noqa: BLE001 - o laço não pode morrer
             logger.exception("falha ao verificar timeouts")
         await asyncio.sleep(intervalo_s)

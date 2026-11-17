@@ -3,7 +3,7 @@ import pytest
 import respx
 from mcp.types import CallToolResult, TextContent
 
-from agents.canal import criar_canal, normalizar_resposta
+from agents.canal import criar_canal
 from agents.clientes.conhecimento import ConhecimentoHttp, ConhecimentoIndisponivel
 from agents.clientes.erp import interpretar_resultado
 from agents.clientes.repositorio import url_asyncpg
@@ -81,14 +81,6 @@ async def test_canal_do_felipe_e_resposta_repetida():
     with pytest.raises(DecisaoJaRegistrada):
         await canal.ao_responder(Resposta(7, 1, "SIM", "gerente"))
     assert recebidas[0].incidente_id == 7
-
-
-def test_normaliza_resposta_do_felipe():
-    class RespostaFelipe:
-        incidente_id, plano_id, resposta, respondido_por = "7", "1", "SIM", "Fulano"
-
-    r = normalizar_resposta(RespostaFelipe())
-    assert (r.incidente_id, r.plano_id, r.resposta) == (7, 1, "SIM")
 
 
 def test_workflow_monta_com_litellm_da_openai():

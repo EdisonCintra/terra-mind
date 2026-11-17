@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 from agents.config import NomeAgente
 from agents.deps import Dependencias
 from agents.modelos import Incidente, para_datetime
-from agents.rules.janelas import FUSO
+from agents.rules.janelas import formatar_data_hora
 from agents.rules.previsao import previsao_da_os
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def os_resumidas(estado: Any) -> list[dict]:
     resultado = []
     for o in estado.get("os_em_risco") or []:
         item = {k: o.get(k) for k in campos}
-        item["inicio_previsto"] = para_datetime(o["inicio_previsto"]).astimezone(FUSO).strftime("%d/%m %H:%M")
+        item["inicio_previsto"] = formatar_data_hora(para_datetime(o["inicio_previsto"]))
         resultado.append(item)
     return resultado
 

@@ -46,6 +46,11 @@ def formatar_data(t: datetime) -> str:
     return f"{t.astimezone(FUSO):%d/%m às %H:%M}"
 
 
+def formatar_data_hora(t: datetime) -> str:
+    """Data e hora curtas, para os prompts: "31/10 06:00"."""
+    return f"{t.astimezone(FUSO):%d/%m %H:%M}"
+
+
 def _janela_h(violacao: ViolacaoOs, duracao_h: float) -> float:
     """Horas a partir do início em que o limite vale.
 

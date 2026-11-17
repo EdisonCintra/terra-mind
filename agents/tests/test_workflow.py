@@ -3,7 +3,6 @@ from datetime import timedelta
 import pytest
 from google.adk.sessions import InMemorySessionService
 
-from agents.modelos import Resposta
 from agents.runner import Orquestrador
 from agents.tests.fakes import (
     AGORA,
@@ -19,6 +18,7 @@ from agents.tests.fakes import (
     ultima_resposta_de,
 )
 from agents.workflow import APP_NAME
+from channels.base import Resposta
 
 # 05/11 06:00: a chuva vai até 04/11 19:00 e a bula pede 4 h sem chuva depois das 8 h de aplicação.
 JANELA_1 = AGORA.replace(hour=6) + timedelta(days=2)

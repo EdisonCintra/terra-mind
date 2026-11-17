@@ -4,11 +4,12 @@ No estado da sessão tudo é guardado como JSON (`model_dump(mode="json")`), por
 `DatabaseSessionService` persiste o estado em Postgres.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
+
+from channels.base import TipoResposta
 
 # G6: `rajada` (km/h), `delta_t` (°C) e `inversao` (1 = inversão térmica prevista; o limite citado é 0,
 # "deve ser evitada") vêm dos campos opcionais do contrato 21 (E3).
@@ -16,9 +17,6 @@ Parametro = Literal["chuva", "vento", "umidade", "temperatura", "rajada", "delta
 # Sentido do limite: "maximo" viola acima dele, "minimo" viola abaixo ("vento entre 2 e 10 km/h" tem os
 # dois). Sem sentido explícito vale o padrão do parâmetro (`SENTIDO_PADRAO`).
 Sentido = Literal["maximo", "minimo"]
-TipoInsumo = Literal["fungicida", "herbicida", "inseticida"]  # D2, contrato 15
-RespostaTipo = Literal["SIM", "NAO", "OPCOES"]
-StatusIncidente = Literal["aberto", "aguardando_aprovacao", "aguardando_decisao_manual", "encerrado"]
 
 # Faixas plausíveis por parâmetro, nas unidades do contrato 12. Valor fora delas indica
 # unidade trocada (vento em m/s, por exemplo) ou número inventado.
@@ -135,6 +133,14 @@ class ViolacaoOs(BaseModel):
 class AvaliacaoRisco(BaseModel):
     violacoes: list[ViolacaoOs]
 
+    def violacoes_por_os(self) -> dict[int, list[ViolacaoOs]]:
+        """Só as que violam. Uma OS pode violar mais de um limite."""
+        agrupadas: dict[int, list[ViolacaoOs]] = {}
+        for v in self.violacoes:
+            if v.viola:
+                agrupadas.setdefault(v.os_id, []).append(v)
+        return agrupadas
+
 
 class Impacto(BaseModel):
     os_id: int
@@ -215,18 +221,8 @@ class Veredito(BaseModel):
 
 
 class RespostaGerente(BaseModel):
-    resposta: RespostaTipo
+    resposta: TipoResposta
     respondido_por: str = "gerente"
-
-
-@dataclass
-class Resposta:
-    """Mesmo formato do `channels.base.Resposta` do Felipe (contrato 6)."""
-
-    incidente_id: int
-    plano_id: int
-    resposta: RespostaTipo
-    respondido_por: str
 
 
 def como_json(modelo: BaseModel | list[BaseModel]) -> dict | list:

@@ -10,6 +10,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.tool_context import ToolContext
 
 from agents.agentes._comum import criar_agente
+from agents.clientes.conhecimento import CAMPOS_TRECHO
 from agents.deps import Dependencias
 from agents.modelos import RespostaBula
 from agents.rules.citacao import normalizar
@@ -19,7 +20,6 @@ CHAVE_RESPOSTA = "resposta_bula"
 LIMITE_TRECHOS = 6  # a busca do conhecimento erra o top 3 em algumas bulas (carência, estresse hídrico)
 LIMITE_BUSCA_AMPLA = 10  # máximo que o conhecimento aceita (rotas_trechos: le=10)
 SAIDA_VAZIA = '{"encontrou": false, "resposta": "", "citacoes": []}'
-CAMPOS = ("texto", "fonte_doc", "pagina", "secao", "produto")
 
 
 async def _produto_aproximado(deps: Dependencias, consulta: str, produto: str) -> list[dict]:
@@ -49,7 +49,7 @@ def criar_buscar_na_bula(deps: Dependencias):
         trechos = await deps.conhecimento.buscar_trechos(consulta, produto=produto, limite=LIMITE_TRECHOS)
         if produto and not trechos:
             trechos = await _produto_aproximado(deps, consulta, produto)
-        achados = [{k: t.get(k) for k in CAMPOS} for t in trechos]
+        achados = [{k: t.get(k) for k in CAMPOS_TRECHO} for t in trechos]
         tool_context.state[CHAVE_VISTOS] = [*(tool_context.state.get(CHAVE_VISTOS) or []), *achados]
         return {"ok": True, "trechos": achados}
 

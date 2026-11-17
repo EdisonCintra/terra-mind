@@ -18,7 +18,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from agents.clientes.conhecimento import ConhecimentoCliente, ConhecimentoIndisponivel
 from agents.config import Settings
 from agents.modelos import CustoAtraso, OsEmRisco, PlanoProposto
-from agents.rules.impacto import CENTAVO, formatar_reais
+from agents.rules.impacto import CENTAVO, formatar_reais, sufixo_estimativa
 from agents.rules.janelas import ANTECEDENCIA, blocos, janelas_climaticas
 from agents.rules.mensagem import formatar_data_longa
 from agents.rules.validador import ContextoPlano
@@ -59,9 +59,10 @@ async def fator_atraso(
 
 def vencimento(proposta: datetime, validos: list[datetime]) -> tuple[datetime, datetime | None]:
     """(quando a janela proposta vence, início da próxima janela boa ou `None`)."""
-    for i, bloco in enumerate(blocos(validos)):
+    agrupados = blocos(validos)
+    for i, bloco in enumerate(agrupados):
         if bloco[0] <= proposta <= bloco[-1]:
-            seguintes = blocos(validos)[i + 1 :]
+            seguintes = agrupados[i + 1 :]
             return bloco[-1] - ANTECEDENCIA, (seguintes[0][0] if seguintes else None)
     depois = [t for t in validos if t > proposta]
     return proposta - ANTECEDENCIA, (depois[0] if depois else None)
@@ -116,10 +117,6 @@ def formatar_duracao(intervalo: timedelta) -> str:
     return f"{texto} e {resto} h" if resto else texto
 
 
-def _estimativa(fonte: str) -> str:
-    return " (estimativa)" if fonte.lower().startswith("estimativa") else ""
-
-
 def linha_custo(c: CustoAtraso, agora: datetime) -> str:
     """Uma linha por OS: quando a janela vence e quanto custa perdê-la."""
     janela = formatar_data_longa(c.janela_proposta)
@@ -135,7 +132,7 @@ def linha_custo(c: CustoAtraso, agora: datetime) -> str:
         por_dia = custo_do_atraso(c.valor_aplicacao_rs, c.fator_dia, timedelta(days=1))
         return (
             f"{inicio} Se ela passar, não há outra janela boa na previsão de 5 dias;"
-            f" cada dia de atraso custa {formatar_reais(por_dia)}{_estimativa(c.fonte_fator)}."
+            f" cada dia de atraso custa {formatar_reais(por_dia)}{sufixo_estimativa(c.fonte_fator)}."
         )
     proxima = formatar_data_longa(c.proxima_janela)
     if c.custo_perder_janela_rs is None:
@@ -143,7 +140,7 @@ def linha_custo(c: CustoAtraso, agora: datetime) -> str:
         return f"{inicio} Se ela passar, a próxima janela boa é {proxima} ({sem_custo})."
     return (
         f"{inicio} Se ela passar, a próxima janela boa é {proxima}, e esperar até lá custa"
-        f" {formatar_reais(c.custo_perder_janela_rs)}{_estimativa(c.fonte_fator)}."
+        f" {formatar_reais(c.custo_perder_janela_rs)}{sufixo_estimativa(c.fonte_fator)}."
     )
 
 
