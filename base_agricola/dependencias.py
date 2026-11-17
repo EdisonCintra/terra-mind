@@ -16,5 +16,6 @@ def get_busca() -> tuple:
     from qdrant_client import QdrantClient
 
     from base_agricola.embeddings import FastEmbedEmbedder
+    from base_agricola.qdrant import COLECAO
 
-    return QdrantClient(url=os.environ["QDRANT_URL"]), FastEmbedEmbedder(), "trechos"
+    return QdrantClient(url=os.environ["QDRANT_URL"]), FastEmbedEmbedder(), COLECAO

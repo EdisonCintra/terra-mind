@@ -1,13 +1,11 @@
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import respx
 
 from monitor.fontes import OPEN_METEO, ReplayFonte
 from monitor.gravar import gravar
+from monitor.main import CENARIOS
 from monitor.tests.conftest import AGORA, SP
-
-CENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 def test_rebase_para_agora_truncado_na_hora():

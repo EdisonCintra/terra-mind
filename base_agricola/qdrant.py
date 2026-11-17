@@ -5,6 +5,7 @@ from qdrant_client import QdrantClient, models
 from base_agricola.embeddings import Embedder
 from base_agricola.modelos import Trecho
 
+COLECAO = "trechos"
 CAMPOS_FILTRO = ("produto", "culturas", "secao", "doc_id")
 
 
@@ -21,7 +22,7 @@ def garantir_colecao(client: QdrantClient, nome: str, dimensao: int) -> None:
         client.create_payload_index(nome, campo, models.PayloadSchemaType.KEYWORD)
 
 
-def indexar(client: QdrantClient, embedder: Embedder, trechos: list[Trecho], colecao: str = "trechos") -> int:
+def indexar(client: QdrantClient, embedder: Embedder, trechos: list[Trecho], colecao: str = COLECAO) -> int:
     """Substitui todos os pontos de cada documento presente em `trechos`; rodar de novo não duplica."""
     garantir_colecao(client, colecao, embedder.dimensao)
     for doc_id in {t.doc_id for t in trechos}:

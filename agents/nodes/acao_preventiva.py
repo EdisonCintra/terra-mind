@@ -4,7 +4,7 @@ from google.adk import Context, Event
 
 from agents.agentes._comum import ENTRADA_LLM
 from agents.deps import Dependencias
-from agents.modelos import AvaliacaoRisco, OsEmRisco, ViolacaoOs, como_json
+from agents.modelos import AvaliacaoRisco, OsEmRisco, como_json
 from agents.nodes.comum import auditar
 from agents.rules.impacto import calcular_impacto
 
@@ -18,11 +18,7 @@ def criar_acao_preventiva(deps: Dependencias):
         impactos: list[dict] = []
         falhas: list[str] = []
         # Uma OS pode violar mais de um limite: suspende uma vez, com todas as justificativas.
-        violacoes_por_os: dict[int, list[ViolacaoOs]] = {}
-        for v in avaliacao.violacoes:
-            if v.viola:
-                violacoes_por_os.setdefault(v.os_id, []).append(v)
-        for os_id, violacoes in violacoes_por_os.items():
+        for os_id, violacoes in avaliacao.violacoes_por_os().items():
             motivo = "; ".join(f"{v.justificativa} (fonte: {v.fonte_doc}, p. {v.pagina})" for v in violacoes)
             r = await deps.erp.suspender_os(os_id, incidente_id, motivo)
             if not r.get("ok"):

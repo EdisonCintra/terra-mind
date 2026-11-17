@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 from agents.modelos import HoraPrevisao
-from agents.rules.janelas import FUSO
+from agents.rules.janelas import formatar_data_hora
 
 HORAS_APOS_FIM = (1, 2, 4, 6, 12, 24)
 
@@ -48,8 +48,8 @@ def previsao_da_os(horas: list[HoraPrevisao], inicio: datetime, duracao_h: float
     durante = [h for h in horas if inicio <= h.ts < fim]
     return {
         "aplicacao": {
-            "de": inicio.astimezone(FUSO).strftime("%d/%m %H:%M"),
-            "ate": fim.astimezone(FUSO).strftime("%d/%m %H:%M"),
+            "de": formatar_data_hora(inicio),
+            "ate": formatar_data_hora(fim),
             **(_agregar(durante) if durante else {"sem_previsao": True}),
         },
         "chuva_acumulada_apos_fim_mm": {
@@ -58,22 +58,3 @@ def previsao_da_os(horas: list[HoraPrevisao], inicio: datetime, duracao_h: float
         },
     }
 
-
-def resumir(
-    horas: list[HoraPrevisao], inicio: datetime, horas_total: int = 120, bloco_h: int = 6
-) -> list[dict]:
-    """Blocos de `bloco_h` horas: chuva somada, vento máximo, umidade mínima e temperatura máxima."""
-    blocos = []
-    for i in range(0, horas_total, bloco_h):
-        a, b = inicio + timedelta(hours=i), inicio + timedelta(hours=i + bloco_h)
-        trecho = [h for h in horas if a <= h.ts < b]
-        if not trecho:
-            continue
-        blocos.append(
-            {
-                "de": a.astimezone(FUSO).strftime("%d/%m %H:%M"),
-                "ate": b.astimezone(FUSO).strftime("%d/%m %H:%M"),
-                **_agregar(trecho),
-            }
-        )
-    return blocos

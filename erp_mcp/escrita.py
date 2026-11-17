@@ -18,13 +18,35 @@ from erp_mcp.db import conectar, para_json, registrar_auditoria
 _NAO_APROVADO = {"ok": False, "erro": "plano não aprovado"}
 
 
-def _plano(conn: psycopg.Connection, plano_id: int) -> dict[str, Any] | None:
-    """Devolve o plano se estiver aprovado (`aprovado_por` e `respondido_em` preenchidos)."""
-    return conn.execute(
+def _plano_aprovado(conn: psycopg.Connection, plano_id: int) -> dict[str, Any] | None:
+    """Devolve o plano se estiver aprovado (`aprovado_por` e `respondido_em` preenchidos).
+
+    Já toma o lock da transação para o plano: duas chamadas com o mesmo plano não correm juntas.
+    """
+    plano = conn.execute(
         "SELECT id, incidente_id FROM agente.planos"
         " WHERE id = %s AND aprovado_por IS NOT NULL AND respondido_em IS NOT NULL",
         (plano_id,),
     ).fetchone()
+    if plano is not None:
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (plano_id,))
+    return plano
+
+
+def _auditar_execucao(
+    conn: psycopg.Connection, plano: dict[str, Any], acao: str, antes: Any, depois: Any, **extra: Any
+) -> None:
+    """Auditoria de uma escrita feita sob plano aprovado, na mesma transação."""
+    plano_id = plano["id"]
+    registrar_auditoria(
+        conn,
+        plano["incidente_id"],
+        "executor",
+        acao,
+        antes,
+        {**depois, "plano_id": plano_id, **extra},
+        f"plano {plano_id} aprovado",
+    )
 
 
 def _os(conn: psycopg.Connection, os_id: int) -> dict[str, Any] | None:
@@ -60,10 +82,9 @@ def reagendar_os(os_id: int, novo_inicio: datetime, plano_id: int) -> dict[str, 
     SIM duplo ou tardio (a segunda chamada com o mesmo plano falha).
     """
     with conectar() as conn:
-        plano = _plano(conn, plano_id)
+        plano = _plano_aprovado(conn, plano_id)
         if plano is None:
             return _NAO_APROVADO
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (plano_id,))
         antes = _os(conn, os_id)
         depois = conn.execute(
             "UPDATE erp.ordens_servico SET status = 'reagendada', inicio_previsto = %s"
@@ -73,15 +94,7 @@ def reagendar_os(os_id: int, novo_inicio: datetime, plano_id: int) -> dict[str, 
         if depois is None:
             atual = antes["status"] if antes else "inexistente"
             return {"ok": False, "erro": f"OS {os_id} não está suspensa (status atual: {atual})"}
-        registrar_auditoria(
-            conn,
-            plano["incidente_id"],
-            "executor",
-            "reagendar_os",
-            antes,
-            {**depois, "plano_id": plano_id},
-            f"plano {plano_id} aprovado",
-        )
+        _auditar_execucao(conn, plano, "reagendar_os", antes, depois)
         return {"ok": True, "os": para_json(depois)}
 
 
@@ -92,10 +105,9 @@ def alocar_maquina(os_id: int, maquina_id: int, plano_id: int) -> dict[str, Any]
     `reagendada` sobreposta ao horário da OS (início + `duracao_horas`).
     """
     with conectar() as conn:
-        plano = _plano(conn, plano_id)
+        plano = _plano_aprovado(conn, plano_id)
         if plano is None:
             return _NAO_APROVADO
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (plano_id,))
         antes = _os(conn, os_id)
         if antes is None:
             return {"ok": False, "erro": f"OS {os_id} não existe"}
@@ -131,15 +143,7 @@ def alocar_maquina(os_id: int, maquina_id: int, plano_id: int) -> dict[str, Any]
             "UPDATE erp.ordens_servico SET maquina_id = %s WHERE id = %s RETURNING *",
             (maquina_id, os_id),
         ).fetchone()
-        registrar_auditoria(
-            conn,
-            plano["incidente_id"],
-            "executor",
-            "alocar_maquina",
-            antes,
-            {**depois, "plano_id": plano_id},
-            f"plano {plano_id} aprovado",
-        )
+        _auditar_execucao(conn, plano, "alocar_maquina", antes, depois)
         return {"ok": True, "os": para_json(depois)}
 
 
@@ -152,14 +156,13 @@ def reservar_estoque(insumo_id: int, quantidade: float, plano_id: int) -> dict[s
     if quantidade <= 0:
         return {"ok": False, "erro": "quantidade deve ser maior que zero"}
     with conectar() as conn:
-        plano = _plano(conn, plano_id)
+        plano = _plano_aprovado(conn, plano_id)
         if plano is None:
             return _NAO_APROVADO
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (plano_id,))
         repetida = conn.execute(
-            "SELECT 1 FROM agente.auditoria WHERE acao = 'reservar_estoque'"
+            "SELECT 1 FROM agente.auditoria WHERE incidente_id = %s AND acao = 'reservar_estoque'"
             " AND depois->>'plano_id' = %s AND depois->>'insumo_id' = %s",
-            (str(plano_id), str(insumo_id)),
+            (plano["incidente_id"], str(plano_id), str(insumo_id)),
         ).fetchone()
         if repetida:
             return {"ok": False, "erro": f"estoque do insumo {insumo_id} já reservado pelo plano {plano_id}"}
@@ -173,13 +176,7 @@ def reservar_estoque(insumo_id: int, quantidade: float, plano_id: int) -> dict[s
                 return {"ok": False, "erro": f"insumo {insumo_id} não existe"}
             tem = f"{antes['estoque']} {antes['unidade']}"
             return {"ok": False, "erro": f"estoque insuficiente: há {tem}, pedido {quantidade}"}
-        registrar_auditoria(
-            conn,
-            plano["incidente_id"],
-            "executor",
-            "reservar_estoque",
-            antes,
-            {**depois, "plano_id": plano_id, "insumo_id": insumo_id, "quantidade": quantidade},
-            f"plano {plano_id} aprovado",
+        _auditar_execucao(
+            conn, plano, "reservar_estoque", antes, depois, insumo_id=insumo_id, quantidade=quantidade
         )
         return {"ok": True, "insumo": para_json(depois)}

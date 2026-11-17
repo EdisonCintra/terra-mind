@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from agents.deps import Dependencias
 from agents.modelos import RespostaGerente
-from agents.nodes.comum import alertar, auditar, ids
+from agents.nodes.comum import alertar, alvo_das_os, auditar
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ async def _recusar(deps: Dependencias, ctx: Context, motivo: str, aviso: str) ->
     abrir incidente no talhão.
     """
     suspensas = ctx.state.get("os_suspensas") or []
-    alvo = f"OS {ids(suspensas)} segue(m) SUSPENSA(S)" if suspensas else "Nenhuma OS foi alterada"
+    alvo = alvo_das_os(suspensas)
     ctx.state["motivo_encerramento"] = motivo
     await alertar(deps, f"{aviso}\n{alvo}. Nenhuma outra ação foi feita.")
     return Event(route="NAO")

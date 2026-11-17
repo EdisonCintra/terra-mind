@@ -7,10 +7,9 @@ serviço ainda está subindo.
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import Protocol
 
-from agents.modelos import Resposta
-from channels.base import DecisaoJaRegistrada, NotificationChannel
+from channels.base import DecisaoJaRegistrada, NotificationChannel, Resposta
 from channels.base import criar_canal as criar_canal_felipe
 
 logger = logging.getLogger(__name__)
@@ -41,21 +40,11 @@ class CanalLog:
         return None
 
 
-def normalizar_resposta(r: Any) -> Resposta:
-    """Aceita o `Resposta` do Felipe (ou qualquer objeto com os mesmos campos)."""
-    return Resposta(
-        incidente_id=int(r.incidente_id),
-        plano_id=int(r.plano_id),
-        resposta=r.resposta,
-        respondido_por=str(r.respondido_por),
-    )
-
-
 def criar_canal(nome: str, ao_responder: Callable[[Resposta], Awaitable[str]]) -> NotificationChannel:
     """Canal do Felipe. Resposta repetida vira `DecisaoJaRegistrada` (o 409 do Telegram, contrato 6)."""
 
-    async def _ao_responder(r: Any) -> None:
-        resultado = await ao_responder(normalizar_resposta(r))
+    async def _ao_responder(r: Resposta) -> None:
+        resultado = await ao_responder(r)
         if resultado == "repetida":
             raise DecisaoJaRegistrada(f"plano {r.plano_id} já respondido")
         if resultado == "desconhecida":

@@ -11,7 +11,7 @@ from base_agricola.chunking import dividir_em_trechos
 from base_agricola.embeddings import Embedder
 from base_agricola.manifesto import Fonte, carregar_manifesto
 from base_agricola.pdf import extrair_paginas
-from base_agricola.qdrant import indexar
+from base_agricola.qdrant import COLECAO, indexar
 
 MANIFESTO = Path(__file__).parent / "dados" / "fontes.yaml"
 FATORES = Path(__file__).parent / "dados" / "fatores_perda.yaml"
@@ -20,7 +20,7 @@ app = typer.Typer(no_args_is_help=True)
 
 
 def indexar_fontes(fontes: list[Fonte], repo, client: QdrantClient, embedder: Embedder,
-                   colecao: str = "trechos") -> dict[str, int | str]:
+                   colecao: str = COLECAO) -> dict[str, int | str]:
     """Indexa cada fonte; uma falha vira mensagem no resultado e o laço segue para a próxima."""
     resultado: dict[str, int | str] = {}
     for f in fontes:

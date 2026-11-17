@@ -16,9 +16,10 @@ from agents.clientes.erp import ErpMcp
 from agents.clientes.repositorio import RepositorioPostgres
 from agents.config import Settings
 from agents.deps import Dependencias
-from agents.modelos import Resposta, RespostaGerente
+from agents.modelos import RespostaGerente
 from agents.runner import Orquestrador, criar_session_service
 from agents.timeout import laco_timeouts
+from channels.base import Resposta
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ async def montar_servicos(settings: Settings) -> Servicos:
     timeouts = asyncio.create_task(
         laco_timeouts(
             deps.repo,
-            lambda: deps.canal,
+            deps.canal,
             deps.relogio,
             settings.approval_timeout_min,
             settings.intervalo_timeout_s,

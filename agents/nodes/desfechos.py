@@ -5,8 +5,8 @@ from google.genai import types
 
 from agents.deps import Dependencias
 from agents.modelos import OsEmRisco
-from agents.nodes.comum import alertar, auditar, ids
-from agents.rules.impacto import calcular_impacto, formatar_reais
+from agents.nodes.comum import alertar, alvo_das_os, auditar, ids
+from agents.rules.impacto import calcular_impacto, formatar_reais, sufixo_estimativa
 
 ABERTOS = {"aberto", "aguardando_aprovacao", "aguardando_decisao_manual"}
 TEMPO_PREVISTO = {
@@ -42,7 +42,7 @@ def texto_decisao_manual(estado) -> str:
             f"Incidente {incidente}: a execução do plano parou no meio. Já feito: {feito}. "
             f"Falhou: {motivo.get('detalhe')}. Confira as OS no painel e decida."
         )
-    alvo = f"OS {ids(suspensas)} segue(m) SUSPENSA(S)" if suspensas else "Nenhuma OS foi alterada"
+    alvo = alvo_das_os(suspensas)
     razoes = {
         "plano_reprovado": "não encontrei uma janela que passe no Validador",
         "janela_invalida": "a janela aprovada deixou de valer",
@@ -58,9 +58,7 @@ def _perda_sem_suspensao(estado) -> str:
     if not perdas:
         return ""
     total = sum(p["perda_rs"] for p in perdas)
-    estimativa = (
-        " (estimativa)" if any(p["fonte_fator"].lower().startswith("estimativa") for p in perdas) else ""
-    )
+    estimativa = sufixo_estimativa(*(p["fonte_fator"] for p in perdas))
     tempo = TEMPO_PREVISTO.get(perdas[0]["condicao"], "o tempo previsto")
     return f" Se forem aplicadas como estão, com {tempo}, a perda é de {formatar_reais(total)}{estimativa}."
 

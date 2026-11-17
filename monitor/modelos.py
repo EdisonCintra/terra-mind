@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel
@@ -19,8 +20,6 @@ class Limiares(BaseModel):
 
     @classmethod
     def do_ambiente(cls) -> "Limiares":
-        import os
-
         nomes = {"chuva_mm": "LIMIAR_CHUVA_MM", "vento_kmh": "LIMIAR_VENTO_KMH",
                  "umidade_min_pct": "LIMIAR_UMIDADE_MIN_PCT", "janela_h": "JANELA_RISCO_H"}
         return cls(**{campo: os.environ[env] for campo, env in nomes.items() if env in os.environ})

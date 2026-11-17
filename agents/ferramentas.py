@@ -7,6 +7,7 @@ e conhecimento por fakes. As escritas no ERP não aparecem aqui: só os nós em 
 
 from google.adk.tools.tool_context import ToolContext
 
+from agents.clientes.conhecimento import CAMPOS_TRECHO
 from agents.deps import Dependencias
 from agents.modelos import para_datetime
 from agents.rules.impacto import calcular_impacto as _calcular_impacto
@@ -37,9 +38,7 @@ def criar_buscar_trechos(deps: Dependencias):
         )
         return {
             "ok": True,
-            "trechos": [
-                {k: t.get(k) for k in ("texto", "fonte_doc", "pagina", "secao", "produto")} for t in trechos
-            ],
+            "trechos": [{k: t.get(k) for k in CAMPOS_TRECHO} for t in trechos],
         }
 
     return buscar_trechos

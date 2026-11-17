@@ -1,4 +1,6 @@
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -9,6 +11,11 @@ from monitor.modelos import HoraPrevisao
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 CAMPOS = {"chuva_mm": "precipitation", "vento_kmh": "wind_speed_10m",
           "umidade_pct": "relative_humidity_2m", "temp_c": "temperature_2m"}
+
+
+def parametros_open_meteo(lat: float, lon: float) -> dict:
+    return {"latitude": lat, "longitude": lon, "hourly": ",".join(CAMPOS.values()),
+            "forecast_days": 5, "timezone": "America/Sao_Paulo", "wind_speed_unit": "kmh"}
 
 
 class FontePrevisaoIndisponivel(Exception):
@@ -35,10 +42,8 @@ class OpenMeteoFonte:
         self.http = http
 
     def obter(self, lat: float, lon: float, agora: datetime) -> list[HoraPrevisao]:
-        params = {"latitude": lat, "longitude": lon, "hourly": ",".join(CAMPOS.values()),
-                  "forecast_days": 5, "timezone": "America/Sao_Paulo", "wind_speed_unit": "kmh"}
         try:
-            resposta = self.http.get(OPEN_METEO, params=params, timeout=10)
+            resposta = self.http.get(OPEN_METEO, params=parametros_open_meteo(lat, lon), timeout=10)
             resposta.raise_for_status()
         except httpx.HTTPError as erro:
             raise FontePrevisaoIndisponivel(str(erro)) from erro
@@ -49,9 +54,6 @@ class ReplayFonte:
     """Previsão gravada (formato Open-Meteo), deslocada para começar na hora atual."""
 
     def __init__(self, caminho):
-        import json
-        from pathlib import Path
-
         self.horas = parse_open_meteo(json.loads(Path(caminho).read_text(encoding="utf-8")))
 
     def obter(self, lat: float, lon: float, agora: datetime) -> list[HoraPrevisao]:

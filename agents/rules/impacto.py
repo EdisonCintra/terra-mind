@@ -44,6 +44,11 @@ async def calcular_impacto(os: OsEmRisco, condicao: str, conhecimento: Conhecime
     )
 
 
+def sufixo_estimativa(*fontes: str) -> str:
+    """" (estimativa)" quando algum fator vem de estimativa, e não de um dado citado."""
+    return " (estimativa)" if any(f.lower().startswith("estimativa") for f in fontes) else ""
+
+
 def formatar_reais(valor: float | None) -> str:
     if valor is None:
         return "não calculada"

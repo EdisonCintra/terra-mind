@@ -10,9 +10,9 @@ from google.genai import types
 
 from agents.clientes.repositorio import ResultadoResposta, url_asyncpg
 from agents.deps import Dependencias
-from agents.modelos import Resposta
 from agents.nodes.aprovacao import interrupt_id
 from agents.workflow import APP_NAME, criar_app
+from channels.base import Resposta
 
 logger = logging.getLogger(__name__)
 

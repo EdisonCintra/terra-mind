@@ -7,9 +7,10 @@ import asyncpg
 import pytest
 
 from agents.clientes.repositorio import RepositorioPostgres
-from agents.modelos import Resposta, como_json
+from agents.modelos import como_json
 from agents.runner import Orquestrador, criar_session_service
 from agents.tests.fakes import AGORA, incidente_chuva, montar_cenario
+from channels.base import Resposta
 
 pytestmark = pytest.mark.pg
 

@@ -7,7 +7,6 @@ from agents.modelos import Impacto, OsEmRisco, PlanoProposto, ViolacaoOs
 from agents.rules.impacto import calcular_impacto, calcular_perda, formatar_reais
 from agents.rules.janelas import janelas_climaticas, motivo_invalida
 from agents.rules.mensagem import compor_mensagem
-from agents.rules.previsao import resumir
 from agents.rules.validador import ContextoPlano, janelas_validas, validar
 from agents.tests.fakes import AGORA, FakeConhecimento, montar_cenario, os_abacus, previsao_chuva
 
@@ -156,12 +155,6 @@ async def test_janelas_validas_com_maquina():
 
 
 # ---------------------------------------------------------------- previsão e mensagem
-
-
-def test_resumo_da_previsao():
-    blocos = resumir(previsao_chuva(), AGORA)
-    assert len(blocos) == 20 and blocos[0]["chuva_mm"] == pytest.approx(13.3, abs=0.1)
-    assert sum(b["chuva_mm"] for b in blocos[:6]) == pytest.approx(80, abs=0.5)  # blocos arredondados
 
 
 def test_previsao_da_os_olha_so_o_horario_da_aplicacao():
