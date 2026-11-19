@@ -1,0 +1,82 @@
+{% extends "pagina.html" %}
+{% block titulo %}Perda evitada · TerraMind{% endblock %}
+{% block cabecalho %}Perda evitada{% endblock %}
+{% block resumo %}Quanto as suspensões e remarcações protegeram na safra. Todo valor sai de código, com a fonte do fator.{% endblock %}
+{% block conteudo %}
+<form class="filtros" method="get" action="/perda">
+  <label>De <input type="date" name="inicio" value="{{ p.inicio.isoformat() }}"></label>
+  <label>Até <input type="date" name="fim" value="{{ p.fim.isoformat() }}"></label>
+  <label class="marcar"><input type="checkbox" name="replay" value="1"{% if replay %} checked{% endif %}> Incluir simulações (demonstração)</label>
+  <button type="submit" class="grande">Atualizar</button>
+</form>
+
+<section class="kpis quatro" aria-label="Resumo da safra">
+  <div class="kpi">
+    <span class="rotulo">Perda evitada</span>
+    <strong class="bom">{{ p.total }}</strong>
+    <small>{{ p.os_protegidas }} OS remarcada(s) com plano aprovado{% if p.estimativa %} · inclui estimativa{% endif %}</small>
+    {% if p.sem_fator %}<small>{{ p.sem_fator }} OS sem fator de perda cadastrado: não entram no total</small>{% endif %}
+  </div>
+  <div class="kpi">
+    <span class="rotulo">Em aberto</span>
+    <strong class="atencao">{{ p.em_aberto }}</strong>
+    <small>OS suspensas esperando a decisão</small>
+  </div>
+  <div class="kpi">
+    <span class="rotulo">Planos</span>
+    <strong>{{ p.planos.aprovados }} <span class="unidade">aprovados</span></strong>
+    <small>{{ p.planos.nao_aprovados }} recusado(s) ou trocado(s) · {{ p.planos.pendentes }} sem resposta · {{ p.planos.manuais }} em decisão manual</small>
+  </div>
+  <div class="kpi">
+    <span class="rotulo">Tempo até a resposta</span>
+    <strong>{{ p.planos.tempo_resposta or "—" }}</strong>
+    <small>média dos planos respondidos</small>
+  </div>
+</section>
+
+{% if p.retorno %}
+<p class="retorno">Retorno na safra: <strong>{{ p.retorno.vezes }}×</strong> o valor da assinatura
+  ({{ p.total }} evitados para {{ p.retorno.custo }} de assinatura: {{ p.retorno.area }} ha a {{ p.retorno.preco }}/ha).</p>
+{% endif %}
+
+<div class="duas-colunas">
+  {% for titulo, linhas in [("Por talhão", p.por_talhao), ("Por produto", p.por_produto)] %}
+  <section class="painel">
+    <div class="titulo-bloco"><h2>{{ titulo }}</h2></div>
+    {% for linha in linhas %}
+    <div class="barra-linha">
+      <span class="forte">{{ linha.nome }}</span>
+      <span class="mono">{{ linha.valor }}</span>
+      <div class="trilho" aria-hidden="true"><div style="width: {{ linha.largura }}%"></div></div>
+    </div>
+    {% else %}
+    <p class="vazio">Nenhuma perda evitada no período.</p>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+
+<section class="painel">
+  <div class="titulo-bloco"><h2>Ordens protegidas</h2><span class="nota">{{ p.linhas|length }} no período</span></div>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Data</th><th>Talhão</th><th>Produto</th><th>Motivo</th><th>Perda</th><th>Fonte do fator</th><th>Situação</th></tr></thead>
+      <tbody>
+        {% for l in p.linhas %}
+        <tr>
+          <td class="mono">{{ l.criado_em|hora }}</td>
+          <td class="forte">{{ l.talhao }}<small>OS {{ l.os_id }} · <a href="/timeline?incidente={{ l.incidente_id }}">incidente {{ l.incidente_id }}</a>{% if l.origem == "replay" %} · simulação{% endif %}</small></td>
+          <td>{{ l.produto or "—" }}</td>
+          <td>{{ l.condicao }}</td>
+          <td class="mono">{{ l.perda }}{% if l.estimativa and l.perda_rs is not none %}<small>estimativa</small>{% endif %}</td>
+          <td class="fonte">{{ l.fonte }}</td>
+          <td><span class="status {{ {'evitada': 'agendada', 'suspensa': 'suspensa', 'recusada': 'cancelada'}.get(l.situacao, 'executada') }}">{{ l.situacao_rotulo }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="vazio">Nenhuma OS foi suspensa no período.{% if not replay %} As simulações ficam de fora: marque "Incluir simulações" para vê-las.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

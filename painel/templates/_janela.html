@@ -1,0 +1,33 @@
+{# Resultado do G3. `data-serve` diz ao agenda.js se o botão Criar OS pode ser liberado. #}
+<div class="janela-resultado" data-serve="{{ 'sim' if a.serve and maquinas else 'nao' }}">
+  {% if a.serve %}
+  <p class="mensagem-ok">Janela boa: respeita os limites do produto na previsão do talhão.</p>
+  {% if maquinas %}
+  <label>Máquina
+    <select name="maquina_id" required>
+      {% for m in maquinas %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+    </select>
+  </label>
+  {% else %}
+  <p class="mensagem-aviso">Nenhum pulverizador livre nesse horário.</p>
+  {% endif %}
+  {% else %}
+  <p class="mensagem-aviso">{{ a.motivo }}</p>
+  {% if a.citacao %}
+  <blockquote class="trecho">“{{ a.citacao.trecho }}”
+    <span class="citacao">{{ a.citacao.fonte_doc }}, p. {{ a.citacao.pagina }}</span>
+  </blockquote>
+  {% endif %}
+  {% if a.sugestoes %}
+  <p class="nota">Próximas janelas boas com máquina livre:</p>
+  <div class="sugestoes">
+    {% for s in a.sugestoes %}
+    <button type="button" class="sugestao" data-inicio="{{ s.valor }}">{{ s.quando }}<small>{{ s.maquina or "máquina " ~ s.maquina_id }}</small></button>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="nota">Não há outra janela boa com máquina livre na previsão.</p>
+  {% endif %}
+  {% endif %}
+  <p class="nota">Previsão: {{ a.fonte_previsao }}</p>
+</div>

@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -18,6 +19,18 @@ def parametros_open_meteo(lat: float, lon: float) -> dict:
             "forecast_days": 5, "timezone": "America/Sao_Paulo", "wind_speed_unit": "kmh"}
 
 
+# Mesmo cálculo de `agents.clientes.clima.vento_2m`.
+# O Open-Meteo dá o vento a 10 m; a bula e o anemômetro do operador falam do vento na altura da
+# barra, perto de 2 m, onde venta menos. Perfil logarítmico da FAO-56 (eq. 47):
+#     u2 = u10 × 4,87 / ln(67,8 × 10 − 5,42) ≈ u10 × 0,748
+FATOR_VENTO_2M = 4.87 / math.log(67.8 * 10 - 5.42)
+
+
+def vento_2m(vento_10m: float) -> float:
+    """Vento (ou rajada) medido a 10 m convertido para 2 m, em km/h, com uma casa decimal."""
+    return round(vento_10m * FATOR_VENTO_2M, 1)
+
+
 class FontePrevisaoIndisponivel(Exception):
     pass
 
@@ -27,14 +40,15 @@ class FontePrevisao(Protocol):
 
 
 def parse_open_meteo(payload: dict) -> list[HoraPrevisao]:
-    """Converte a resposta horária do Open-Meteo; horários no fuso devolvido pela API."""
+    """Converte a resposta horária do Open-Meteo; horários no fuso devolvido pela API e vento a 2 m."""
     fuso = ZoneInfo(payload["timezone"])
     h = payload["hourly"]
-    return [
-        HoraPrevisao(ts=datetime.fromisoformat(ts).replace(tzinfo=fuso),
-                     **{campo: h[chave][i] or 0.0 for campo, chave in CAMPOS.items()})
-        for i, ts in enumerate(h["time"])
-    ]
+    horas = []
+    for i, ts in enumerate(h["time"]):
+        valores = {campo: h[chave][i] or 0.0 for campo, chave in CAMPOS.items()}
+        valores["vento_kmh"] = vento_2m(valores["vento_kmh"])
+        horas.append(HoraPrevisao(ts=datetime.fromisoformat(ts).replace(tzinfo=fuso), **valores))
+    return horas
 
 
 class OpenMeteoFonte:

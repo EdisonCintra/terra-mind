@@ -5,6 +5,7 @@ from datetime import datetime
 from google.adk.models.base_llm import BaseLlm
 
 from agents.canal import Canal
+from agents.clientes.clima import ClimaCliente
 from agents.clientes.conhecimento import ConhecimentoCliente
 from agents.clientes.erp import ErpCliente
 from agents.clientes.repositorio import RepositorioAgente
@@ -57,6 +58,8 @@ class Dependencias:
     canal: Canal
     modelos: dict[NomeAgente, BaseLlm | str] = field(default_factory=dict)
     relogio: Callable[[], datetime] = agora_sp
+    # Previsão fora do incidente (G2, G3 e G7). O workflow do incidente não usa: segue no snapshot.
+    clima: ClimaCliente | None = None
 
     def modelo(self, agente: NomeAgente) -> BaseLlm | str:
         if agente in self.modelos:

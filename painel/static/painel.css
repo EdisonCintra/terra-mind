@@ -156,3 +156,67 @@ tr:has(.status.reagendada) .perda { color: var(--bom); }
 .resposta-bula .texto { margin: 0; }
 .resposta-bula .trecho { margin: .6rem 0 0; padding-left: .7rem; border-left: 3px solid var(--ceu); color: var(--suave); font-size: .85rem; overflow-wrap: anywhere; }
 .voltar, .link-bula { color: var(--ceu); text-decoration: none; }
+
+/* Telas de perda evitada (G1), agenda (G2 e G3) e relatórios (G7): menu, filtros e formulários. */
+.menu { display: flex; flex-wrap: wrap; gap: .25rem 1.1rem; font-size: .86rem; }
+.menu a { color: var(--suave); text-decoration: none; padding-block: .2rem; border-bottom: 2px solid transparent; }
+.menu a:hover { color: var(--tinta); }
+.menu a.ativa { color: var(--tinta); border-bottom-color: var(--bom); }
+.pagina { max-width: 1520px; margin-inline: auto; padding: 1.25rem 2rem 3rem; display: grid; gap: 1rem; }
+.pagina .kpis { max-width: none; padding: 0; }
+.kpis.quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi .unidade { font: .8rem "Segoe UI", system-ui, sans-serif; color: var(--suave); letter-spacing: 0; }
+.filtros { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem 1.25rem; }
+.filtros label, .formulario label { display: grid; gap: .25rem; color: var(--suave); font-size: .8rem; }
+.filtros .marcar { display: flex; align-items: center; gap: .4rem; padding-bottom: .55rem; }
+.filtros input, .filtros select, .formulario input, .formulario select, .formulario textarea {
+  font: inherit; color: var(--tinta); background: var(--superficie-2); border: 1px solid var(--linha-forte);
+  border-radius: 8px; padding: .5rem .6rem; min-width: 0; color-scheme: dark;
+}
+.formulario { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem 1.25rem; }
+.formulario .largo { grid-column: 1 / -1; }
+.acoes-formulario { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.acoes-formulario > div:empty { display: none; }
+button.discreto { color: var(--suave); background: transparent; border: 1px solid var(--linha-forte); padding: .3rem .7rem; font-size: .78rem; font-weight: 500; }
+button.discreto:hover { color: var(--tinta); border-color: var(--suave); }
+.link-pdf { color: var(--ceu); font-weight: 600; text-underline-offset: 3px; }
+.duas-colunas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.retorno { padding: .85rem 1.1rem; border: 1px solid rgba(69, 207, 142, .35); border-radius: 8px; background: rgba(69, 207, 142, .07); }
+.retorno strong { color: var(--bom); font: 600 1.1rem var(--mono); }
+.barra-linha { display: grid; grid-template-columns: 1fr auto; gap: .2rem 1rem; padding-block: .5rem; border-bottom: 1px solid var(--linha); }
+.barra-linha:last-child { border-bottom: 0; }
+.trilho { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--superficie-2); overflow: hidden; }
+.trilho div { height: 100%; border-radius: 3px; background: var(--bom-fundo); }
+.fonte { color: var(--suave); font-size: .78rem; max-width: 26rem; overflow-wrap: anywhere; }
+
+/* Agenda: uma linha por dia, uma célula por hora de trabalho (06h às 18h). */
+.selos { display: flex; flex-wrap: wrap; }
+.citacao.generico { color: var(--suave); border-color: var(--linha-forte); }
+.ler-bula { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; margin-top: 1rem; }
+.ler-bula p { margin: 0; flex: 1 1 22rem; }
+.semana { display: grid; gap: .55rem; }
+.dia { display: grid; grid-template-columns: 5.5rem 3rem minmax(0, 1fr); align-items: center; gap: .2rem .75rem; }
+.horas { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 3px; }
+.cabecalho-horas .horas span { color: var(--suave); font: .68rem var(--mono); text-align: center; }
+.hora { display: inline-block; height: 1.5rem; border-radius: 4px; background: var(--superficie-2); }
+.hora.boa { background: var(--bom-fundo); }
+.hora.ruim { background: rgba(240, 112, 93, .75); }
+.hora.passou { background: var(--linha); }
+.hora.sem { background: repeating-linear-gradient(45deg, var(--superficie-2) 0 4px, var(--linha) 4px 8px); }
+.motivos { grid-column: 3; margin: 0; padding: 0; list-style: none; color: var(--suave); font-size: .78rem; }
+.legenda { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; color: var(--suave); font-size: .78rem; }
+.legenda .hora { width: 1rem; height: .8rem; margin-right: -.6rem; }
+.janela-resultado { display: grid; gap: .5rem; }
+.janela-resultado p, .janela-resultado blockquote { margin: 0; }
+.janela-resultado .trecho { padding-left: .7rem; border-left: 3px solid var(--ceu); color: var(--suave); font-size: .85rem; }
+.sugestoes { display: flex; flex-wrap: wrap; gap: .5rem; }
+button.sugestao { display: grid; gap: .1rem; text-align: left; color: var(--bom); background: rgba(69, 207, 142, .08); border: 1px solid rgba(69, 207, 142, .45); }
+button.sugestao:hover { background: rgba(69, 207, 142, .16); }
+button.sugestao small { font-weight: 400; }
+
+@media (max-width: 900px) {
+  .kpis.quatro, .duas-colunas { grid-template-columns: minmax(0, 1fr); }
+  .formulario { grid-template-columns: minmax(0, 1fr); }
+  .pagina { padding-inline: 1rem; }
+  .dia { grid-template-columns: 4.5rem 2.5rem minmax(0, 1fr); }
+}

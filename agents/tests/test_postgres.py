@@ -109,3 +109,73 @@ async def test_retoma_sessao_em_orquestrador_novo(pg_url):
     )
     assert {"sessions", "events"} <= {t["table_name"] for t in tabelas_adk}  # sessões do ADK no schema agente
     await c.deps.repo.engine.dispose()
+
+
+async def test_repositorio_impactos_limites_e_relatorios(pg_url):
+    """Contratos 25 e 26 e o registro do G7 no Postgres de verdade (migration 020)."""
+    from agents.modelos import LimiteProduto
+
+    repo = RepositorioPostgres.de_url(pg_url)
+    incidente_id = await inserir_incidente(pg_url)
+    await consultar(
+        pg_url,
+        "INSERT INTO erp.ordens_servico (id, talhao_id, tipo_operacao, inicio_previsto)"
+        " VALUES (1, 1, 'pulverizacao', now()) RETURNING id",
+    )
+    linha = {
+        "os_id": 1,
+        "talhao_id": 1,
+        "produto": "Abacus HC",
+        "condicao": "chuva",
+        "valor_aplicacao_rs": 6660.0,
+        "fator": 0.5,
+        "fonte": "estimativa: chuva lava o produto",
+        "perda_rs": 3330.0,
+    }
+    await repo.gravar_impactos(incidente_id, [linha])
+    await repo.gravar_impactos(incidente_id, [{**linha, "perda_rs": 3000.0}])  # regravar atualiza
+    await repo.situar_impactos(incidente_id, "recusada", de={"evitada"})  # situação errada: não muda
+    plano_id = await repo.criar_plano(incidente_id, {"opcoes": []})
+    await repo.situar_impactos(incidente_id, "evitada", plano_id=plano_id)
+    [impacto] = await consultar(pg_url, "SELECT * FROM agente.impactos")
+    assert (impacto["situacao"], impacto["plano_id"], float(impacto["perda_rs"])) == (
+        "evitada",
+        plano_id,
+        3000.0,
+    )
+
+    chuva = LimiteProduto(
+        parametro="chuva",
+        limite=0,
+        unidade="mm",
+        janela_h=4,
+        trecho="quatro (4) horas",
+        fonte_doc="bula-x",
+        pagina=7,
+    )
+    vento = LimiteProduto(
+        parametro="vento",
+        sentido="minimo",
+        limite=3,
+        trecho="ventos de 3 a 10 km/h",
+        fonte_doc="bula-x",
+        pagina=8,
+    )
+    assert await repo.limites_do_produto("Abacus HC") == []
+    await repo.salvar_limites("Abacus HC", [chuva, vento])
+    await repo.salvar_limites("Abacus HC", [chuva])  # reler a bula troca, não duplica
+    [lido] = await repo.limites_do_produto("Abacus HC")
+    assert (lido.parametro, lido.sentido, lido.janela_h, lido.pagina, lido.generico) == (
+        "chuva",
+        "maximo",
+        4,
+        7,
+        False,
+    )
+
+    assert await repo.proxima_versao_relatorio(1) == 1
+    registro = await repo.salvar_relatorio(1, 1, {"os_id": 1}, "abc", b"%PDF-1.7", True)
+    assert registro["versao"] == 1 and await repo.proxima_versao_relatorio(1) == 2
+    [guardado] = await consultar(pg_url, "SELECT pdf, conforme, sha256 FROM agente.relatorios_aplicacao")
+    assert bytes(guardado["pdf"]) == b"%PDF-1.7" and guardado["conforme"] is True
+    await repo.engine.dispose()

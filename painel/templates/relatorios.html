@@ -1,0 +1,11 @@
+{% extends "pagina.html" %}
+{% block titulo %}Relatórios de aplicação · TerraMind{% endblock %}
+{% block cabecalho %}Relatórios de aplicação{% endblock %}
+{% block resumo %}Ao concluir a OS, o PDF sai com os dados reais, o clima da aplicação e a conferência com a bula.{% endblock %}
+{% block conteudo %}
+<div id="resultado" aria-live="polite"></div>
+<div id="formulario-concluir"></div>
+<div id="relatorios" hx-get="/parcial/relatorios" hx-trigger="relatorios-mudou from:body" hx-swap="innerHTML">
+  {% include "_relatorios.html" %}
+</div>
+{% endblock %}

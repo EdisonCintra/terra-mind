@@ -1,0 +1,56 @@
+<section class="painel">
+  <div class="titulo-bloco"><h2>Ordens a concluir</h2><span class="nota">{{ abertas|length }} agendada(s)</span></div>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>OS</th><th>Talhão</th><th>Produto</th><th>Início previsto</th><th>Máquina</th><th></th></tr></thead>
+      <tbody>
+        {% for os in abertas %}
+        <tr>
+          <td class="mono">{{ os.id }}</td>
+          <td class="forte">{{ os.talhao }}<small>{{ os.area_ha }} ha</small></td>
+          <td>{{ os.produto or "—" }}</td>
+          <td class="mono">{{ os.inicio_previsto|hora }}</td>
+          <td>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</td>
+          <td><button class="grande" hx-get="/os/{{ os.id }}/concluir" hx-target="#formulario-concluir" hx-swap="innerHTML">Concluir</button></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="vazio">Nenhuma OS agendada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="painel">
+  <div class="titulo-bloco"><h2>Aplicações concluídas</h2><span class="nota">{{ relatorios|length }} no total</span></div>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>OS</th><th>Talhão</th><th>Produto</th><th>Aplicação</th><th>Bula</th><th>Relatório</th></tr></thead>
+      <tbody>
+        {% for r in relatorios %}
+        <tr>
+          <td class="mono">{{ r.os_id }}</td>
+          <td class="forte">{{ r.talhao }}<small>{{ r.area_aplicada_ha }} ha · {{ r.modalidade }}</small></td>
+          <td>{{ r.produto or "—" }}</td>
+          <td class="mono">{{ r.inicio_real|hora }}<small>até {{ r.fim_real|hora }}</small></td>
+          <td>
+            {% if r.relatorio_id is none %}<span class="status executada">Sem relatório</span>
+            {% elif r.conforme is true %}<span class="status agendada">Conforme</span>
+            {% elif r.conforme is false %}<span class="status cancelada">Fora do limite</span>
+            {% else %}<span class="status executada">Não conferida</span>{% endif %}
+          </td>
+          <td>
+            {% if r.relatorio_id is not none %}
+            <a class="link-pdf" href="/relatorios/{{ r.relatorio_id }}/pdf" target="_blank" rel="noopener">PDF v{{ r.versao }}</a>
+            <small class="mono" title="SHA-256 dos dados: {{ r.sha256 }}">{{ r.sha256[:12] }}…</small>
+            {% endif %}
+            <button class="discreto" hx-post="/relatorios/os/{{ r.os_id }}/gerar" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Gerar de novo</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="vazio">Nenhuma aplicação concluída ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

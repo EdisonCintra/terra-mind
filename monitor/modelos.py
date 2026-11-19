@@ -14,7 +14,7 @@ class HoraPrevisao(BaseModel):
 
 class Limiares(BaseModel):
     chuva_mm: float = 20
-    vento_kmh: float = 15
+    vento_kmh: float = 11  # a 2 m, como o snapshot (`fontes.vento_2m`); equivale a 15 km/h a 10 m
     umidade_min_pct: float = 50
     janela_h: int = 48
 

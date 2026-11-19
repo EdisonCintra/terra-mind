@@ -16,6 +16,11 @@ def test_parse_localiza_no_fuso_e_mantem_120_horas(payload_open_meteo):
     assert horas[1].ts - horas[0].ts == timedelta(hours=1)
 
 
+def test_vento_vem_convertido_para_2_m(payload_open_meteo):
+    payload_open_meteo["hourly"]["wind_speed_10m"][0] = 20.0
+    assert parse_open_meteo(payload_open_meteo)[0].vento_kmh == 15.0  # 20 × 0,748 (FAO-56)
+
+
 def test_parse_trata_valor_nulo_como_zero(payload_open_meteo):
     payload_open_meteo["hourly"]["precipitation"][0] = None
     assert parse_open_meteo(payload_open_meteo)[0].chuva_mm == 0

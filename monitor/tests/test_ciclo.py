@@ -38,7 +38,7 @@ class RepoFalso:
     def incidente_sem_andamento(self, talhao_id):
         return self.sem_andamento.get(talhao_id)
 
-    def criar_incidente(self, talhao_id, gatilhos, snapshot):
+    def criar_incidente(self, talhao_id, gatilhos, snapshot, origem="live"):
         novo = len(self.snapshots) + 1
         self.abertos.add(talhao_id)
         self.sem_andamento[talhao_id] = novo

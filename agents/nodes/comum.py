@@ -23,6 +23,17 @@ async def alertar(deps: Dependencias, texto: str) -> None:
         logger.exception("falha ao enviar alerta ao gerente")
 
 
+async def situar_impactos(deps: Dependencias, ctx: Context, situacao: str, **filtros: Any) -> None:
+    """G1: atualiza a situação da perda em `agente.impactos`. Como a auditoria, nunca derruba o fluxo."""
+    incidente_id = ctx.state.get("incidente_id")
+    if incidente_id is None:
+        return
+    try:
+        await deps.repo.situar_impactos(incidente_id, situacao, **filtros)
+    except Exception:  # noqa: BLE001
+        logger.exception("falha ao atualizar os impactos do incidente %s", incidente_id)
+
+
 def ids(lista: list[int]) -> str:
     return ", ".join(str(i) for i in lista)
 

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://terramind:terramind@localhost:5432/terramind"
     erp_mcp_url: str = "http://localhost:8030/mcp"
     conhecimento_url: str = "http://localhost:8010"
+    # Previsão fora do incidente (agenda, janela da OS e relatório): a mesma fonte do Monitor.
+    open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
 
     # Modelos da OpenAI pelo LiteLLM, no formato `openai/<modelo>`.
     openai_api_key: str | None = None
