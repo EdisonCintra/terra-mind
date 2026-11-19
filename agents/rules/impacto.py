@@ -44,8 +44,26 @@ async def calcular_impacto(os: OsEmRisco, condicao: str, conhecimento: Conhecime
     )
 
 
+def linha_de_impacto(os: OsEmRisco, condicao: str, impacto: Impacto) -> dict:
+    """A linha de `agente.impactos` (contrato 25) de uma OS suspensa. `valor_aplicacao_rs` é o valor
+    inteiro em risco (fator 1); `perda_rs` é a parte dele que a condição faria perder."""
+    valor = None
+    if os.dose_por_ha is not None and os.preco_unitario is not None:
+        valor = calcular_perda(os.area_ha, os.dose_por_ha, os.preco_unitario, 1)
+    return {
+        "os_id": os.os_id,
+        "talhao_id": os.talhao_id,
+        "produto": os.produto,
+        "condicao": condicao,
+        "valor_aplicacao_rs": valor,
+        "fator": impacto.fator,
+        "fonte": impacto.fonte_fator,
+        "perda_rs": impacto.perda_rs,
+    }
+
+
 def sufixo_estimativa(*fontes: str) -> str:
-    """" (estimativa)" quando algum fator vem de estimativa, e não de um dado citado."""
+    """ " (estimativa)" quando algum fator vem de estimativa, e não de um dado citado."""
     return " (estimativa)" if any(f.lower().startswith("estimativa") for f in fontes) else ""
 
 

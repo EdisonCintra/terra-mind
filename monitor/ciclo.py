@@ -10,7 +10,8 @@ log = logging.getLogger("monitor")
 
 
 def executar_ciclo(fonte: FontePrevisao, repo, notificador: Notificador, limiares: Limiares,
-                   agora: datetime, talhao_ids: list[int] | None = None) -> ResultadoCiclo:
+                   agora: datetime, talhao_ids: list[int] | None = None,
+                   origem: str = "live") -> ResultadoCiclo:
     """Um passe por todos os talhões. Erro num talhão vira mensagem e o ciclo segue.
 
     Incidente ainda `aberto` é avisado de novo: o aviso pode ter falhado e `/iniciar` é idempotente.
@@ -28,7 +29,7 @@ def executar_ciclo(fonte: FontePrevisao, repo, notificador: Notificador, limiare
                 gatilhos = avaliar(horas, limiares, agora)
                 if not gatilhos:
                     continue
-                incidente_id = repo.criar_incidente(talhao.id, gatilhos, horas)
+                incidente_id = repo.criar_incidente(talhao.id, gatilhos, horas, origem)
                 incidentes.append(incidente_id)
         except Exception as erro:  # noqa: BLE001 - um talhão ruim não para os outros
             log.exception("talhão %s", talhao.id)

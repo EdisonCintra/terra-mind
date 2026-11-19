@@ -5,7 +5,7 @@ from google.genai import types
 
 from agents.deps import Dependencias
 from agents.modelos import OsEmRisco
-from agents.nodes.comum import alertar, alvo_das_os, auditar, ids
+from agents.nodes.comum import alertar, alvo_das_os, auditar, ids, situar_impactos
 from agents.rules.impacto import calcular_impacto, formatar_reais, sufixo_estimativa
 
 ABERTOS = {"aberto", "aguardando_aprovacao", "aguardando_decisao_manual"}
@@ -89,6 +89,7 @@ def criar_decisao_manual(deps: Dependencias):
         if (ctx.state.get("motivo_manual") or {}).get("codigo") == "avaliacao_indisponivel":
             ctx.state["perdas_sem_suspensao"] = await perdas_sem_suspensao(deps, ctx.state)
         await deps.repo.mudar_status(incidente_id, "aguardando_decisao_manual", de=ABERTOS)
+        await situar_impactos(deps, ctx, "decisao_manual", de={"suspensa"})
         texto = texto_decisao_manual(ctx.state)
         await alertar(deps, texto)
         await auditar(
@@ -113,6 +114,9 @@ def criar_encerrar(deps: Dependencias):
     async def encerrar(ctx: Context, node_input):
         incidente_id = ctx.state.get("incidente_id")
         await deps.repo.mudar_status(incidente_id, "encerrado", de=ABERTOS)
+        # G1: encerrou com a OS ainda suspensa (proposta recusada ou opções esgotadas). Depois do
+        # Executor a situação já é "evitada" e não muda.
+        await situar_impactos(deps, ctx, "recusada", de={"suspensa"})
         await auditar(
             deps, ctx, "encerrar", "encerrar_incidente", justificativa=ctx.state.get("motivo_encerramento")
         )

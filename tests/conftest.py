@@ -22,7 +22,8 @@ def banco_limpo():
     with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
         conn.execute(
             "TRUNCATE erp.leituras_solo, erp.ordens_servico, erp.operadores, erp.maquinas,"
-            " erp.insumos, erp.talhoes, agente.auditoria, agente.planos, agente.incidentes"
+            " erp.insumos, erp.talhoes, agente.auditoria, agente.planos, agente.incidentes,"
+            " conhecimento.limites_produto"
             " RESTART IDENTITY CASCADE"
         )
         # Os ids dos incidentes recomeçam em 1; sem limpar as sessões do ADK (criadas pelo `agents`),

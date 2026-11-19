@@ -7,7 +7,7 @@ from google.adk import Context, Event
 from agents.clientes.erp import ErpIndisponivel
 from agents.deps import Dependencias
 from agents.modelos import PlanoProposto
-from agents.nodes.comum import alertar, auditar, ids
+from agents.nodes.comum import alertar, auditar, ids, situar_impactos
 from agents.rules.janelas import formatar_data
 from agents.rules.validador import ContextoPlano, validar
 
@@ -95,6 +95,7 @@ def criar_executor(deps: Dependencias):
                 except Exception:  # noqa: BLE001
                     logger.exception("falha ao notificar operador %s", chat_id)
         await auditar(deps, ctx, "executor", "executar_plano", depois={"plano_id": plano_id, "os": feitas})
+        await situar_impactos(deps, ctx, "evitada", plano_id=plano_id)  # G1: só agora a perda foi evitada
         estoque = " e estoque reservado" if reservou_estoque else ""
         await alertar(deps, f"Plano {plano_id} executado: OS {ids(feitas)} remarcadas{estoque}.")
         ctx.state["motivo_encerramento"] = f"plano {plano_id} executado"

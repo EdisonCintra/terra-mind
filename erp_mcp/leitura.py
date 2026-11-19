@@ -103,3 +103,64 @@ def leituras_solo(talhao_id: int, horas: int = 24) -> list[dict[str, Any]]:
     )
     with conectar() as conn:
         return para_json(conn.execute(sql, (talhao_id, horas)).fetchall())
+
+
+def listar_talhoes() -> list[dict[str, Any]]:
+    """Lista os talhões com `id`, `nome`, `area_ha`, `cultura`, `estagio_fenologico`, `lat` e `lon`."""
+    sql = "SELECT id, nome, area_ha, cultura, estagio_fenologico, lat, lon FROM erp.talhoes ORDER BY id"
+    with conectar() as conn:
+        return para_json(conn.execute(sql).fetchall())
+
+
+def consultar_insumo(insumo_id: int) -> dict[str, Any]:
+    """Devolve o insumo: `id`, `produto`, `tipo`, `unidade`, `preco_unitario`, `estoque` e `bula_id`.
+
+    Se o insumo não existir, responde `{"ok": false, "erro": "..."}`.
+    """
+    with conectar() as conn:
+        linha = conn.execute("SELECT * FROM erp.insumos WHERE id = %s", (insumo_id,)).fetchone()
+    if linha is None:
+        return {"ok": False, "erro": f"Insumo {insumo_id} não existe"}
+    return para_json(linha)
+
+
+def detalhar_execucao(os_id: int) -> dict[str, Any]:
+    """Devolve a OS executada com tudo o que o relatório de aplicação usa (contrato 28).
+
+    Traz as chaves de `detalhar_os` mais `cultura`, `estagio_fenologico`, `lat`, `lon`, `maquina`,
+    `operador`, `bula_id` e `execucao` (a linha de `erp.execucoes_os`, com `maquina` e `operador`
+    reais). Se a OS não existir ou ainda não tiver execução registrada, responde
+    `{"ok": false, "erro": "..."}`.
+    """
+    with conectar() as conn:
+        os = conn.execute(
+            """
+            SELECT os.id, os.talhao_id, os.status, os.tipo_operacao, os.insumo_id, os.dose_por_ha,
+                   os.inicio_previsto, os.duracao_horas,
+                   t.nome AS talhao, t.area_ha, t.cultura, t.estagio_fenologico, t.lat, t.lon,
+                   i.produto, i.tipo AS tipo_insumo, i.unidade, i.bula_id,
+                   m.nome AS maquina, o.nome AS operador
+            FROM erp.ordens_servico os
+            JOIN erp.talhoes t ON t.id = os.talhao_id
+            LEFT JOIN erp.insumos i ON i.id = os.insumo_id
+            LEFT JOIN erp.maquinas m ON m.id = os.maquina_id
+            LEFT JOIN erp.operadores o ON o.id = os.operador_id
+            WHERE os.id = %s
+            """,
+            (os_id,),
+        ).fetchone()
+        if os is None:
+            return {"ok": False, "erro": f"OS {os_id} não existe"}
+        execucao = conn.execute(
+            """
+            SELECT e.*, m.nome AS maquina, m.tipo AS maquina_tipo, o.nome AS operador
+            FROM erp.execucoes_os e
+            LEFT JOIN erp.maquinas m ON m.id = e.maquina_id
+            LEFT JOIN erp.operadores o ON o.id = e.operador_id
+            WHERE e.os_id = %s
+            """,
+            (os_id,),
+        ).fetchone()
+    if execucao is None:
+        return {"ok": False, "erro": f"OS {os_id} ainda não tem execução registrada"}
+    return para_json({**os, "execucao": execucao})

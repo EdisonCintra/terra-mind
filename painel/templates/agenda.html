@@ -1,0 +1,67 @@
+{% extends "pagina.html" %}
+{% block titulo %}Agenda · TerraMind{% endblock %}
+{% block cabecalho %}Agenda da semana{% endblock %}
+{% block resumo %}As horas boas e ruins para aplicar cada produto, pelo limite da bula e pela previsão do talhão.{% endblock %}
+{% block scripts %}<script src="/static/agenda.js" defer></script>{% endblock %}
+{% block conteudo %}
+{% if not insumos %}
+<p class="vazio">Nenhum produto cadastrado.</p>
+{% else %}
+<form id="filtro-agenda" class="filtros" hx-get="/parcial/agenda" hx-target="#agenda" hx-swap="innerHTML"
+      hx-trigger="load, change, agenda-mudou from:body" hx-indicator="#carregando"
+      hx-on:change="document.getElementById('aviso-agenda').innerHTML = ''">
+  <label>Produto
+    <select name="insumo_id">
+      {% for i in insumos %}<option value="{{ i.id }}">{{ i.produto }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Duração da aplicação
+    <select name="duracao_horas">
+      {% for h in [2, 4, 6, 8] %}<option value="{{ h }}"{% if h == 8 %} selected{% endif %}>{{ h }} h</option>{% endfor %}
+    </select>
+  </label>
+  <span id="carregando" class="htmx-indicator nota">Buscando a previsão…</span>
+</form>
+<div id="aviso-agenda" aria-live="polite"></div>
+<div id="agenda"></div>
+
+<section class="painel" id="nova-os">
+  <div class="titulo-bloco"><h2>Agendar aplicação</h2><span class="nota">a janela é conferida antes de criar a OS</span></div>
+  <form class="formulario" hx-post="/os/nova" hx-target="#resultado-os" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+    <label>Talhão
+      <select name="talhao_id" data-janela>
+        {% for t in talhoes %}<option value="{{ t.id }}">{{ t.nome }} · {{ t.area_ha }} ha</option>{% endfor %}
+      </select>
+    </label>
+    <label>Produto
+      <select name="insumo_id" data-janela>
+        {% for i in insumos %}<option value="{{ i.id }}">{{ i.produto }} ({{ i.unidade }})</option>{% endfor %}
+      </select>
+    </label>
+    <label>Dose por hectare
+      <input name="dose_por_ha" type="number" step="0.001" min="0.001" required placeholder="0,300">
+    </label>
+    <label>Início
+      <input name="inicio" type="datetime-local" step="3600" required data-janela>
+    </label>
+    <label>Duração
+      <select name="duracao_horas" data-janela>
+        {% for h in [2, 4, 6, 8] %}<option value="{{ h }}"{% if h == 8 %} selected{% endif %}>{{ h }} h</option>{% endfor %}
+      </select>
+    </label>
+    <label>Operador
+      <select name="operador_id">
+        <option value="">Definir depois</option>
+        {% for o in operadores %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
+      </select>
+    </label>
+    {# A avaliação da janela (G3) preenche este bloco, com o seletor de máquina quando a janela serve. #}
+    <div id="janela" class="largo" aria-live="polite"><p class="vazio">Escolha a data para conferir a janela.</p></div>
+    <div class="largo acoes-formulario">
+      <button type="submit" class="grande" id="criar-os" disabled>Criar OS</button>
+      <div id="resultado-os" aria-live="polite"></div>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

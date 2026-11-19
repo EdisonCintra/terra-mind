@@ -34,12 +34,14 @@ class RepositorioMonitor:
                 {"t": talhao_id},
             ).scalar_one_or_none()
 
-    def criar_incidente(self, talhao_id: int, gatilhos: list[Gatilho], snapshot: list[HoraPrevisao]) -> int:
+    def criar_incidente(self, talhao_id: int, gatilhos: list[Gatilho], snapshot: list[HoraPrevisao],
+                        origem: str = "live") -> int:
+        """`origem='replay'` (contrato 27) tira o incidente do histórico e do dashboard de perda."""
         with self.engine.begin() as conn:
             return conn.execute(
-                text("INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status) "
-                     "VALUES (:t, CAST(:g AS jsonb), CAST(:s AS jsonb), 'aberto') RETURNING id"),
-                {"t": talhao_id,
+                text("INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status, origem) "
+                     "VALUES (:t, CAST(:g AS jsonb), CAST(:s AS jsonb), 'aberto', :o) RETURNING id"),
+                {"t": talhao_id, "o": origem,
                  "g": json.dumps([g.model_dump(mode="json") for g in gatilhos]),
                  "s": json.dumps([h.model_dump(mode="json") for h in snapshot])},
             ).scalar_one()

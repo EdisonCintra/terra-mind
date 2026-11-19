@@ -1,0 +1,5 @@
+<nav class="menu" aria-label="Telas">
+  {% for caminho, rotulo in [("/os", "Visão geral"), ("/agenda", "Agenda"), ("/perda", "Perda evitada"), ("/relatorios", "Relatórios"), ("/bula", "Pergunte à bula")] %}
+  <a href="{{ caminho }}"{% if request.url.path == caminho %} class="ativa" aria-current="page"{% endif %}>{{ rotulo }}</a>
+  {% endfor %}
+</nav>

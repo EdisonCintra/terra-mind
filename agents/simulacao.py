@@ -16,9 +16,10 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
+from agents.clientes.clima import Previsao
 from agents.config import Settings
 from agents.deps import Dependencias
-from agents.modelos import Gatilho, HoraPrevisao, Incidente
+from agents.modelos import Gatilho, HoraPrevisao, Incidente, LimiteProduto
 from agents.rules.janelas import FUSO
 
 AGORA = datetime(2026, 11, 3, 8, 0, tzinfo=FUSO)
@@ -177,6 +178,8 @@ class FakeErp:
     maquinas: dict[int, dict] = field(default_factory=dict)
     operadores: list[dict] = field(default_factory=list)
     estoque: dict[int, float] = field(default_factory=dict)
+    insumos: dict[int, dict] = field(default_factory=dict)
+    execucoes: dict[int, dict] = field(default_factory=dict)
     planos_aprovados: Callable[[int], bool] = lambda plano_id: False
     escritas: list[tuple] = field(default_factory=list)
     falhar_em: set[str] = field(default_factory=set)
@@ -229,6 +232,27 @@ class FakeErp:
     async def listar_operadores(self):
         self._checar()
         return self.operadores
+
+    async def listar_talhoes(self):
+        self._checar()
+        return list(self.talhoes.values())
+
+    async def consultar_insumo(self, insumo_id):
+        self._checar()
+        if insumo_id not in self.insumos:
+            from agents.clientes.erp import ErpIndisponivel
+
+            raise ErpIndisponivel(f"consultar_insumo: Insumo {insumo_id} não existe")
+        return self.insumos[insumo_id]
+
+    async def detalhar_execucao(self, os_id):
+        self._checar()
+        if os_id not in self.execucoes:
+            from agents.clientes.erp import ErpIndisponivel
+
+            raise ErpIndisponivel(f"detalhar_execucao: OS {os_id} ainda não tem execução registrada")
+        o = self.os[os_id]
+        return {**self.talhoes[o["talhao_id"]], **self._linha(o), "execucao": self.execucoes[os_id]}
 
     async def suspender_os(self, os_id, incidente_id, motivo):
         self.escritas.append(("suspender_os", os_id))
@@ -306,6 +330,9 @@ class FakeRepo:
     incidentes: dict[int, Incidente] = field(default_factory=dict)
     planos: dict[int, dict] = field(default_factory=dict)
     auditoria: list[dict] = field(default_factory=list)
+    impactos: dict[tuple[int, int], dict] = field(default_factory=dict)
+    limites: dict[str, list[LimiteProduto]] = field(default_factory=dict)
+    relatorios: list[dict] = field(default_factory=list)
 
     def aprovado(self, plano_id: int) -> bool:
         p = self.planos.get(plano_id)
@@ -379,6 +406,52 @@ class FakeRepo:
             }
         )
 
+    async def gravar_impactos(self, incidente_id, impactos):
+        for i in impactos:
+            anterior = self.impactos.get(
+                (incidente_id, i["os_id"]), {"situacao": "suspensa", "plano_id": None}
+            )
+            self.impactos[(incidente_id, i["os_id"])] = {**anterior, **i, "incidente_id": incidente_id}
+
+    async def situar_impactos(self, incidente_id, situacao, de=None, plano_id=None):
+        for (inc, _), i in self.impactos.items():
+            if inc == incidente_id and (de is None or i["situacao"] in de):
+                i.update(situacao=situacao, plano_id=plano_id or i["plano_id"])
+
+    async def limites_do_produto(self, produto):
+        return list(self.limites.get(produto, []))
+
+    async def salvar_limites(self, produto, limites):
+        self.limites[produto] = list(limites)
+
+    async def proxima_versao_relatorio(self, os_id):
+        return 1 + sum(1 for r in self.relatorios if r["os_id"] == os_id)
+
+    async def salvar_relatorio(self, os_id, versao, dados, sha256, pdf, conforme):
+        registro = {"id": len(self.relatorios) + 1, "os_id": os_id, "versao": versao, "gerado_em": AGORA}
+        self.relatorios.append(
+            {**registro, "dados": dados, "sha256": sha256, "pdf": pdf, "conforme": conforme}
+        )
+        return registro
+
+
+@dataclass
+class FakeClima:
+    """Previsão fixa para a agenda, a janela e o relatório (G2, G3 e G7)."""
+
+    horas: list[HoraPrevisao] = field(default_factory=list)
+    fonte: str = "previsão de teste"
+    pedidos: list[tuple] = field(default_factory=list)
+    indisponivel: bool = False
+
+    async def previsao(self, lat, lon, dias=7, dias_passados=0):
+        self.pedidos.append((lat, lon, dias, dias_passados))
+        if self.indisponivel:
+            from agents.clientes.clima import ClimaIndisponivel
+
+            raise ClimaIndisponivel("fake fora do ar")
+        return Previsao(horas=list(self.horas), fonte=self.fonte)
+
 
 # ---------------------------------------------------------------- cenário da demo
 
@@ -437,6 +510,7 @@ class Cenario:
     repo: FakeRepo
     canal: FakeCanal
     conhecimento: FakeConhecimento
+    clima: FakeClima
 
 
 def os_da_fazenda(agora: datetime = AGORA) -> dict[int, dict]:
@@ -464,6 +538,19 @@ def montar_cenario(
                 "area_ha": 120.0,
                 "cultura": "milho",
                 "estagio_fenologico": "V6",
+                "lat": -17.79,
+                "lon": -50.92,
+            }
+        },
+        insumos={
+            1: {
+                "id": 1,
+                "produto": PRODUTO,
+                "tipo": "fungicida",
+                "unidade": "L",
+                "preco_unitario": 185.0,
+                "estoque": 500.0,
+                "bula_id": "bula-abacus-hc",
             }
         },
         maquinas={
@@ -501,6 +588,7 @@ def montar_cenario(
         ],
     )
     canal = FakeCanal()
+    clima = FakeClima(horas=previsao_chuva(agora))
     deps = Dependencias(
         settings=settings or Settings(_env_file=None),
         erp=erp,
@@ -509,5 +597,6 @@ def montar_cenario(
         canal=canal,
         modelos=modelos_padrao() if modelos is None else modelos,
         relogio=lambda: agora,
+        clima=clima,
     )
-    return Cenario(deps=deps, erp=erp, repo=repo, canal=canal, conhecimento=conhecimento)
+    return Cenario(deps=deps, erp=erp, repo=repo, canal=canal, conhecimento=conhecimento, clima=clima)

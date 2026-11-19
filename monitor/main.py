@@ -61,9 +61,9 @@ def criar_app(repo=None, notificador=None, fonte_live=None, modo: str | None = N
             deps[nome] = fabricas[nome]()
         return deps[nome]
 
-    def rodar(fonte, talhao_ids=None) -> ResultadoCiclo:
+    def rodar(fonte, talhao_ids=None, origem: str = "live") -> ResultadoCiclo:
         resultado = executar_ciclo(fonte, dep("repo"), dep("notificador"), limiares or Limiares.do_ambiente(),
-                                   datetime.now(SP), talhao_ids)
+                                   datetime.now(SP), talhao_ids, origem)
         app.state.ultimo = resultado
         return resultado
 
@@ -103,7 +103,7 @@ def criar_app(repo=None, notificador=None, fonte_live=None, modo: str | None = N
         if not caminho.is_file():
             raise HTTPException(status_code=404, detail="cenario_inexistente")
         ids = [pedido.talhao_id] if pedido.talhao_id is not None else None
-        r = rodar(ReplayFonte(caminho), ids)
+        r = rodar(ReplayFonte(caminho), ids, origem="replay")
         return {"incidentes": r.incidentes, "erros": r.erros}
 
     @app.post("/ciclo")

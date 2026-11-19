@@ -198,7 +198,7 @@ def criar_incidente() -> int:
 
 def test_servidor_nao_expoe_janelas_validas():
     nomes = {f.__name__ for f in FERRAMENTAS}
-    assert "janelas_validas" not in nomes and len(nomes) == 10
+    assert "janelas_validas" not in nomes and len(nomes) == 13
 
 
 async def test_servidor_responde_pelo_streamable_http():

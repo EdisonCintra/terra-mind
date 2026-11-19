@@ -57,4 +57,3 @@ def previsao_da_os(horas: list[HoraPrevisao], inicio: datetime, duracao_h: float
             for n in HORAS_APOS_FIM
         },
     }
-

@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from agents.modelos import Gatilho, HoraPrevisao, Incidente
+from agents.modelos import Gatilho, HoraPrevisao, Incidente, LimiteProduto
 
 ResultadoResposta = Literal["ok", "repetida", "desconhecida"]
 
@@ -57,6 +57,27 @@ class RepositorioAgente(Protocol):
         depois: Any = None,
         justificativa: str | None = None,
     ) -> None: ...
+
+    async def gravar_impactos(self, incidente_id: int, impactos: list[dict]) -> None:
+        """Contrato 25: uma linha por OS suspensa, com `os_id`, `talhao_id`, `produto`, `condicao`,
+        `valor_aplicacao_rs`, `fator`, `fonte` e `perda_rs`. Regravar o mesmo incidente atualiza."""
+        ...
+
+    async def situar_impactos(
+        self, incidente_id: int, situacao: str, de: set[str] | None = None, plano_id: int | None = None
+    ) -> None: ...
+    async def limites_do_produto(self, produto: str) -> list[LimiteProduto]:
+        """Contrato 26: os limites lidos da bula do produto (lista vazia = bula ainda não lida)."""
+        ...
+
+    async def salvar_limites(self, produto: str, limites: list[LimiteProduto]) -> None: ...
+    async def proxima_versao_relatorio(self, os_id: int) -> int: ...
+    async def salvar_relatorio(
+        self, os_id: int, versao: int, dados: dict, sha256: str, pdf: bytes, conforme: bool | None
+    ) -> dict:
+        """Guarda uma versão do relatório de aplicação e devolve `{id, os_id, versao, gerado_em}`.
+        Duas gerações simultâneas da mesma OS disputam a mesma versão: a segunda falha no UNIQUE."""
+        ...
 
 
 class RepositorioPostgres:
@@ -188,3 +209,112 @@ class RepositorioPostgres:
                     "just": justificativa,
                 },
             )
+
+    async def gravar_impactos(self, incidente_id, impactos):
+        sql = text(
+            "INSERT INTO agente.impactos (incidente_id, os_id, talhao_id, produto, condicao,"
+            " valor_aplicacao_rs, fator, fonte, perda_rs)"
+            " VALUES (:inc, :os_id, :talhao_id, :produto, :condicao, :valor_aplicacao_rs, :fator, :fonte,"
+            " :perda_rs)"
+            " ON CONFLICT (incidente_id, os_id) DO UPDATE SET condicao = EXCLUDED.condicao,"
+            " valor_aplicacao_rs = EXCLUDED.valor_aplicacao_rs, fator = EXCLUDED.fator,"
+            " fonte = EXCLUDED.fonte, perda_rs = EXCLUDED.perda_rs, atualizado_em = now()"
+        )
+        async with self.engine.begin() as conn:
+            for impacto in impactos:
+                await conn.execute(sql, {"inc": incidente_id, **impacto})
+
+    async def situar_impactos(self, incidente_id, situacao, de=None, plano_id=None):
+        sql = (
+            "UPDATE agente.impactos SET situacao = :situacao, atualizado_em = now(),"
+            " plano_id = COALESCE(:plano, plano_id) WHERE incidente_id = :inc"
+        )
+        params: dict[str, Any] = {"situacao": situacao, "plano": plano_id, "inc": incidente_id}
+        if de is not None:
+            sql += " AND situacao = ANY(:de)"
+            params["de"] = list(de)
+        async with self.engine.begin() as conn:
+            await conn.execute(text(sql), params)
+
+    async def limites_do_produto(self, produto):
+        async with self.engine.connect() as conn:
+            linhas = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT parametro, sentido, limite, unidade, janela_h, trecho,"
+                            " documento AS fonte_doc, pagina FROM conhecimento.limites_produto"
+                            " WHERE produto = :produto ORDER BY parametro, sentido"
+                        ),
+                        {"produto": produto},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [LimiteProduto.model_validate(dict(linha)) for linha in linhas]
+
+    async def salvar_limites(self, produto, limites):
+        """Troca os limites do produto pelos recém-lidos, numa transação (reler a bula não duplica)."""
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM conhecimento.limites_produto WHERE produto = :produto"),
+                {"produto": produto},
+            )
+            for limite in limites:
+                await conn.execute(
+                    text(
+                        "INSERT INTO conhecimento.limites_produto (produto, parametro, sentido, limite,"
+                        " unidade, janela_h, trecho, documento, pagina) VALUES (:produto, :parametro,"
+                        " :sentido, :limite, :unidade, :janela_h, :trecho, :documento, :pagina)"
+                    ),
+                    {
+                        "produto": produto,
+                        "parametro": limite.parametro,
+                        "sentido": limite.sentido_efetivo,
+                        "limite": limite.limite,
+                        "unidade": limite.unidade,
+                        "janela_h": limite.janela_h,
+                        "trecho": limite.trecho,
+                        "documento": limite.fonte_doc,
+                        "pagina": limite.pagina,
+                    },
+                )
+
+    async def proxima_versao_relatorio(self, os_id):
+        async with self.engine.connect() as conn:
+            return (
+                await conn.execute(
+                    text(
+                        "SELECT COALESCE(MAX(versao), 0) + 1 FROM agente.relatorios_aplicacao"
+                        " WHERE os_id = :os"
+                    ),
+                    {"os": os_id},
+                )
+            ).scalar_one()
+
+    async def salvar_relatorio(self, os_id, versao, dados, sha256, pdf, conforme):
+        async with self.engine.begin() as conn:
+            linha = (
+                (
+                    await conn.execute(
+                        text(
+                            "INSERT INTO agente.relatorios_aplicacao"
+                            " (os_id, versao, conforme, dados, sha256, pdf)"
+                            " VALUES (:os, :versao, :conforme, CAST(:dados AS jsonb), :sha, :pdf)"
+                            " RETURNING id, os_id, versao, gerado_em"
+                        ),
+                        {
+                            "os": os_id,
+                            "versao": versao,
+                            "conforme": conforme,
+                            "dados": _json(dados),
+                            "sha": sha256,
+                            "pdf": pdf,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return dict(linha)

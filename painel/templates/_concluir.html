@@ -1,0 +1,32 @@
+{# Conclusão da OS (contrato 28). Uma coluna no celular; os campos de voo só aparecem para drone e avião. #}
+<section class="painel">
+  <div class="titulo-bloco"><h2>Concluir OS {{ os.id }} · {{ os.talhao }}</h2><span class="nota">{{ os.produto or "sem insumo" }}</span></div>
+  <form class="formulario" hx-post="/os/{{ os.id }}/concluir" hx-target="#resultado" hx-swap="innerHTML"
+        hx-disabled-elt="find button[type=submit]" hx-indicator="find .htmx-indicator"
+        hx-on::after-request="if (event.detail.successful && event.detail.xhr.getResponseHeader('HX-Trigger')) this.closest('section').remove()">
+    <label>Início real <input name="inicio_real" type="datetime-local" required value="{{ inicio }}"></label>
+    <label>Término real <input name="fim_real" type="datetime-local" required value="{{ fim }}"></label>
+    <label>Área aplicada (ha) <input name="area_aplicada_ha" inputmode="decimal" required value="{{ os.area_ha }}"></label>
+    <label>Dose aplicada ({{ os.unidade or "un" }}/ha) <input name="dose_real_por_ha" inputmode="decimal" value="{{ os.dose_por_ha or '' }}"></label>
+    <label>Volume de calda (L/ha) <input name="volume_calda_l_ha" inputmode="decimal"></label>
+    <label>Modalidade
+      <select name="modalidade" onchange="this.form.querySelectorAll('.so-voo').forEach(e => e.hidden = this.value === 'terrestre')">
+        <option value="terrestre">Terrestre</option>
+        <option value="drone">Drone</option>
+        <option value="aerea">Avião agrícola</option>
+      </select>
+    </label>
+    <label>Receituário agronômico nº <input name="receituario_numero" maxlength="60"></label>
+    <label>Responsável técnico <input name="responsavel_tecnico" maxlength="120"></label>
+    <label>Registro profissional (CREA) <input name="registro_profissional" maxlength="40"></label>
+    <label>Ponta de pulverização <input name="ponta" maxlength="60"></label>
+    <label class="so-voo" hidden>Altura do voo (m) <input name="altura_voo_m" inputmode="decimal"></label>
+    <label class="so-voo" hidden>Largura da faixa (m) <input name="largura_faixa_m" inputmode="decimal"></label>
+    <label class="so-voo" hidden>Aeronave (identificação ANAC) <input name="aeronave" maxlength="60"></label>
+    <label class="largo">Observações <textarea name="observacoes" rows="2" maxlength="500"></textarea></label>
+    <div class="largo acoes-formulario">
+      <button type="submit" class="grande">Concluir e gerar relatório</button>
+      <span class="htmx-indicator nota">Gravando e gerando o PDF…</span>
+    </div>
+  </form>
+</section>

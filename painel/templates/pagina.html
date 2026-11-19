@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}TerraMind{% endblock %}</title>
+  <link rel="stylesheet" href="/static/painel.css">
+  <script src="/static/htmx.min.js"></script>
+  {% block scripts %}{% endblock %}
+</head>
+<body>
+  {# Base das telas fora da visão geral (perda evitada, agenda e relatórios). #}
+  <header class="topo">
+    <div class="marca">
+      <div>
+        <h1>{% block cabecalho %}{% endblock %}</h1>
+        <p>{% block resumo %}{% endblock %}</p>
+      </div>
+    </div>
+    {% include "_menu.html" %}
+  </header>
+  <main class="pagina">
+    {% block conteudo %}{% endblock %}
+  </main>
+</body>
+</html>

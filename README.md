@@ -58,6 +58,17 @@ O Supervisor junta as duas análises num plano. Ele só pode escolher datas e m�
 - Além da chuva, as janelas tratam vento (máximo e mínimo), umidade, temperatura, rajada, Delta T e inversão térmica. Os três últimos vêm dos campos opcionais do Monitor (contrato 21). Sem o dado, a janela não é aceita.
 - Custo da demora: ao propor o plano, o código grava quando a janela proposta vence e quanto custa perdê-la: `valor da aplicação × fator de atraso por dia × dias até a próxima janela boa`. O lembrete do timeout e o painel mostram esses números. O fator vem do conhecimento (`condicao=atraso`) ou, até o E7, da estimativa declarada em `FATOR_ATRASO_DIA`. Se o Avaliador falhou e a OS não foi suspensa, a decisão manual mostra a perda inteira de aplicar com o tempo previsto.
 
+### Fora do incidente: perda evitada, agenda, janela da OS e relatório
+
+Quatro recursos rodam sem incidente aberto. Nenhum deles põe número ou data vindo de LLM na tela.
+
+- **Perda evitada (`/perda`, G1).** A Ação Preventiva grava uma linha por OS suspensa em `agente.impactos` (contrato 25), com valor da aplicação, fator, fonte e perda. O Executor muda a situação para `evitada` quando o plano é executado; recusa e decisão manual também ficam registradas. A tela soma só o que foi evitado, por talhão e por produto, e mostra planos aprovados, recusados e sem resposta e o tempo médio até a resposta. Incidente de replay (`origem = 'replay'`, contrato 27) fica de fora, a não ser com "Incluir simulações". Com `PRECO_HA_SAFRA` definido, a tela mostra quantas vezes a perda evitada paga a assinatura.
+- **Agenda (`/agenda`, G2).** `GET /agenda?insumo_id=` devolve, por talhão e por dia, as horas boas e ruins para começar a aplicação, com o motivo. Os limites vêm de `conhecimento.limites_produto` (contrato 26). O botão "Ler os limites da bula" chama `POST /limites/extrair`: um agente lê a bula uma vez, e o código só aceita o limite cujo trecho veio da busca, com a mesma página, e cujo número aparece no trecho. Para o parâmetro que a bula não traz, vale uma referência genérica (vento de 3 a 10 km/h, até 30 °C, umidade a partir de 55%, Delta T de 2 a 10 °C), sempre marcada como genérica.
+- **Janela da OS (G3).** `POST /janelas/avaliar` diz se a janela serve. Se não serve, devolve o motivo com a página da bula e até 3 janelas boas com máquina livre. No formulário "Agendar aplicação", aceitar uma sugestão preenche o campo, e a OS só é criada com a janela conferida.
+- **Relatório de aplicação (`/relatorios`, G7).** Concluir a OS grava os dados reais (`erp.execucoes_os`, contrato 28) e gera um PDF com área, produto, dose, execução, clima durante a aplicação e a conferência de cada limite da bula, com a página. O SHA-256 dos dados vai no rodapé e fica no banco. O que a norma pede para drone, avião e aplicação terrestre, e o que ainda falta, está em [docs/relatorio-de-aplicacao.md](docs/relatorio-de-aplicacao.md).
+
+A previsão desses recursos vem direto do Open-Meteo (`agents/clientes/clima.py`), com direção e rajada do vento, o Delta T calculado da temperatura e da umidade e a inversão térmica (ar a 80 m pelo menos 0,5 °C mais quente que a 2 m, com vento abaixo de 6 km/h). Na bula, chuva "zero" aceita até 1 mm no período: o modelo põe garoa de 0,1 mm em quase toda hora. Em todo o sistema, inclusive no Monitor, o vento e a rajada são os da altura da barra (2 m), convertidos dos 10 m do Open-Meteo pela FAO-56 (× 0,748), porque é assim que a bula e o anemômetro do operador medem. O incidente continua usando o snapshot do Monitor. Quando o Monitor expuser a previsão por talhão (contrato 19), basta trocar a implementação do cliente.
+
 ### Quando um agente falha
 
 Cada agente pode fazer até 6 rodadas de chamadas de ferramenta, e na última só pode responder. Se uma ferramenta dá erro, o modelo recebe `{"ok": false}` e segue. Se o próprio modelo falha, estoura o timeout (90 s, com 2 tentativas) ou devolve algo fora do schema, a saída vira vazia e o fluxo segue por um caminho seguro:
@@ -76,7 +87,7 @@ Os modelos ficam nas variáveis `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OP
 | `agents` | 8000 | Workflow do incidente (Google ADK) e canal de aprovação |
 | `conhecimento` | 8010 | Trechos das bulas no Qdrant e fatores de perda |
 | `erp-mcp` | 8030 | Servidor MCP sobre o mini-ERP (talhões, OS, máquinas, estoque) |
-| `painel` | 8080 | Ordens de serviço ao vivo, linha do tempo, aprovação e "Simular chuva" |
+| `painel` | 8080 | Ordens de serviço ao vivo, linha do tempo, "Simular chuva", agenda, perda evitada e relatórios de aplicação |
 | `postgres`, `qdrant` | 5432, 6333 | ERP, estado dos agentes e base vetorial |
 
 ## Executar
@@ -87,6 +98,12 @@ docker compose up -d --build
 ```
 
 Abra `http://localhost:8080` e clique em Simular chuva para disparar o cenário de 80 mm.
+
+Banco criado antes da migration `020_decisao.sql`? Aplique-a sem apagar os dados (ela é idempotente):
+
+```bash
+docker compose exec -T postgres psql -U terramind -d terramind < db/migrations/020_decisao.sql
+```
 
 As datas do seed contam a partir da criação do banco. Para recomeçar a demo do zero, rode `docker compose down -v && docker compose up -d --build`.
 

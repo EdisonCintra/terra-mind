@@ -130,6 +130,44 @@ class ViolacaoOs(BaseModel):
         return self.sentido or SENTIDO_PADRAO.get(self.parametro or "", "maximo")
 
 
+class LimiteProduto(BaseModel):
+    """Limite de aplicação de um produto (contrato 26), usado antes de existir incidente (G2 e G3).
+
+    Vem de `conhecimento.limites_produto` (lido da bula, com trecho e página) ou, quando a bula não foi
+    lida ou não traz o parâmetro, da referência genérica (`generico=True`, sem página). Tem os mesmos
+    campos que as janelas leem de `ViolacaoOs`: `parametro`, `limite`, `janela_h` e `sentido_efetivo`.
+    """
+
+    parametro: Parametro
+    sentido: Sentido | None = None
+    limite: float
+    unidade: str | None = None
+    janela_h: float | None = Field(None, gt=0, le=120)
+    trecho: str | None = None
+    fonte_doc: str | None = None
+    pagina: int | None = None
+    generico: bool = False
+
+    @model_validator(mode="after")
+    def _confere(self) -> Self:
+        minimo, maximo = FAIXAS[self.parametro]
+        if not minimo <= self.limite <= maximo:
+            raise ValueError(f"limite {self.limite} fora da faixa de {self.parametro} ({minimo}..{maximo})")
+        if self.parametro == "inversao" and (self.limite != 0 or self.sentido_efetivo != "maximo"):
+            raise ValueError("inversão térmica só tem o limite 0 (deve ser evitada)")
+        if not self.generico and (not self.trecho or not self.fonte_doc or self.pagina is None):
+            raise ValueError("limite de bula sem trecho, fonte ou página")
+        return self
+
+    @property
+    def sentido_efetivo(self) -> Sentido:
+        return self.sentido or SENTIDO_PADRAO.get(self.parametro, "maximo")
+
+    @property
+    def chave(self) -> tuple[str, str]:
+        return self.parametro, self.sentido_efetivo
+
+
 class AvaliacaoRisco(BaseModel):
     violacoes: list[ViolacaoOs]
 
