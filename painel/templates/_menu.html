@@ -2,4 +2,12 @@
   {% for caminho, rotulo in [("/os", "Visão geral"), ("/agenda", "Agenda"), ("/perda", "Perda evitada"), ("/relatorios", "Relatórios"), ("/bula", "Pergunte à bula")] %}
   <a href="{{ caminho }}"{% if request.url.path == caminho %} class="ativa" aria-current="page"{% endif %}>{{ rotulo }}</a>
   {% endfor %}
+  {# F2: a fazenda escolhida filtra todas as telas (cookie `fazenda`). O E1 troca isto pelo seletor do design novo. #}
+  <select id="seletor-fazenda" class="seletor-fazenda" aria-label="Fazenda"
+          onchange="location.href='/fazenda/' + this.value + '?volta=' + encodeURIComponent(location.pathname)">
+    <option value="0"{% if not request.cookies.get('fazenda') %} selected{% endif %}>Todas as fazendas</option>
+    {% for f in fazendas() %}
+    <option value="{{ f.id }}"{% if request.cookies.get('fazenda') == f.id|string %} selected{% endif %}>{{ f.nome }}{% if f.demo %} (demo){% endif %}</option>
+    {% endfor %}
+  </select>
 </nav>

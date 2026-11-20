@@ -16,7 +16,17 @@ FUSO = ZoneInfo("America/Sao_Paulo")  # contrato 12
 CITACAO = re.compile(r"\(fonte:\s*(.+?),\s*p\.\s*(\d+)\)")
 
 
-def listar_ordens() -> list[dict]:
+def listar_fazendas() -> list[dict]:
+    """Fazendas para o seletor do painel (contrato 20), com o nome da organização."""
+    with conectar() as conn:
+        return conn.execute(
+            "SELECT f.id, f.nome, f.demo, o.nome AS organizacao FROM erp.fazendas f"
+            " JOIN erp.organizacoes o ON o.id = f.organizacao_id ORDER BY f.demo, f.nome"
+        ).fetchall()
+
+
+def listar_ordens(fazenda_id: int | None = None) -> list[dict]:
+    """Todas as leituras do painel aceitam `fazenda_id` (contrato 20); sem ele, todas as fazendas."""
     with conectar() as conn:
         return conn.execute(
             """
@@ -27,20 +37,23 @@ def listar_ordens() -> list[dict]:
             LEFT JOIN erp.insumos i ON i.id = os.insumo_id
             LEFT JOIN erp.maquinas m ON m.id = os.maquina_id
             LEFT JOIN erp.operadores o ON o.id = os.operador_id
+            WHERE (%(faz)s::int IS NULL OR os.fazenda_id = %(faz)s)
             ORDER BY os.inicio_previsto, os.id
-            """
+            """,
+            {"faz": fazenda_id},
         ).fetchall()
 
 
-def listar_incidentes(limite: int = 8) -> list[dict]:
+def listar_incidentes(limite: int = 8, fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             """
             SELECT i.id, i.status, i.criado_em, t.nome AS talhao
             FROM agente.incidentes i JOIN erp.talhoes t ON t.id = i.talhao_id
-            ORDER BY i.id DESC LIMIT %s
+            WHERE (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
+            ORDER BY i.id DESC LIMIT %(limite)s
             """,
-            (limite,),
+            {"faz": fazenda_id, "limite": limite},
         ).fetchall()
 
 
@@ -53,7 +66,7 @@ def auditoria_do_incidente(incidente_id: int) -> list[dict]:
         ).fetchall()
 
 
-def planos_pendentes() -> list[dict]:
+def planos_pendentes(fazenda_id: int | None = None) -> list[dict]:
     """Planos sem resposta (inclui os escalonados: a sessão segue pausada)."""
     with conectar() as conn:
         return conn.execute(
@@ -64,21 +77,27 @@ def planos_pendentes() -> list[dict]:
             FROM agente.planos p
             JOIN agente.incidentes i ON i.id = p.incidente_id
             JOIN erp.talhoes t ON t.id = i.talhao_id
-            WHERE p.respondido_em IS NULL
+            WHERE p.respondido_em IS NULL AND (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
             ORDER BY p.criado_em, p.id
-            """
+            """,
+            {"faz": fazenda_id},
         ).fetchall()
 
 
-def listar_produtos() -> list[str]:
+def listar_produtos(fazenda_id: int | None = None) -> list[str]:
     """Produtos cadastrados no ERP, para o Pergunte à bula (contrato 1: mesmo nome da bula)."""
     with conectar() as conn:
         return [
-            linha["produto"] for linha in conn.execute("SELECT produto FROM erp.insumos ORDER BY produto")
+            linha["produto"]
+            for linha in conn.execute(
+                "SELECT DISTINCT produto FROM erp.insumos"
+                " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY produto",
+                {"faz": fazenda_id},
+            )
         ]
 
 
-def incidentes_decisao_manual() -> list[dict]:
+def incidentes_decisao_manual(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             """
@@ -88,8 +107,10 @@ def incidentes_decisao_manual() -> list[dict]:
                     ORDER BY a.id DESC LIMIT 1) AS alerta
             FROM agente.incidentes i JOIN erp.talhoes t ON t.id = i.talhao_id
             WHERE i.status = 'aguardando_decisao_manual'
+              AND (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
             ORDER BY i.id
-            """
+            """,
+            {"faz": fazenda_id},
         ).fetchall()
 
 
@@ -180,7 +201,9 @@ def inicio_da_safra(hoje: date) -> date:
     return date(hoje.year if hoje.month >= 7 else hoje.year - 1, 7, 1)
 
 
-def perda_evitada(inicio: date, fim: date, incluir_replay: bool = False) -> dict:
+def perda_evitada(
+    inicio: date, fim: date, incluir_replay: bool = False, fazenda_id: int | None = None
+) -> dict:
     """Números do dashboard, todos de `agente.impactos` e `agente.planos` (nada é somado no navegador).
 
     Incidente de replay fica de fora (contrato 27), a não ser no modo demonstração.
@@ -191,13 +214,16 @@ def perda_evitada(inicio: date, fim: date, incluir_replay: bool = False) -> dict
         JOIN erp.talhoes t ON t.id = im.talhao_id
         WHERE im.criado_em >= %(inicio)s AND im.criado_em < %(fim)s::date + 1
           AND (%(replay)s OR i.origem = 'live')
+          AND (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
     """
     planos = """
         FROM agente.planos p JOIN agente.incidentes i ON i.id = p.incidente_id
+        JOIN erp.talhoes t ON t.id = i.talhao_id
         WHERE p.criado_em >= %(inicio)s AND p.criado_em < %(fim)s::date + 1
           AND (%(replay)s OR i.origem = 'live')
+          AND (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
     """
-    params = {"inicio": inicio, "fim": fim, "replay": incluir_replay}
+    params = {"inicio": inicio, "fim": fim, "replay": incluir_replay, "faz": fazenda_id}
     with conectar() as conn:
         situacoes = conn.execute(
             "SELECT im.situacao, count(*) AS os, COALESCE(sum(im.perda_rs), 0) AS perda_rs,"
@@ -235,12 +261,18 @@ def perda_evitada(inicio: date, fim: date, incluir_replay: bool = False) -> dict
             params,
         ).fetchone()
         manuais = conn.execute(
-            "SELECT count(*) AS n FROM agente.incidentes i WHERE i.status = 'aguardando_decisao_manual'"
+            "SELECT count(*) AS n FROM agente.incidentes i JOIN erp.talhoes t ON t.id = i.talhao_id"
+            " WHERE i.status = 'aguardando_decisao_manual'"
             " AND i.criado_em >= %(inicio)s AND i.criado_em < %(fim)s::date + 1"
-            " AND (%(replay)s OR i.origem = 'live')",
+            " AND (%(replay)s OR i.origem = 'live')"
+            " AND (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)",
             params,
         ).fetchone()
-        area = conn.execute("SELECT COALESCE(sum(area_ha), 0) AS ha FROM erp.talhoes").fetchone()
+        area = conn.execute(
+            "SELECT COALESCE(sum(area_ha), 0) AS ha FROM erp.talhoes"
+            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
+            params,
+        ).fetchone()
     por_situacao = {s["situacao"]: s for s in situacoes}
     evitada = por_situacao.get("evitada") or {"os": 0, "perda_rs": 0, "sem_fator": 0, "estimativa": False}
     total = float(evitada["perda_rs"])
@@ -311,30 +343,41 @@ def _com_barras(linhas: list[dict]) -> list[dict]:
 
 
 # --- G2 e G3: agenda e criação de OS ----------------------------------------------------------
-def listar_insumos() -> list[dict]:
+def listar_insumos(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
-            "SELECT id, produto, tipo, unidade, estoque FROM erp.insumos ORDER BY produto"
+            "SELECT id, fazenda_id, produto, tipo, unidade, estoque FROM erp.insumos"
+            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY produto, id",
+            {"faz": fazenda_id},
         ).fetchall()
 
 
-def listar_talhoes() -> list[dict]:
+def listar_talhoes(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
-        return conn.execute("SELECT id, nome, area_ha, cultura FROM erp.talhoes ORDER BY id").fetchall()
+        return conn.execute(
+            "SELECT id, fazenda_id, nome, area_ha, cultura FROM erp.talhoes"
+            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY id",
+            {"faz": fazenda_id},
+        ).fetchall()
 
 
-def maquinas_livres(inicio: datetime, fim: datetime) -> list[dict]:
-    """Pulverizadores livres no intervalo, pela mesma regra do MCP (`disponibilidade_maquinas`)."""
-    return leitura.disponibilidade_maquinas(inicio, fim, "pulverizador")
+def maquinas_livres(inicio: datetime, fim: datetime, talhao_id: int | None = None) -> list[dict]:
+    """Pulverizadores livres no intervalo, pela mesma regra do MCP (`disponibilidade_maquinas`):
+    com o `talhao_id`, só os da fazenda do talhão."""
+    return leitura.disponibilidade_maquinas(inicio, fim, "pulverizador", talhao_id)
 
 
-def listar_operadores() -> list[dict]:
+def listar_operadores(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
-        return conn.execute("SELECT id, nome FROM erp.operadores ORDER BY nome").fetchall()
+        return conn.execute(
+            "SELECT id, fazenda_id, nome FROM erp.operadores"
+            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY nome",
+            {"faz": fazenda_id},
+        ).fetchall()
 
 
 # --- G7: conclusão da OS e relatórios ---------------------------------------------------------
-def ordens_a_concluir() -> list[dict]:
+def ordens_a_concluir(fazenda_id: int | None = None) -> list[dict]:
     """OS que podem ser concluídas: agendadas ou reagendadas, da mais próxima para a mais distante."""
     with conectar() as conn:
         return conn.execute(
@@ -347,8 +390,10 @@ def ordens_a_concluir() -> list[dict]:
             LEFT JOIN erp.maquinas m ON m.id = os.maquina_id
             LEFT JOIN erp.operadores o ON o.id = os.operador_id
             WHERE os.status IN ('agendada', 'reagendada')
+              AND (%(faz)s::int IS NULL OR os.fazenda_id = %(faz)s)
             ORDER BY os.inicio_previsto, os.id
-            """
+            """,
+            {"faz": fazenda_id},
         ).fetchall()
 
 
@@ -356,7 +401,7 @@ def ordem(os_id: int) -> dict | None:
     return next((o for o in ordens_a_concluir() if o["id"] == os_id), None)
 
 
-def listar_relatorios() -> list[dict]:
+def listar_relatorios(fazenda_id: int | None = None) -> list[dict]:
     """A última versão do relatório de cada OS executada (a OS sem relatório aparece para gerar)."""
     with conectar() as conn:
         return conn.execute(
@@ -371,8 +416,10 @@ def listar_relatorios() -> list[dict]:
                 SELECT id, versao, gerado_em, conforme, sha256 FROM agente.relatorios_aplicacao
                 WHERE os_id = os.id ORDER BY versao DESC LIMIT 1
             ) r ON true
+            WHERE (%(faz)s::int IS NULL OR os.fazenda_id = %(faz)s)
             ORDER BY e.fim_real DESC, os.id DESC
-            """
+            """,
+            {"faz": fazenda_id},
         ).fetchall()
 
 

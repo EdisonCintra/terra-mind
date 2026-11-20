@@ -99,12 +99,29 @@ docker compose up -d --build
 
 Abra `http://localhost:8080` e clique em Simular chuva para disparar o cenário de 80 mm.
 
-Banco criado antes da migration `020_decisao.sql`? Aplique-a sem apagar os dados (ela é idempotente):
+### Migrations
+
+O serviço `migrar` roda a cada `docker compose up` e aplica só as migrations novas de `db/migrations/`,
+registrando as aplicadas em `public.migracoes_aplicadas`. Cadastros e incidentes não são apagados:
+`docker compose down -v` só é preciso para recomeçar a demo do zero (as datas do seed contam a partir da
+criação do banco).
 
 ```bash
-docker compose exec -T postgres psql -U terramind -d terramind < db/migrations/020_decisao.sql
+docker compose run --rm migrar                # aplica o que falta (também roda sozinho na subida)
+docker compose run --rm migrar python -m db.migrar --listar   # aplicadas e pendentes
 ```
 
-As datas do seed contam a partir da criação do banco. Para recomeçar a demo do zero, rode `docker compose down -v && docker compose up -d --build`.
+Banco criado antes do runner (sem a tabela de registro) é adotado sozinho: o que já estava lá é só
+registrado e o que faltava (ex.: `003_fazendas.sql`, `020_decisao.sql`) é aplicado. Migration já aplicada
+não se edita: a correção vai numa migration nova. Faixas: Felipe `003`–`009` e seed `9xx`, Edison
+`011`–`019`, Gustavo `020`–`029`.
+
+### Fazendas
+
+Organização > fazenda > talhões, máquinas, operadores, insumos e OS (`fazenda_id` em todos). O seed traz
+a "Fazenda Exemplo" e a "Fazenda Demo" (organizações diferentes; a Demo é onde o replay roda). Cada
+fazenda tem seus gerentes em `erp.gerentes`: o canal manda cada mensagem ao gerente da fazenda do
+incidente. `GERENTE_CHAT_ID` é só o gerente padrão, para a fazenda sem gerente com chat. O painel filtra
+tudo pela fazenda escolhida no menu (cookie `fazenda`).
 
 Mais detalhes: [agents/README.md](agents/README.md) · [docs/contratos.md](docs/contratos.md) · [docs/plans/](docs/plans/)

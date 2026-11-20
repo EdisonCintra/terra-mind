@@ -220,3 +220,6 @@ button.sugestao small { font-weight: 400; }
   .pagina { padding-inline: 1rem; }
   .dia { grid-template-columns: 4.5rem 2.5rem minmax(0, 1fr); }
 }
+
+/* F2: seletor de fazenda no menu (o E1 troca pelo design novo) */
+.seletor-fazenda { font: inherit; font-size: .82rem; color: var(--tinta); background: transparent; border: 1px solid var(--suave); border-radius: .4rem; padding: .15rem .4rem; }

@@ -82,8 +82,8 @@ def test_checks_erp_recusam_fertilizante_adubacao_e_status_invalido(conn):
     with pytest.raises(CheckViolation):
         with conn.transaction():
             conn.execute(
-                "INSERT INTO erp.insumos (produto, tipo, unidade, preco_unitario, estoque)"
-                " VALUES ('Ureia', 'fertilizante', 'kg', 3.50, 1000)"
+                "INSERT INTO erp.insumos (fazenda_id, produto, tipo, unidade, preco_unitario, estoque)"
+                " VALUES (1, 'Ureia', 'fertilizante', 'kg', 3.50, 1000)"
             )
 
     with pytest.raises(CheckViolation):

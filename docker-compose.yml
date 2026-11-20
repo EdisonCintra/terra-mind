@@ -11,12 +11,25 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U terramind -d terramind"]
       interval: 3s
       timeout: 3s
       retries: 20
+
+  # F2: aplica só as migrations novas a cada subida e registra as aplicadas (`python -m db.migrar`).
+  # Sem `down -v`: o que foi cadastrado fica. O `./db` montado dispensa rebuild ao criar uma migration.
+  migrar:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://terramind:terramind@postgres:5432/terramind
+    volumes:
+      - ./db:/app/db:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   erp-mcp:
     build:
@@ -30,8 +43,8 @@ services:
     ports:
       - "8030:8030"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrar:
+        condition: service_completed_successfully
 
   painel:
     build:
@@ -47,8 +60,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrar:
+        condition: service_completed_successfully
 
   qdrant:
     image: qdrant/qdrant
@@ -73,8 +86,8 @@ services:
       DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
       QDRANT_URL: http://qdrant:6333
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrar:
+        condition: service_completed_successfully
       qdrant:
         condition: service_healthy
 
@@ -103,8 +116,8 @@ services:
     ports:
       - "8020:8020"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrar:
+        condition: service_completed_successfully
       agents:
         condition: service_started
 
@@ -122,8 +135,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrar:
+        condition: service_completed_successfully
       erp-mcp:
         condition: service_started
       conhecimento:

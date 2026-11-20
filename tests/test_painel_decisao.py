@@ -85,6 +85,7 @@ def test_retorno_sobre_a_assinatura_so_com_o_preco_configurado(cliente, monkeypa
     impacto(novo_incidente("encerrado"), 1, 4110.00)
     assert "Retorno na safra" not in cliente.get("/perda").text
     monkeypatch.setenv("PRECO_HA_SAFRA", "10")
+    cliente.cookies.set("fazenda", "1")  # a assinatura é por fazenda: sem escolher, somaria a Demo também
     r = cliente.get("/perda")  # 205,5 ha × R$ 10 = R$ 2.055,00 de assinatura
     assert "Retorno na safra" in r.text and "2,0×" in r.text and "R$ 2.055,00" in r.text
 

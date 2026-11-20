@@ -91,7 +91,7 @@ def criar_decisao_manual(deps: Dependencias):
         await deps.repo.mudar_status(incidente_id, "aguardando_decisao_manual", de=ABERTOS)
         await situar_impactos(deps, ctx, "decisao_manual", de={"suspensa"})
         texto = texto_decisao_manual(ctx.state)
-        await alertar(deps, texto)
+        await alertar(deps, ctx, texto)
         await auditar(
             deps,
             ctx,

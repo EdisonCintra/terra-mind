@@ -105,7 +105,7 @@ uv run adk run agents/agentes/supervisor      # um agente sozinho
 | `MODEL_AVALIADOR`, `MODEL_AGRONOMICO`, `MODEL_OPERACIONAL`, `MODEL_SUPERVISOR` | `openai/gpt-6-luna` | Formato `openai/<modelo>`; trocar um agente por vez se precisar de mais qualidade |
 | `REASONING_EFFORT` | `low` | Raciocínio dos quatro agentes. O `gpt-6-luna` não aceita `minimal`; `none` desliga. Vazio = padrão do modelo |
 | `CHANNEL` | `painel` | `telegram` ou `painel` |
-| `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID` | — | Lidas pelo `channels` do Felipe |
+| `TELEGRAM_BOT_TOKEN`, `GERENTE_CHAT_ID` | — | Lidas pelo `channels` do Felipe (o gerente de cada fazenda vem de `erp.gerentes`; `GERENTE_CHAT_ID` é o padrão) |
 | `APPROVAL_TIMEOUT_MIN` | `30` | Escalonamento de plano sem resposta (uma vez) |
 | `MAX_REPLANEJAMENTOS`, `MAX_VOLTAS_VALIDADOR` | `2`, `2` | Limites do fluxo |
 | `TIMEOUT_LLM_S`, `TENTATIVAS_LLM` | `90`, `2` | Timeout e novas tentativas de cada chamada à OpenAI (no cliente LiteLLM) |

@@ -39,6 +39,16 @@
 
 **Pronto quando:** duas fazendas de organizações diferentes rodam juntas, cada incidente chega só ao gerente da fazenda certa, e uma migration nova sobe sem apagar os dados.
 
+**Status: concluído em 19/11/2026** (branch `feat/f2-fazendas-migrations`).
+
+- Migration `003_fazendas.sql`: `erp.organizacoes`, `erp.fazendas`, `erp.gerentes` e `fazenda_id` nas cinco tabelas. Banco com dados é adotado sem perda (tudo vira "Fazenda Exemplo"). Gatilho no banco impede OS com talhão, máquina, operador ou insumo de fazendas diferentes. `insumos.produto` passou a ser único por fazenda.
+- Seed: duas organizações (Exemplo e Demo), duas fazendas e um gerente por fazenda. A Fazenda Demo (`demo = true`) tem 1 talhão, 1 máquina, 1 operador e o Abacus HC; ainda sem OS (o E2 decide o que o replay precisa).
+- Runner `python -m db.migrar` e serviço `migrar` no compose (os demais serviços esperam por ele); registro em `public.migracoes_aplicadas`; banco antigo é adotado. O `initdb` deixou de aplicar os SQL.
+- MCP: `disponibilidade_maquinas` e `listar_operadores` recebem `talhao_id` e filtram pela fazenda dele; `listar_talhoes(fazenda_id)` e `listar_os(fazenda_id)`; `alocar_maquina` recusa máquina de outra fazenda. Os agentes passam o `talhao_id`; `GET /agenda?fazenda_id=` filtra.
+- Canal: cada mensagem vai aos gerentes ativos da fazenda do incidente (`channels/destinos.py`). `GERENTE_CHAT_ID` virou o gerente padrão (fallback); sem nenhum destino o canal falha alto (`SemDestino`). Os alertas do `agents` agora levam o `incidente_id`.
+- Painel: todas as leituras filtram por `fazenda_id`; seletor provisório no menu (cookie `fazenda`; o E1 troca pelo design novo).
+- Fora desta entrega: Row Level Security (segunda camada, "se der tempo") e o isolamento por organização por usuário, que depende do login do F3 (hoje as leituras recebem a fazenda; quem restringe as fazendas do usuário é o F3).
+
 ### F3 · Login e perfis (4)
 
 - Usuários com senha em hash (argon2 ou bcrypt), organização, fazendas, papel e contato no canal (chat do Telegram ou telefone do WhatsApp). O gerente cadastra os usuários da fazenda.

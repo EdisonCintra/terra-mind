@@ -64,6 +64,23 @@ DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 templates.env.filters.update(hora=_hora, hms=_hms, dia=_dia)
 templates.env.globals.update(STATUS_OS=STATUS_OS, STATUS_INCIDENTE=STATUS_INCIDENTE)
 
+# --- Fazenda escolhida (F2, contrato 20) ------------------------------------------------------
+# Fica num cookie: as telas atualizadas pelo HTMX (a cada 2 s) o mandam sozinhas. Sem cookie, todas as
+# fazendas. Quando o F3 trouxer o login, o seletor passa a listar só as fazendas do usuário.
+COOKIE_FAZENDA = "fazenda"
+
+
+def _fazenda(request: Request) -> int | None:
+    valor = request.cookies.get(COOKIE_FAZENDA, "")
+    return int(valor) if valor.isdecimal() else None
+
+
+def _fazendas_do_seletor() -> list[dict]:
+    return dados.listar_fazendas()
+
+
+templates.env.globals["fazendas"] = _fazendas_do_seletor
+
 
 def cliente_http() -> httpx.Client:
     """Cliente para o `agents` e o Monitor (os testes trocam esta função)."""
@@ -84,29 +101,43 @@ def raiz() -> RedirectResponse:
     return RedirectResponse("/os")
 
 
+@app.get("/fazenda/{fazenda_id}", include_in_schema=False)
+def escolher_fazenda(fazenda_id: int, volta: str = "/os") -> RedirectResponse:
+    """Guarda a fazenda escolhida (0 = todas) e volta para a tela de onde veio."""
+    destino = volta if volta.startswith("/") and not volta.startswith("//") else "/os"
+    resposta = RedirectResponse(destino, status_code=303)
+    if fazenda_id > 0:
+        resposta.set_cookie(COOKIE_FAZENDA, str(fazenda_id), max_age=60 * 60 * 24 * 365, samesite="lax")
+    else:
+        resposta.delete_cookie(COOKIE_FAZENDA)
+    return resposta
+
+
 # --- Tela 1: ordens de serviço ---------------------------------------------------------------
 @app.get("/os", response_class=HTMLResponse)
 def tela_os(request: Request):
-    return templates.TemplateResponse(request, "os.html", {"ordens": dados.listar_ordens()})
+    return templates.TemplateResponse(request, "os.html", {"ordens": dados.listar_ordens(_fazenda(request))})
 
 
 @app.get("/parcial/os", response_class=HTMLResponse)
 def parcial_os(request: Request):
     """Só as `<tr>` da tabela: o HTMX troca o corpo da tabela a cada 2 s."""
-    return templates.TemplateResponse(request, "_linhas_os.html", {"ordens": dados.listar_ordens()})
+    return templates.TemplateResponse(
+        request, "_linhas_os.html", {"ordens": dados.listar_ordens(_fazenda(request))}
+    )
 
 
 @app.get("/parcial/alertas", response_class=HTMLResponse)
 def parcial_alertas(request: Request):
     """Faixa vermelha para incidentes em `aguardando_decisao_manual` (telas 1 e 3)."""
     return templates.TemplateResponse(
-        request, "_alertas.html", {"manuais": dados.incidentes_decisao_manual()}
+        request, "_alertas.html", {"manuais": dados.incidentes_decisao_manual(_fazenda(request))}
     )
 
 
 # --- Tela 2: linha do tempo ------------------------------------------------------------------
-def _contexto_timeline(incidente: int | None) -> dict:
-    incidentes = dados.listar_incidentes()
+def _contexto_timeline(incidente: int | None, fazenda_id: int | None = None) -> dict:
+    incidentes = dados.listar_incidentes(fazenda_id=fazenda_id)
     escolhido = incidente if incidente is not None else (incidentes[0]["id"] if incidentes else None)
     eventos = []
     for a in dados.auditoria_do_incidente(escolhido) if escolhido is not None else []:
@@ -128,12 +159,14 @@ def _agora() -> datetime:
 
 @app.get("/timeline", response_class=HTMLResponse)
 def tela_timeline(request: Request, incidente: int | None = None):
-    return templates.TemplateResponse(request, "timeline.html", _contexto_timeline(incidente))
+    contexto = _contexto_timeline(incidente, _fazenda(request))
+    return templates.TemplateResponse(request, "timeline.html", contexto)
 
 
 @app.get("/parcial/timeline", response_class=HTMLResponse)
 def parcial_timeline(request: Request, incidente: int | None = None):
-    return templates.TemplateResponse(request, "_eventos.html", _contexto_timeline(incidente))
+    contexto = _contexto_timeline(incidente, _fazenda(request))
+    return templates.TemplateResponse(request, "_eventos.html", contexto)
 
 
 # --- Tela 3: aprovação pendente --------------------------------------------------------------
@@ -146,7 +179,8 @@ def tela_aprovacao(request: Request):
 def parcial_pendentes(request: Request):
     agora = _agora()
     planos = [
-        {**p, "atraso": dados.linhas_atraso(p["custos_atraso"], agora)} for p in dados.planos_pendentes()
+        {**p, "atraso": dados.linhas_atraso(p["custos_atraso"], agora)}
+        for p in dados.planos_pendentes(_fazenda(request))
     ]
     return templates.TemplateResponse(request, "_pendentes.html", {"planos": planos})
 
@@ -181,7 +215,8 @@ TIMEOUT_BULA_S = 150  # o agente pode buscar até 3 vezes e o LLM tem 90 s por c
 
 @app.get("/bula", response_class=HTMLResponse)
 def tela_bula(request: Request):
-    return templates.TemplateResponse(request, "bula.html", {"produtos": dados.listar_produtos()})
+    produtos = dados.listar_produtos(_fazenda(request))
+    return templates.TemplateResponse(request, "bula.html", {"produtos": produtos})
 
 
 @app.post("/bula/perguntar", response_class=HTMLResponse)
@@ -271,7 +306,7 @@ def tela_perda(request: Request, inicio: date | None = None, fim: date | None = 
     hoje = _agora().date()
     inicio = inicio or dados.inicio_da_safra(hoje)
     fim = fim or hoje
-    contexto = {"p": dados.perda_evitada(inicio, fim, replay), "replay": replay}
+    contexto = {"p": dados.perda_evitada(inicio, fim, replay, _fazenda(request)), "replay": replay}
     return templates.TemplateResponse(request, "perda.html", contexto)
 
 
@@ -316,10 +351,11 @@ def _motivos(dia: dict) -> list[str]:
 
 @app.get("/agenda", response_class=HTMLResponse)
 def tela_agenda(request: Request):
+    fazenda = _fazenda(request)
     contexto = {
-        "insumos": dados.listar_insumos(),
-        "talhoes": dados.listar_talhoes(),
-        "operadores": dados.listar_operadores(),
+        "insumos": dados.listar_insumos(fazenda),
+        "talhoes": dados.listar_talhoes(fazenda),
+        "operadores": dados.listar_operadores(fazenda),
         "horas": list(HORAS_AGENDA),
     }
     return templates.TemplateResponse(request, "agenda.html", contexto)
@@ -328,6 +364,8 @@ def tela_agenda(request: Request):
 @app.get("/parcial/agenda", response_class=HTMLResponse)
 def parcial_agenda(request: Request, insumo_id: int, duracao_horas: float = 8, dias: int = 7):
     params = {"insumo_id": insumo_id, "duracao_horas": duracao_horas, "dias": dias}
+    if (fazenda := _fazenda(request)) is not None:
+        params["fazenda_id"] = fazenda  # o agents só devolve os talhões da fazenda do insumo
     agenda, falha = _agents("GET", "/agenda", params=params)
     if agenda:
         for talhao in agenda["talhoes"]:
@@ -384,7 +422,9 @@ def avaliar_janela(
     for s in avaliacao["sugestoes"]:
         s["valor"] = datetime.fromisoformat(s["inicio"]).astimezone(FUSO).strftime("%Y-%m-%dT%H:%M")
     livres = (
-        dados.maquinas_livres(quando, quando + timedelta(hours=duracao_horas)) if avaliacao["serve"] else []
+        dados.maquinas_livres(quando, quando + timedelta(hours=duracao_horas), talhao_id)
+        if avaliacao["serve"]
+        else []
     )
     return templates.TemplateResponse(request, "_janela.html", {"a": avaliacao, "maquinas": livres})
 
@@ -427,16 +467,19 @@ def _numero(texto: str) -> float | None:
 
 @app.get("/relatorios", response_class=HTMLResponse)
 def tela_relatorios(request: Request):
-    return templates.TemplateResponse(request, "relatorios.html", _contexto_relatorios())
+    return templates.TemplateResponse(request, "relatorios.html", _contexto_relatorios(_fazenda(request)))
 
 
 @app.get("/parcial/relatorios", response_class=HTMLResponse)
 def parcial_relatorios(request: Request):
-    return templates.TemplateResponse(request, "_relatorios.html", _contexto_relatorios())
+    return templates.TemplateResponse(request, "_relatorios.html", _contexto_relatorios(_fazenda(request)))
 
 
-def _contexto_relatorios() -> dict:
-    return {"abertas": dados.ordens_a_concluir(), "relatorios": dados.listar_relatorios()}
+def _contexto_relatorios(fazenda_id: int | None = None) -> dict:
+    return {
+        "abertas": dados.ordens_a_concluir(fazenda_id),
+        "relatorios": dados.listar_relatorios(fazenda_id),
+    }
 
 
 @app.get("/os/{os_id}/concluir", response_class=HTMLResponse)

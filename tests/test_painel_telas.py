@@ -23,11 +23,11 @@ def sql(consulta, params=()):
         return cur.fetchone() if cur.description else None
 
 
-def novo_incidente(status="aberto"):
+def novo_incidente(status="aberto", talhao_id=1):
     return sql(
         "INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status)"
-        " VALUES (1, '[]', '[]', %s) RETURNING id",
-        (status,),
+        " VALUES (%s, '[]', '[]', %s) RETURNING id",
+        (talhao_id, status),
     )[0]
 
 

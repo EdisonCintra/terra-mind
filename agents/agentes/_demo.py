@@ -36,8 +36,8 @@ INCIDENTE_DEMO = 1
 class CanalDoTerminal(FakeCanal):
     """Guarda as mensagens e as mostra no terminal do `adk web`."""
 
-    async def enviar_alerta(self, texto):
-        await super().enviar_alerta(texto)
+    async def enviar_alerta(self, texto, incidente_id=None):
+        await super().enviar_alerta(texto, incidente_id)
         logger.warning("[alerta ao gerente] %s", texto)
 
     async def pedir_aprovacao(self, incidente_id, plano_id, texto):

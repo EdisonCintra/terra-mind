@@ -47,7 +47,9 @@ class ContextoPlano:
 async def maquinas_livres(erp: ErpCliente, inicio: datetime, os: OsEmRisco) -> set[int]:
     """Máquinas livres durante a OS, só do tipo que a operação usa (quando ele é conhecido)."""
     duracao_h, tipo = os.duracao_horas, os.tipo_maquina
-    livres = await erp.disponibilidade_maquinas(inicio, inicio + timedelta(hours=duracao_h), tipo)
+    livres = await erp.disponibilidade_maquinas(
+        inicio, inicio + timedelta(hours=duracao_h), tipo, os.talhao_id
+    )
     return {int(m.get("id", m.get("maquina_id"))) for m in livres}
 
 

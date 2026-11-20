@@ -28,10 +28,10 @@ class ErpCliente(Protocol):
     async def detalhar_os(self, os_id: int) -> dict: ...
     async def consultar_talhao(self, talhao_id: int) -> dict: ...
     async def disponibilidade_maquinas(
-        self, inicio: datetime, fim: datetime, tipo: str | None = None
+        self, inicio: datetime, fim: datetime, tipo: str | None = None, talhao_id: int | None = None
     ) -> list[dict]: ...
-    async def listar_operadores(self) -> list[dict]: ...
-    async def listar_talhoes(self) -> list[dict]: ...
+    async def listar_operadores(self, talhao_id: int | None = None) -> list[dict]: ...
+    async def listar_talhoes(self, fazenda_id: int | None = None) -> list[dict]: ...
     async def consultar_insumo(self, insumo_id: int) -> dict: ...
     async def detalhar_execucao(self, os_id: int) -> dict: ...
     async def suspender_os(self, os_id: int, incidente_id: int, motivo: str) -> dict: ...
@@ -126,14 +126,17 @@ class ErpMcp:
     async def consultar_talhao(self, talhao_id):
         return await self._ler_item("consultar_talhao", talhao_id=talhao_id)
 
-    async def disponibilidade_maquinas(self, inicio, fim, tipo=None):
-        return await self._ler_lista("disponibilidade_maquinas", inicio=inicio, fim=fim, tipo=tipo)
+    async def disponibilidade_maquinas(self, inicio, fim, tipo=None, talhao_id=None):
+        # Contrato 20: com `talhao_id`, só máquinas da fazenda do talhão.
+        return await self._ler_lista(
+            "disponibilidade_maquinas", inicio=inicio, fim=fim, tipo=tipo, talhao_id=talhao_id
+        )
 
-    async def listar_operadores(self):
-        return await self._ler_lista("listar_operadores")
+    async def listar_operadores(self, talhao_id=None):
+        return await self._ler_lista("listar_operadores", talhao_id=talhao_id)
 
-    async def listar_talhoes(self):
-        return await self._ler_lista("listar_talhoes")
+    async def listar_talhoes(self, fazenda_id=None):
+        return await self._ler_lista("listar_talhoes", fazenda_id=fazenda_id)
 
     async def consultar_insumo(self, insumo_id):
         return await self._ler_item("consultar_insumo", insumo_id=insumo_id)

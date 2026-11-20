@@ -6,7 +6,7 @@ from typing import Any
 from erp_mcp.db import conectar, para_json
 
 _SQL_OS = """
-    SELECT os.id, os.talhao_id, os.status, os.tipo_operacao, os.insumo_id,
+    SELECT os.id, os.fazenda_id, os.talhao_id, os.status, os.tipo_operacao, os.insumo_id,
            i.produto, i.tipo AS tipo_insumo, os.dose_por_ha, i.unidade, i.preco_unitario,
            os.inicio_previsto, os.duracao_horas, os.maquina_id, m.tipo AS maquina_tipo,
            os.operador_id, t.nome AS talhao, t.area_ha
@@ -17,21 +17,40 @@ _SQL_OS = """
 """
 
 
-def listar_os(inicio: datetime, fim: datetime, talhao_id: int | None = None) -> list[dict[str, Any]]:
+def _fazenda_do_talhao(conn, talhao_id: int | None, fazenda_id: int | None) -> tuple[bool, int | None]:
+    """Resolve o recorte por fazenda (contrato 20): `fazenda_id` explícito ou a do `talhao_id`.
+
+    Devolve `(ok, fazenda)`. Sem nenhum dos dois, `(True, None)` = todas as fazendas. `ok = False`
+    quando o talhão não existe ou não é da `fazenda_id` pedida: quem lê não recebe nada de outra fazenda.
+    """
+    if talhao_id is None:
+        return True, fazenda_id
+    linha = conn.execute("SELECT fazenda_id FROM erp.talhoes WHERE id = %s", (talhao_id,)).fetchone()
+    if linha is None or (fazenda_id is not None and linha["fazenda_id"] != fazenda_id):
+        return False, None
+    return True, linha["fazenda_id"]
+
+
+def listar_os(
+    inicio: datetime, fim: datetime, talhao_id: int | None = None, fazenda_id: int | None = None
+) -> list[dict[str, Any]]:
     """Lista as ordens de serviço (OS) com início previsto entre `inicio` e `fim`.
 
-    Cada OS traz `id`, `talhao_id`, `talhao`, `area_ha`, `status`, `tipo_operacao`, `insumo_id`,
+    Cada OS traz `id`, `fazenda_id`, `talhao_id`, `talhao`, `area_ha`, `status`, `tipo_operacao`, `insumo_id`,
     `produto`, `tipo_insumo`, `dose_por_ha`, `unidade`, `preco_unitario`, `inicio_previsto`,
     `duracao_horas`, `maquina_id`, `maquina_tipo` e `operador_id`. Use `talhao_id` para filtrar
-    um talhão. Datas em ISO 8601 com fuso.
+    um talhão e `fazenda_id` para uma fazenda. Datas em ISO 8601 com fuso.
     """
     sql = (
         _SQL_OS
         + " WHERE os.inicio_previsto BETWEEN %s AND %s"
-        + " AND (%s::int IS NULL OR os.talhao_id = %s) ORDER BY os.inicio_previsto, os.id"
+        + " AND (%s::int IS NULL OR os.talhao_id = %s)"
+        + " AND (%s::int IS NULL OR os.fazenda_id = %s) ORDER BY os.inicio_previsto, os.id"
     )
     with conectar() as conn:
-        return para_json(conn.execute(sql, (inicio, fim, talhao_id, talhao_id)).fetchall())
+        return para_json(
+            conn.execute(sql, (inicio, fim, talhao_id, talhao_id, fazenda_id, fazenda_id)).fetchall()
+        )
 
 
 def detalhar_os(os_id: int) -> dict[str, Any]:
@@ -47,42 +66,63 @@ def detalhar_os(os_id: int) -> dict[str, Any]:
 
 
 def disponibilidade_maquinas(
-    inicio: datetime, fim: datetime, tipo: str | None = None
+    inicio: datetime,
+    fim: datetime,
+    tipo: str | None = None,
+    talhao_id: int | None = None,
+    fazenda_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Lista as máquinas livres no intervalo `inicio`–`fim`.
 
     Livre = `status = 'disponivel'` e sem OS `agendada` ou `reagendada` que se sobreponha ao
     intervalo (o fim de cada OS é `inicio_previsto + duracao_horas`). Use `tipo` (ex.:
-    'pulverizador') para filtrar. Cada máquina traz `id`, `nome`, `tipo` e `status`.
+    'pulverizador') para filtrar. Informe o `talhao_id` (ou a `fazenda_id`): só entram máquinas da
+    fazenda do talhão, nunca de outra fazenda. Cada máquina traz `id`, `fazenda_id`, `nome`, `tipo`
+    e `status`.
     """
     sql = """
-        SELECT m.id, m.nome, m.tipo, m.status
+        SELECT m.id, m.fazenda_id, m.nome, m.tipo, m.status
         FROM erp.maquinas m
         WHERE m.status = 'disponivel'
-          AND (%s::text IS NULL OR m.tipo = %s)
+          AND (%(faz)s::int IS NULL OR m.fazenda_id = %(faz)s)
+          AND (%(tipo)s::text IS NULL OR m.tipo = %(tipo)s)
           AND NOT EXISTS (
               SELECT 1 FROM erp.ordens_servico os
               WHERE os.maquina_id = m.id
                 AND os.status IN ('agendada', 'reagendada')
-                AND os.inicio_previsto < %s
-                AND %s < os.inicio_previsto + os.duracao_horas * interval '1 hour'
+                AND os.inicio_previsto < %(fim)s
+                AND %(ini)s < os.inicio_previsto + os.duracao_horas * interval '1 hour'
           )
         ORDER BY m.id
     """
     with conectar() as conn:
-        return para_json(conn.execute(sql, (tipo, tipo, fim, inicio)).fetchall())
+        ok, fazenda = _fazenda_do_talhao(conn, talhao_id, fazenda_id)
+        if not ok:
+            return []
+        params = {"faz": fazenda, "tipo": tipo, "fim": fim, "ini": inicio}
+        return para_json(conn.execute(sql, params).fetchall())
 
 
-def listar_operadores() -> list[dict[str, Any]]:
-    """Lista os operadores com `id`, `nome` e `telegram_chat_id` (para avisá-los pelo canal)."""
+def listar_operadores(talhao_id: int | None = None, fazenda_id: int | None = None) -> list[dict[str, Any]]:
+    """Lista os operadores com `id`, `fazenda_id`, `nome` e `telegram_chat_id` (para avisá-los pelo canal).
+
+    Informe o `talhao_id` (ou a `fazenda_id`): só entram operadores da fazenda do talhão.
+    """
     with conectar() as conn:
+        ok, fazenda = _fazenda_do_talhao(conn, talhao_id, fazenda_id)
+        if not ok:
+            return []
         return para_json(
-            conn.execute("SELECT id, nome, telegram_chat_id FROM erp.operadores ORDER BY id").fetchall()
+            conn.execute(
+                "SELECT id, fazenda_id, nome, telegram_chat_id FROM erp.operadores"
+                " WHERE (%s::int IS NULL OR fazenda_id = %s) ORDER BY id",
+                (fazenda, fazenda),
+            ).fetchall()
         )
 
 
 def consultar_talhao(talhao_id: int) -> dict[str, Any]:
-    """Devolve o talhão completo: `id`, `nome`, `area_ha`, `cultura`, `data_plantio`,
+    """Devolve o talhão completo: `id`, `fazenda_id`, `nome`, `area_ha`, `cultura`, `data_plantio`,
     `estagio_fenologico`, `lat`, `lon` e `tipo_solo`.
 
     Se o talhão não existir, responde `{"ok": false, "erro": "..."}`.
@@ -105,15 +145,23 @@ def leituras_solo(talhao_id: int, horas: int = 24) -> list[dict[str, Any]]:
         return para_json(conn.execute(sql, (talhao_id, horas)).fetchall())
 
 
-def listar_talhoes() -> list[dict[str, Any]]:
-    """Lista os talhões com `id`, `nome`, `area_ha`, `cultura`, `estagio_fenologico`, `lat` e `lon`."""
-    sql = "SELECT id, nome, area_ha, cultura, estagio_fenologico, lat, lon FROM erp.talhoes ORDER BY id"
+def listar_talhoes(fazenda_id: int | None = None) -> list[dict[str, Any]]:
+    """Lista os talhões com `id`, `fazenda_id`, `nome`, `area_ha`, `cultura`, `estagio_fenologico`,
+    `lat` e `lon`.
+
+    Use `fazenda_id` para listar só os de uma fazenda.
+    """
+    sql = (
+        "SELECT id, fazenda_id, nome, area_ha, cultura, estagio_fenologico, lat, lon FROM erp.talhoes"
+        " WHERE (%s::int IS NULL OR fazenda_id = %s) ORDER BY id"
+    )
     with conectar() as conn:
-        return para_json(conn.execute(sql).fetchall())
+        return para_json(conn.execute(sql, (fazenda_id, fazenda_id)).fetchall())
 
 
 def consultar_insumo(insumo_id: int) -> dict[str, Any]:
-    """Devolve o insumo: `id`, `produto`, `tipo`, `unidade`, `preco_unitario`, `estoque` e `bula_id`.
+    """Devolve o insumo: `id`, `fazenda_id`, `produto`, `tipo`, `unidade`, `preco_unitario`, `estoque`
+    e `bula_id`.
 
     Se o insumo não existir, responde `{"ok": false, "erro": "..."}`.
     """

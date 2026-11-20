@@ -165,12 +165,12 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
         dias: int = Query(7, ge=1, le=14),
         duracao_horas: float = Query(8, gt=0, le=24),
         talhao_id: int | None = None,
-        fazenda_id: int | None = None,  # contrato 20: aceito desde já; filtra quando o F2 criar a fazenda
+        fazenda_id: int | None = None,  # contrato 20: só os talhões desta fazenda (padrão: a do insumo)
     ) -> dict:
         """G2 (contrato 24): por talhão e por dia, as faixas boas e ruins para o produto, com o motivo."""
         try:
             resultado = await _servico(request, "agenda").semana(
-                insumo_id, inicio, dias, duracao_horas, talhao_id
+                insumo_id, inicio, dias, duracao_horas, talhao_id, fazenda_id
             )
         except NaoEncontrado as e:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e

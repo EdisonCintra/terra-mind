@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class Canal(Protocol):
-    async def enviar_alerta(self, texto: str) -> None: ...
+    async def enviar_alerta(self, texto: str, incidente_id: int | None = None) -> None: ...
     async def pedir_aprovacao(self, incidente_id: int, plano_id: int, texto: str) -> None: ...
     async def notificar_operador(self, chat_id: int, texto: str) -> None: ...
 
@@ -24,7 +24,7 @@ class Canal(Protocol):
 class CanalLog:
     """Canal sem envio: registra no log. Provisório enquanto o canal real não foi montado."""
 
-    async def enviar_alerta(self, texto):
+    async def enviar_alerta(self, texto, incidente_id=None):
         logger.warning("[alerta ao gerente] %s", texto)
 
     async def pedir_aprovacao(self, incidente_id, plano_id, texto):

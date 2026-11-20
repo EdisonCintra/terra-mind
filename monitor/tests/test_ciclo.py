@@ -124,9 +124,9 @@ def repo_pg(engine_pg):
 
     with engine_pg.begin() as conn:
         conn.execute(text("TRUNCATE agente.incidentes, erp.talhoes RESTART IDENTITY CASCADE"))
-        conn.execute(text("INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, "
+        conn.execute(text("INSERT INTO erp.talhoes (fazenda_id, nome, area_ha, cultura, data_plantio, "
                           "estagio_fenologico, lat, lon) "
-                          "VALUES ('T1', 120, 'milho', current_date, 'V6', -17.79, -50.92)"))
+                          "VALUES (1, 'T1', 120, 'milho', current_date, 'V6', -17.79, -50.92)"))
     return RepositorioMonitor(engine_pg)
 
 

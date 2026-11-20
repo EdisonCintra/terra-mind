@@ -32,13 +32,15 @@ def criar_os(
     fim = inicio + timedelta(hours=duracao_horas)
     with conectar() as conn:
         talhao = conn.execute(
-            "SELECT id, nome, area_ha FROM erp.talhoes WHERE id = %s", (talhao_id,)
+            "SELECT id, fazenda_id, nome, area_ha FROM erp.talhoes WHERE id = %s", (talhao_id,)
         ).fetchone()
         insumo = conn.execute(
-            "SELECT id, produto, estoque, unidade FROM erp.insumos WHERE id = %s", (insumo_id,)
+            "SELECT id, fazenda_id, produto, estoque, unidade FROM erp.insumos WHERE id = %s", (insumo_id,)
         ).fetchone()
         if talhao is None or insumo is None:
             return {"ok": False, "erro": "Talhão ou produto não encontrado."}
+        if insumo["fazenda_id"] != talhao["fazenda_id"]:
+            return {"ok": False, "erro": f"{insumo['produto']} não é do estoque da fazenda deste talhão."}
         necessario = float(talhao["area_ha"]) * dose_por_ha
         if float(insumo["estoque"]) < necessario:
             return {
@@ -48,10 +50,22 @@ def criar_os(
             }
         # A linha da máquina fica travada até o commit: duas OS criadas juntas não pegam a mesma.
         maquina = conn.execute(
-            "SELECT id, nome, tipo, status FROM erp.maquinas WHERE id = %s FOR UPDATE", (maquina_id,)
+            "SELECT id, fazenda_id, nome, tipo, status FROM erp.maquinas WHERE id = %s FOR UPDATE",
+            (maquina_id,),
         ).fetchone()
-        if maquina is None or maquina["tipo"] != TIPO_MAQUINA or maquina["status"] != "disponivel":
-            return {"ok": False, "erro": "Escolha um pulverizador disponível."}
+        if (
+            maquina is None
+            or maquina["tipo"] != TIPO_MAQUINA
+            or maquina["status"] != "disponivel"
+            or maquina["fazenda_id"] != talhao["fazenda_id"]
+        ):
+            return {"ok": False, "erro": "Escolha um pulverizador disponível desta fazenda."}
+        if operador_id is not None:
+            operador = conn.execute(
+                "SELECT fazenda_id FROM erp.operadores WHERE id = %s", (operador_id,)
+            ).fetchone()
+            if operador is None or operador["fazenda_id"] != talhao["fazenda_id"]:
+                return {"ok": False, "erro": "Escolha um operador desta fazenda."}
         ocupada = conn.execute(
             """
             SELECT id FROM erp.ordens_servico

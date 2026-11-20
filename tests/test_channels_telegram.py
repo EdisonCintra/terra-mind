@@ -111,11 +111,17 @@ async def test_conflict_de_polling_vira_mensagem_clara(caplog):
     assert "outro processo" in caplog.text and "TELEGRAM_BOT_TOKEN" in caplog.text
 
 
-def test_sem_token_ou_chat_id_o_erro_manda_usar_o_painel(monkeypatch):
+def test_sem_token_o_erro_manda_usar_o_painel(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
-    monkeypatch.setenv("GERENTE_CHAT_ID", "")
     with pytest.raises(RuntimeError, match="CHANNEL=painel"):
         criar_canal("telegram", AsyncMock())
+
+
+def test_gerente_padrao_e_opcional(monkeypatch):
+    """F2: o destino vem de `erp.gerentes`; `GERENTE_CHAT_ID` é só o padrão e pode ficar vazio."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TOKEN-DE-TESTE")
+    monkeypatch.setenv("GERENTE_CHAT_ID", "")
+    assert criar_canal("telegram", AsyncMock()).gerente_padrao is None
 
 
 # --- G4: pergunta livre à bula ------------------------------------------------------------------

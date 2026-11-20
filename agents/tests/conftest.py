@@ -37,9 +37,11 @@ async def pg_url(postgres_url):
         for arquivo in sorted(sem_o_seed):
             await conn.execute(arquivo.read_text(encoding="utf-8"))
         await conn.execute(
-            "INSERT INTO erp.talhoes"
-            " (id, nome, area_ha, cultura, data_plantio, estagio_fenologico, lat, lon)"
-            " VALUES (1, 'Talhão 1 - Sede', 120, 'milho', current_date - 30, 'V6', -17.79, -50.92)"
+            "INSERT INTO erp.organizacoes (id, nome) VALUES (1, 'Org Teste');"
+            " INSERT INTO erp.fazendas (id, organizacao_id, nome) VALUES (1, 1, 'Fazenda Teste');"
+            " INSERT INTO erp.talhoes"
+            " (id, fazenda_id, nome, area_ha, cultura, data_plantio, estagio_fenologico, lat, lon)"
+            " VALUES (1, 1, 'Talhão 1 - Sede', 120, 'milho', current_date - 30, 'V6', -17.79, -50.92)"
         )
     finally:
         await conn.close()

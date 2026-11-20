@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 MAX_REVALIDACOES = 1
 
 
-async def _chat_ids(deps: Dependencias) -> dict[int, int]:
+async def _chat_ids(deps: Dependencias, talhao_id: int | None = None) -> dict[int, int]:
+    """Chat de cada operador da fazenda do talhão (contrato 20: nunca de operador de outra fazenda)."""
     try:
-        operadores = await deps.erp.listar_operadores()
+        operadores = await deps.erp.listar_operadores(talhao_id)
     except ErpIndisponivel:
         return {}
     return {o["id"]: o["telegram_chat_id"] for o in operadores if o.get("telegram_chat_id")}
@@ -41,13 +42,14 @@ def criar_executor(deps: Dependencias):
                     veredito.motivos
                 )
                 await alertar(
-                    deps, f"A janela aprovada no plano {plano_id} não vale mais; preparando nova opção."
+                    deps, ctx, f"A janela aprovada no plano {plano_id} não vale mais; preparando nova opção."
                 )
                 return Event(route="revalidar")
             ctx.state["motivo_manual"] = {"codigo": "janela_invalida", "detalhe": "; ".join(veredito.motivos)}
             return Event(route="falhou")
 
-        chat_ids = await _chat_ids(deps)
+        talhao_id = next((o.talhao_id for o in contexto.os_por_id.values()), None)
+        chat_ids = await _chat_ids(deps, talhao_id)
         feitas: list[int] = []
         executados: list[str] = []  # cada escrita que deu certo, para o gerente saber o que já mudou
         reservou_estoque = False
@@ -97,7 +99,7 @@ def criar_executor(deps: Dependencias):
         await auditar(deps, ctx, "executor", "executar_plano", depois={"plano_id": plano_id, "os": feitas})
         await situar_impactos(deps, ctx, "evitada", plano_id=plano_id)  # G1: só agora a perda foi evitada
         estoque = " e estoque reservado" if reservou_estoque else ""
-        await alertar(deps, f"Plano {plano_id} executado: OS {ids(feitas)} remarcadas{estoque}.")
+        await alertar(deps, ctx, f"Plano {plano_id} executado: OS {ids(feitas)} remarcadas{estoque}.")
         ctx.state["motivo_encerramento"] = f"plano {plano_id} executado"
         return Event(route="ok")
 
