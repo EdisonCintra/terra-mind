@@ -48,8 +48,8 @@ async def test_iniciar_e_parar_existem_por_padrao():
 
 
 def test_criar_canal_recusa_nome_desconhecido():
-    with pytest.raises(ValueError, match="canal desconhecido: 'whatsapp'"):
-        criar_canal("whatsapp", lambda r: None)
+    with pytest.raises(ValueError, match="canal desconhecido: 'sms'"):
+        criar_canal("sms", lambda r: None)
 
 
 def test_criar_canal_entrega_o_ao_responder_a_implementacao(monkeypatch):

@@ -3,12 +3,14 @@ agenda e janelas (contrato 24), limites da bula (contrato 26) e relatório de ap
 
 import asyncio
 import contextlib
+import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from agents.agenda import AgendaIndisponivel, NaoEncontrado, PedidoJanela, ServicoAgenda
@@ -125,6 +127,40 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok"}
+
+    def canal_whatsapp(request: Request):
+        """O canal em uso, se for o WhatsApp (F4); com outro canal as rotas do webhook não existem."""
+        canal = getattr(request.app.state.servicos.orquestrador.deps, "canal", None)
+        if not hasattr(canal, "assinatura_valida"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "canal_whatsapp_inativo")
+        return canal
+
+    @app.get("/whatsapp/webhook", include_in_schema=False)
+    async def whatsapp_verificar(
+        request: Request,
+        modo: str = Query("", alias="hub.mode"),
+        token: str = Query("", alias="hub.verify_token"),
+        desafio: str = Query("", alias="hub.challenge"),
+    ) -> PlainTextResponse:
+        """Verificação da Meta ao cadastrar o webhook: devolve o `hub.challenge` se o token confere."""
+        resposta = canal_whatsapp(request).verificar(modo, token, desafio)
+        if resposta is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "token_invalido")
+        return PlainTextResponse(resposta)
+
+    @app.post("/whatsapp/webhook", include_in_schema=False)
+    async def whatsapp_receber(request: Request) -> dict:
+        """Mensagens e cliques do WhatsApp. Só vale com a assinatura da Meta; processa em segundo plano."""
+        canal = canal_whatsapp(request)
+        corpo = await request.body()
+        if not canal.assinatura_valida(corpo, request.headers.get("X-Hub-Signature-256")):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "assinatura_invalida")
+        try:
+            payload = json.loads(corpo)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "json_invalido") from e
+        canal.agendar(payload)
+        return {"status": "recebido"}
 
     @app.post("/incidentes/{incidente_id}/iniciar", status_code=status.HTTP_202_ACCEPTED)
     async def iniciar(incidente_id: int, request: Request) -> dict:

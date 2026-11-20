@@ -17,12 +17,16 @@ MAX_REVALIDACOES = 1
 
 
 async def _chat_ids(deps: Dependencias, talhao_id: int | None = None) -> dict[int, int]:
-    """Chat de cada operador da fazenda do talhão (contrato 20: nunca de operador de outra fazenda)."""
+    """Contato de cada operador da fazenda do talhão (contrato 20: nunca de operador de outra fazenda).
+
+    A coluna depende do canal: chat do Telegram ou telefone do WhatsApp (`campo_operador` do canal).
+    """
+    campo = getattr(deps.canal, "campo_operador", "telegram_chat_id")
     try:
         operadores = await deps.erp.listar_operadores(talhao_id)
     except ErpIndisponivel:
         return {}
-    return {o["id"]: o["telegram_chat_id"] for o in operadores if o.get("telegram_chat_id")}
+    return {o["id"]: o[campo] for o in operadores if o.get(campo)}
 
 
 def criar_executor(deps: Dependencias):

@@ -104,7 +104,8 @@ def disponibilidade_maquinas(
 
 
 def listar_operadores(talhao_id: int | None = None, fazenda_id: int | None = None) -> list[dict[str, Any]]:
-    """Lista os operadores com `id`, `fazenda_id`, `nome` e `telegram_chat_id` (para avisá-los pelo canal).
+    """Lista os operadores com `id`, `fazenda_id`, `nome`, `telegram_chat_id` e `whatsapp_telefone` (para
+    avisá-los pelo canal).
 
     Informe o `talhao_id` (ou a `fazenda_id`): só entram operadores da fazenda do talhão.
     """
@@ -114,7 +115,7 @@ def listar_operadores(talhao_id: int | None = None, fazenda_id: int | None = Non
             return []
         return para_json(
             conn.execute(
-                "SELECT id, fazenda_id, nome, telegram_chat_id FROM erp.operadores"
+                "SELECT id, fazenda_id, nome, telegram_chat_id, whatsapp_telefone FROM erp.operadores"
                 " WHERE (%s::int IS NULL OR fazenda_id = %s) ORDER BY id",
                 (fazenda, fazenda),
             ).fetchall()

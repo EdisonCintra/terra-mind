@@ -91,15 +91,17 @@ def test_banco_antigo_sem_registro_e_adotado_e_recebe_so_o_que_faltava(banco_vaz
         for arquivo in sorted(antigas.glob("*.sql")):
             conn.execute(arquivo.read_text(encoding="utf-8"))
 
-    nomes = migrar.aplicar(banco_vazio)  # pasta real: 003 e 020 são novas para este banco
+    nomes = migrar.aplicar(banco_vazio)  # pasta real: tudo o que não era do banco antigo é novo para ele
 
-    assert nomes == ["003_fazendas.sql", "020_decisao.sql"]
+    todas = sorted(p.name for p in PASTA_REAL.glob("*.sql"))
+    assert nomes == [n for n in todas if n not in migrar.JA_APLICADAS_ANTES_DO_RUNNER]
+    assert "003_fazendas.sql" in nomes and "020_decisao.sql" in nomes
     with psycopg.connect(banco_vazio) as conn:
         talhao = conn.execute("SELECT nome, fazenda_id FROM erp.talhoes").fetchall()
         assert talhao == [("Talhão Antigo", 1)]
         assert conn.execute("SELECT fazenda_id FROM erp.insumos").fetchone()[0] == 1
         assert conn.execute("SELECT nome FROM erp.fazendas").fetchone()[0] == "Fazenda Exemplo"
-        assert conn.execute("SELECT count(*) FROM public.migracoes_aplicadas").fetchone()[0] == 6
+        assert conn.execute("SELECT count(*) FROM public.migracoes_aplicadas").fetchone()[0] == len(todas)
     assert migrar.aplicar(banco_vazio) == []
 
 

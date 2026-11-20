@@ -78,6 +78,15 @@
 
 **Pronto quando:** o incidente da demo chega no WhatsApp com os 3 botões, o clique retoma a sessão, e o segundo clique responde "decisão já registrada" (os mesmos testes do Telegram).
 
+**Status: código concluído em 19/11/2026** (branch `feat/f4-whatsapp`); **falta a rodada real na Meta** (conta, número, verificação da empresa e modelos aprovados), que não depende de código. Guia em [docs/whatsapp.md](../whatsapp.md).
+
+- `channels/whatsapp.py` (`WhatsAppChannel`) e `whatsapp` em `_CANAIS`; `CHANNEL=whatsapp` no `agents`. Os nós do `agents` não mudam, só o `incidente_id` que já ia nos alertas (F2) e o contato do operador por canal (`campo_operador`).
+- Webhook `GET/POST /whatsapp/webhook` no `agents`: verificação da Meta e assinatura `X-Hub-Signature-256` (sem o App Secret o webhook recusa tudo). Processa em segundo plano e ignora reentrega.
+- Janela de 24 h (`agente.whatsapp_janelas`, migration `004_whatsapp.sql`): dentro dela, texto e 3 botões; fora, os modelos `terramind_aprovacao` (3 respostas rápidas) e `terramind_aviso`. Recusa 131047 da Meta cai para o modelo.
+- Destino pelo gerente da fazenda do incidente (`erp.gerentes.whatsapp_telefone`); só ele aprova. `WHATSAPP_GERENTE_TELEFONE` é o padrão. Telefone do operador em `erp.operadores.whatsapp_telefone`.
+- Pergunte à bula pelo WhatsApp. Botões, rótulos e identificadores compartilhados com o Telegram (`channels/base.py`).
+- Testado com a Cloud API simulada (32 testes). Teste manual contra a Meta: `python -m channels.teste_whatsapp <telefone>`.
+
 ### F5 · Indicadores da fazenda (2)
 
 - Bloco no painel com os insumos e o estoque de cada um, número de talhões e área total, OS por status (agendadas, suspensas, reagendadas, executadas), e o que está plantado e o que vai ser plantado em cada talhão.

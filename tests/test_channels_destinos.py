@@ -102,7 +102,7 @@ async def test_fazenda_sem_gerente_com_chat_usa_o_padrao(envio):
 
 async def test_sem_gerente_e_sem_padrao_falha_alto_em_vez_de_sumir(envio):
     gerente(2, None)
-    with pytest.raises(SemDestino, match="GERENTE_CHAT_ID"):
+    with pytest.raises(SemDestino, match="gerente padrão"):
         await canal().pedir_aprovacao(incidente(3), 6, "x")
     envio.assert_not_awaited()
 

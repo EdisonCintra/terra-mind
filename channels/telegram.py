@@ -28,7 +28,17 @@ from telegram.ext import (
 )
 
 from channels import destinos
-from channels.base import AoResponder, DecisaoJaRegistrada, NotificationChannel, Resposta
+from channels.base import (
+    DECISAO_JA_REGISTRADA,
+    ECO,
+    PREFIXO,
+    ROTULOS,
+    AoResponder,
+    DecisaoJaRegistrada,
+    NotificationChannel,
+    ler_callback,
+    montar_callback,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,26 +50,6 @@ AJUDA = (
 )
 NAO_AUTORIZADO = "Este número ainda não está liberado para perguntas. Peça ao gerente da fazenda."
 SEM_PERGUNTA = "As perguntas à bula ainda não estão ligadas neste bot."
-
-PREFIXO = "r"  # callback_data: r:{incidente_id}:{plano_id}:{resposta}  (limite do Telegram: 64 bytes)
-ROTULOS = {"SIM": "Aceitar Proposta", "OPCOES": "Ver próxima opção", "NAO": "Recusar Proposta"}
-ECO = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
-
-
-def montar_callback(incidente_id: int, plano_id: int, resposta: str) -> str:
-    return f"{PREFIXO}:{incidente_id}:{plano_id}:{resposta}"
-
-
-def ler_callback(data: str) -> Resposta | None:
-    """Converte o `callback_data` num `Resposta` (sem `respondido_por`); `None` se não for nosso."""
-    partes = (data or "").split(":")
-    if len(partes) != 4 or partes[0] != PREFIXO:
-        return None
-    try:
-        return Resposta(int(partes[1]), int(partes[2]), partes[3], "")  # type: ignore[arg-type]
-    except ValueError:
-        return None
-
 
 def montar_teclado(incidente_id: int, plano_id: int) -> InlineKeyboardMarkup:
     # Um botão por linha: mais fácil de tocar no celular.
@@ -142,7 +132,7 @@ class TelegramChannel(NotificationChannel):
         try:
             await self.ao_responder(resposta)
         except DecisaoJaRegistrada:
-            await query.message.reply_text("Decisão já registrada para este plano. Nada foi alterado.")
+            await query.message.reply_text(DECISAO_JA_REGISTRADA)
         except Exception:
             log.exception("falha ao registrar a resposta %s", resposta)
             await query.message.reply_text("Não consegui registrar a resposta. Tente pelo painel.")

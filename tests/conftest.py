@@ -23,7 +23,7 @@ def banco_limpo():
         conn.execute(
             "TRUNCATE erp.leituras_solo, erp.ordens_servico, erp.operadores, erp.maquinas,"
             " erp.insumos, erp.talhoes, erp.gerentes, erp.fazendas, erp.organizacoes,"
-            " agente.auditoria, agente.planos, agente.incidentes,"
+            " agente.auditoria, agente.planos, agente.incidentes, agente.whatsapp_janelas,"
             " conhecimento.limites_produto"
             " RESTART IDENTITY CASCADE"
         )

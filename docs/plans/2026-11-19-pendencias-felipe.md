@@ -1,4 +1,4 @@
-# Pendências do Felipe (atualizado em 19/11/2026, após o F2)
+# Pendências do Felipe (atualizado em 19/11/2026, após o F2 e o código do F4)
 
 Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" = o que precisa existir antes.
 
@@ -11,7 +11,7 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | F3 · Login e perfis | A fazer |
 | F6 · Conclusão da OS pelo operador | A fazer (há uma tela mínima do G7 para substituir) |
 | F5 · Indicadores da fazenda | A fazer |
-| F4 · WhatsApp | A fazer (começa pela conta na Meta) |
+| F4 · WhatsApp | **Código concluído** (branch `feat/f4-whatsapp`, guia em [docs/whatsapp.md](../whatsapp.md)); falta a conta, o número, a verificação da empresa e os 2 modelos aprovados na Meta, e uma rodada real |
 
 ## 1. Tarefas de outras pessoas que dependem de mim
 
@@ -40,8 +40,8 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | F3 (login) | Permissões da tabela (proposta): confirmar com o time | Time | **Pendente: decisão** |
 | F3 (`respondido_por` e `AGENTS_TOKEN`) | `agents` passar a exigir o segredo em `POST /incidentes/{id}/resposta` | Gustavo | Pendente; combinar a mudança no `agents/api.py` |
 | F3 (WhatsApp/Telegram: só gerente aprova) | Contato no canal por usuário | Felipe | Livre (depois do F3 base) |
-| F4 (WhatsApp) | Conta, número e verificação da empresa na Meta; aprovação do modelo de mensagem com 3 botões (leva dias, não depende de código) | Externo (Meta) | **Pendente: começar logo** |
-| F4 (webhook de resposta) | Rota pública no `agents` e a mesma `ao_responder` do Telegram | Gustavo | Combinar: a rota fica no serviço dele |
+| F4 (WhatsApp) | Conta, número e verificação da empresa na Meta; aprovação dos modelos `terramind_aprovacao` e `terramind_aviso` (leva dias, não depende de código) | Externo (Meta) | **Pendente: começar logo** (passo a passo em docs/whatsapp.md) |
+| F4 (webhook de resposta) | Rota `/whatsapp/webhook` no `agents` e a mesma `ao_responder` do Telegram | Gustavo | **Feito** (mudei `agents/api.py`, `config.py` e `nodes/executor.py`; avisar o Gustavo). Falta uma URL HTTPS pública do `agents` |
 | F4 (custo por mensagem) | Valor no BMC ("a levantar") | Time/negócio | Pendente |
 | F5 (indicadores) | Nada externo para estoque, OS e talhões. "O que vai ser plantado" exige tabela nova de safra: minha | Felipe | Livre |
 | F5 (insumo cujo estoque não cobre as OS agendadas) | Dose e área das OS (já no banco) | Felipe | Livre |
