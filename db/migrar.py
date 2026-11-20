@@ -87,7 +87,10 @@ def aplicar(url: str | None = None, pasta: Path = PASTA) -> list[str]:
                 texto = arquivo.read_text(encoding="utf-8")
                 soma = _hash(texto)
                 if arquivo.name in feitas:
-                    if feitas[arquivo.name] != soma:
+                    if feitas[arquivo.name] != soma and arquivo.name.startswith("9"):
+                        # Seed (9xx) é editado de propósito e só vale em banco novo: não é erro.
+                        log.info("%s mudou depois de aplicada (seed): vale só em banco novo", arquivo.name)
+                    elif feitas[arquivo.name] != soma:
                         log.warning(
                             "%s mudou depois de aplicada; o runner não a roda de novo. "
                             "Corrija com uma migration nova.",

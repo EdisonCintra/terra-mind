@@ -135,6 +135,26 @@
 
 **Pronto quando:** os números do bloco batem com o banco para a fazenda selecionada.
 
+**Status: concluído em 19/11/2026** (branch `feat/f5-indicadores`).
+
+- Tela **Fazenda** em `/indicadores` (item novo no menu): talhões e área total, OS por status (agendadas, suspensas, reagendadas, executadas e canceladas), OS dos próximos 7 dias, máquinas em manutenção (com os nomes), insumos com estoque, previsto nas OS agendadas e saldo (selo "Faltam X" quando o estoque não cobre), e por talhão o que está plantado (cultura, data, estágio) e o próximo plantio planejado.
+- Tudo calculado no banco em `painel/dados.indicadores(fazenda_id, agora)`, pela fazenda escolhida no menu (sem escolha, soma todas e mostra a coluna da fazenda). O "previsto nas OS" é área do talhão × dose das OS agendadas e reagendadas, a mesma conta de `painel/escrita.criar_os`.
+- Migration `005_safra.sql`: `erp.planejamento_safra` (talhão, safra, cultura, plantio previsto, status `planejado`/`plantado`/`cancelado`). O seed ganhou um planejamento por talhão. A tela de cadastro desse planejamento fica no F1.
+- Os testes comparam cada número com o banco (15 testes em `tests/test_painel_indicadores.py`). A tela não foi revisada visualmente no navegador: usa os componentes existentes e o E1 vai redesenhar.
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F5)**
+
+- **`painel/dados.py` e `painel/main.py`** (onde estão as telas do G1, G2, G3 e G7): só acrescentei. Função `indicadores()`, filtro `num` (número em formato brasileiro), rota `/indicadores` e o item "Fazenda" em `_menu.html`. Nada do que ele fez foi alterado.
+- **G1 (perda evitada) e G5:** não usam o estoque nem o planejamento; nenhuma mudança de contrato.
+- **Banco:** tabela nova `erp.planejamento_safra`. `TRUNCATE erp.talhoes ... CASCADE` (o `conftest`) já a limpa junto.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F5)**
+
+- **E1 (design):** a tela `/indicadores` (`painel/templates/indicadores.html`) usa só os componentes atuais (`.kpis`, `.painel`, `.tabela`, `.status`, `.selo`, `.numeros`) e deve ser redesenhada junto com as outras. Ids estáveis para os números: `ind-talhoes`, `ind-proximas`, `ind-manutencao`, `ind-sem-cobertura`, `ind-os-<status>`.
+- **E3/E4 (cartões e mapa):** "Outras variáveis sugeridas" do F5 (máquinas em manutenção, OS dos próximos 7 dias, insumo sem cobertura) já entraram; se os cartões de clima forem para a mesma tela, é só acrescentar um bloco.
+- **Seed (`900_seed.sql`):** inclui o planejamento de safra. **Seed editado não chega a banco que já existe**; para ver o planejamento num banco antigo, `docker compose down -v` ou insira à mão. O runner agora só informa (não avisa) quando o seed muda depois de aplicado.
+- **Faixa 005 ocupada** (`005_safra.sql`, do Felipe); as migrations dele continuam em 011–019.
+
 ### F6 · Conclusão da OS pelo operador (2)
 
 - Hoje nenhuma tela marca a OS como `executada`: o status existe no schema, mas nada o usa.

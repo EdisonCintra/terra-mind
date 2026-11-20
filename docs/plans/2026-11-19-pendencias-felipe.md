@@ -10,7 +10,7 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | F1 · Cadastro pelo painel | A fazer |
 | F3 · Login e perfis | A fazer |
 | F6 · Conclusão da OS pelo operador | A fazer (há uma tela mínima do G7 para substituir) |
-| F5 · Indicadores da fazenda | A fazer |
+| F5 · Indicadores da fazenda | **Concluído** (branch `feat/f5-indicadores`); falta só a revisão visual do E1 e a tela de cadastro do planejamento de safra (F1) |
 | F4 · WhatsApp | **Código concluído** (branch `feat/f4-whatsapp`, guia em [docs/whatsapp.md](../whatsapp.md)); falta a conta, o número, a verificação da empresa e os 2 modelos aprovados na Meta, e uma rodada real |
 
 ## 1. Tarefas de outras pessoas que dependem de mim
@@ -43,8 +43,9 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | F4 (WhatsApp) | Conta, número e verificação da empresa na Meta; aprovação dos modelos `terramind_aprovacao` e `terramind_aviso` (leva dias, não depende de código) | Externo (Meta) | **Pendente: começar logo** (passo a passo em docs/whatsapp.md) |
 | F4 (webhook de resposta) | Rota `/whatsapp/webhook` no `agents` e a mesma `ao_responder` do Telegram | Gustavo | **Feito** (mudei `agents/api.py`, `config.py` e `nodes/executor.py`; avisar o Gustavo). Falta uma URL HTTPS pública do `agents` |
 | F4 (custo por mensagem) | Valor no BMC ("a levantar") | Time/negócio | Pendente |
-| F5 (indicadores) | Nada externo para estoque, OS e talhões. "O que vai ser plantado" exige tabela nova de safra: minha | Felipe | Livre |
-| F5 (insumo cujo estoque não cobre as OS agendadas) | Dose e área das OS (já no banco) | Felipe | Livre |
+| F5 (indicadores) | Nada externo para estoque, OS e talhões. Tabela de safra criada (`005_safra.sql`) | Felipe | **Pronto**. Redesenho visual depende do E1 |
+| F1 (cadastro do planejamento de safra) | Quem planeja a safra hoje só consegue pelo banco; a tela de cadastro entra no F1 | Felipe | Pendente (F1) |
+| F5 (insumo cujo estoque não cobre as OS agendadas) | Dose e área das OS (já no banco) | Felipe | **Pronto** |
 | F6 (conclusão pelo operador) | `erp.execucoes_os` (contrato 28) e `POST /relatorios/os/{id}` (G7) | Gustavo | **Pronto** (migration 020 e relatório existem) |
 | F6 (tela para celular) | Componentes e layout de celular do E1 | Edison | Pendente (mesmo bloqueio do topo) |
 | F2 (restrição por organização do usuário) | Login do F3 para saber as fazendas de cada usuário | Felipe | Depende do F3 |
@@ -52,7 +53,7 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 
 ## Dúvidas abertas para o time
 
-1. O Edison entrega o E1 (esqueleto) antes de eu começar o F1? Se não, começo pelo que não tem tela nova: F4 (conta na Meta) e a parte de dados do F5.
+1. O Edison entrega o E1 (esqueleto) antes de eu começar o F1? Se não, começo pelo que não tem tela nova: F4 (conta na Meta); o F5 já foi feito com o layout atual.
 2. Tabela de permissões do F3: confirmar (operador cria e edita OS? aprova plano?).
 3. Gustavo quer o `safra_inicio` por fazenda no G1?
 4. Os 2 testes do Monitor (`test_ciclo_manual_usa_fonte_live` e `test_modo_live_roda_ciclo_em_background`) já falhavam no `main` antes do F2: é com o Edison.

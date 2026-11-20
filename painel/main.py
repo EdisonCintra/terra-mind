@@ -2,7 +2,8 @@
 
     uv run uvicorn painel.main:app --port 8080
 
-Telas: 1 ordens de serviço, 2 linha do tempo do incidente, 3 aprovação pendente, 4 simular chuva,
+Telas: indicadores da fazenda (F5, `/indicadores`), 1 ordens de serviço, 2 linha do tempo do incidente,
+3 aprovação pendente, 4 simular chuva,
 Pergunte à bula (G4, `/bula`), perda evitada (G1, `/perda`), agenda e janela da OS (G2 e G3, `/agenda`)
 e relatórios de aplicação (G7, `/relatorios`).
 """
@@ -61,7 +62,7 @@ def _dia(valor: date | str) -> str:
 
 
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
-templates.env.filters.update(hora=_hora, hms=_hms, dia=_dia)
+templates.env.filters.update(hora=_hora, hms=_hms, dia=_dia, num=dados.numero)
 templates.env.globals.update(STATUS_OS=STATUS_OS, STATUS_INCIDENTE=STATUS_INCIDENTE)
 
 # --- Fazenda escolhida (F2, contrato 20) ------------------------------------------------------
@@ -308,6 +309,16 @@ def tela_perda(request: Request, inicio: date | None = None, fim: date | None = 
     fim = fim or hoje
     contexto = {"p": dados.perda_evitada(inicio, fim, replay, _fazenda(request)), "replay": replay}
     return templates.TemplateResponse(request, "perda.html", contexto)
+
+
+# --- Indicadores da fazenda (F5) -------------------------------------------------------------
+@app.get("/indicadores", response_class=HTMLResponse)
+def tela_indicadores(request: Request):
+    """Bloco "Fazenda": talhões, OS por status, estoque, máquinas e o que está (e vai ser) plantado."""
+    fazenda = _fazenda(request)
+    nome = next((f["nome"] for f in dados.listar_fazendas() if f["id"] == fazenda), None)
+    contexto = {"i": dados.indicadores(fazenda, _agora()), "fazenda": nome}
+    return templates.TemplateResponse(request, "indicadores.html", contexto)
 
 
 # --- Agenda e janela da OS (G2 e G3) ---------------------------------------------------------

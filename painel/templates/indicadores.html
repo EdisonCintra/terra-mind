@@ -1,0 +1,114 @@
+{% extends "pagina.html" %}
+{% block titulo %}Fazenda · TerraMind{% endblock %}
+{% block cabecalho %}Fazenda{% endblock %}
+{% block resumo %}{{ fazenda or "Todas as fazendas" }}: talhões, ordens de serviço, estoque, máquinas e o que está (e vai ser) plantado. Todos os números saem do banco.{% endblock %}
+{% block conteudo %}
+{% set os = i.os_por_status %}
+<section class="kpis quatro" aria-label="Resumo da fazenda">
+  <div class="kpi">
+    <span class="rotulo">Talhões</span>
+    <strong id="ind-talhoes">{{ i.talhoes }}</strong>
+    <small>{{ i.area_ha|num(1) }} ha no total</small>
+  </div>
+  <div class="kpi">
+    <span class="rotulo">OS nos próximos {{ i.dias_proximas }} dias</span>
+    <strong id="ind-proximas" class="azul">{{ i.os_proximas|length }}</strong>
+    <small>agendadas ou reagendadas</small>
+  </div>
+  <div class="kpi">
+    <span class="rotulo">Máquinas em manutenção</span>
+    <strong id="ind-manutencao"{% if i.maquinas.manutencao %} class="atencao"{% endif %}>{{ i.maquinas.manutencao }}</strong>
+    <small>de {{ i.maquinas.total }} máquina(s){% if i.maquinas.nomes %}: {{ i.maquinas.nomes }}{% endif %}</small>
+  </div>
+  <div class="kpi">
+    <span class="rotulo">Estoque que não cobre as OS</span>
+    <strong id="ind-sem-cobertura"{% if i.insumos_sem_cobertura %} class="quente"{% endif %}>{{ i.insumos_sem_cobertura|length }}</strong>
+    <small>{% if i.insumos_sem_cobertura %}produto(s) com OS agendadas acima do estoque{% else %}todas as OS agendadas têm estoque{% endif %}</small>
+  </div>
+</section>
+
+<section class="painel">
+  <div class="titulo-bloco"><h2>Ordens de serviço por status</h2><span class="nota">{{ os.values()|sum }} no total</span></div>
+  <div class="numeros" id="ind-os">
+    {% for status, rotulo in [("agendada", "Agendadas"), ("suspensa_preventiva", "Suspensas"), ("reagendada", "Reagendadas"), ("executada", "Executadas"), ("cancelada", "Canceladas")] %}
+    <div>
+      <span class="rotulo"><span class="status {{ STATUS_OS[status][1] }}">{{ rotulo }}</span></span>
+      <strong id="ind-os-{{ status }}">{{ os[status] }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="duas-colunas">
+  <section class="painel">
+    <div class="titulo-bloco"><h2>Insumos e estoque</h2><span class="nota">{{ i.insumos|length }} produto(s)</span></div>
+    <div class="tabela">
+      <table>
+        <thead><tr>{% if not fazenda %}<th>Fazenda</th>{% endif %}<th>Produto</th><th>Estoque</th><th>Previsto nas OS</th><th>Saldo</th></tr></thead>
+        <tbody>
+          {% for p in i.insumos %}
+          <tr>
+            {% if not fazenda %}<td>{{ p.fazenda }}</td>{% endif %}
+            <td class="forte">{{ p.produto }}<small>{{ p.tipo }}</small></td>
+            <td class="mono">{{ p.estoque|num(2) }} {{ p.unidade }}</td>
+            <td class="mono">{{ p.comprometido|num(2) }} {{ p.unidade }}<small>{{ p.os_agendadas }} OS</small></td>
+            <td>
+              {% if p.cobre %}<span class="selo ok">Sobra {{ p.saldo|num(2) }} {{ p.unidade }}</span>
+              {% else %}<span class="selo alerta">Faltam {{ (-p.saldo)|num(2) }} {{ p.unidade }}</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="vazio">Nenhum insumo cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="painel">
+    <div class="titulo-bloco"><h2>OS dos próximos {{ i.dias_proximas }} dias</h2><span class="nota">{{ i.os_proximas|length }} OS</span></div>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Início</th><th>Talhão</th><th>Produto</th><th>Máquina</th></tr></thead>
+        <tbody>
+          {% for o in i.os_proximas %}
+          <tr>
+            <td class="mono">{{ o.inicio_previsto|hora }}</td>
+            <td class="forte">{{ o.talhao }}<small>OS {{ o.id }}</small></td>
+            <td>{{ o.produto or "—" }}</td>
+            <td>{{ o.maquina or "—" }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="vazio">Nenhuma OS agendada para os próximos {{ i.dias_proximas }} dias.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="painel">
+  <div class="titulo-bloco"><h2>Plantado e próximo plantio</h2><span class="nota">{{ i.plantio|length }} talhão(ões)</span></div>
+  <div class="tabela">
+    <table>
+      <thead><tr>{% if not fazenda %}<th>Fazenda</th>{% endif %}<th>Talhão</th><th>Plantado agora</th><th>Estágio</th><th>Próximo plantio planejado</th></tr></thead>
+      <tbody>
+        {% for t in i.plantio %}
+        <tr>
+          {% if not fazenda %}<td>{{ t.fazenda }}</td>{% endif %}
+          <td class="forte">{{ t.nome }}<small>{{ t.area_ha|num(1) }} ha</small></td>
+          <td>{{ t.cultura|capitalize }}<small>plantado em {{ t.data_plantio.strftime("%d/%m/%Y") }} · há {{ t.dias_de_plantio }} dias</small></td>
+          <td class="mono">{{ t.estagio_fenologico }}</td>
+          <td>
+            {% if t.plantio_previsto %}{{ t.proxima_cultura|capitalize }}<small>safra {{ t.proxima_safra }} · {{ t.plantio_previsto.strftime("%d/%m/%Y") }} (em {{ t.dias_ate_plantar }} dias)</small>
+            {% else %}<span class="vazio">Nada planejado</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="vazio">Nenhum talhão cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

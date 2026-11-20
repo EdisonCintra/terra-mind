@@ -22,6 +22,12 @@ INSERT INTO erp.talhoes (fazenda_id, nome, area_ha, cultura, data_plantio, estag
     (1, 'Talhão 2 - Baixada',  85.50, 'soja',  current_date - 45, 'R1', -17.810000, -50.900000, 'latossolo'),
     (2, 'Talhão Demo',        100.00, 'milho', current_date - 30, 'V6', -17.850000, -50.880000, 'latossolo');
 
+-- F5: o que vai ser plantado (planejamento de safra), datas relativas como o resto do seed.
+INSERT INTO erp.planejamento_safra (talhao_id, safra, cultura, plantio_previsto, observacoes) VALUES
+    (1, '2026/27', 'soja',  current_date + 150, 'Soja depois da colheita do milho'),
+    (2, '2026/27', 'milho', current_date + 90,  'Milho safrinha depois da soja'),
+    (3, '2026/27', 'soja',  current_date + 120, NULL);
+
 -- Só defensivos agrícolas (D2 / contrato 15).
 -- Contrato 1: `produto` e `bula_id` iguais ao `fontes.yaml` do Edison (`id: bula-abacus-hc`, `produto: Abacus HC`).
 -- Engeo Pleno S não tem bula no `fontes.yaml` (e não há fator de perda para inseticida): `bula_id` NULL; só aparece na OS 3, fora da janela de risco.

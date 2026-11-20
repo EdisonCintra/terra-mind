@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -428,3 +428,116 @@ def pdf_do_relatorio(relatorio_id: int) -> dict | None:
         return conn.execute(
             "SELECT os_id, versao, pdf FROM agente.relatorios_aplicacao WHERE id = %s", (relatorio_id,)
         ).fetchone()
+
+
+# --- F5: indicadores da fazenda ----------------------------------------------------------------
+STATUS_DA_OS = ("agendada", "suspensa_preventiva", "reagendada", "executada", "cancelada")
+# O estoque "previsto nas OS" soma só as agendadas e reagendadas: a suspensa só consome depois de reagendada.
+DIAS_PROXIMAS_OS = 7
+
+
+def numero(valor: Any, casas: int = 1) -> str:
+    """Número no formato brasileiro: 1234.5 → "1.234,5"."""
+    inteiro, _, fracao = f"{float(valor):,.{casas}f}".partition(".")
+    return inteiro.replace(",", ".") + ("," + fracao if fracao else "")
+
+
+def indicadores(fazenda_id: int | None = None, agora: datetime | None = None) -> dict[str, Any]:
+    """Números do bloco "Fazenda" (F5), todos calculados no banco para a fazenda escolhida.
+
+    Sem `fazenda_id`, soma todas as fazendas. Traz talhões e área, OS por status, OS dos próximos 7 dias,
+    insumos com o estoque e o quanto as OS agendadas vão consumir (e quais não cobrem), máquinas em
+    manutenção, e por talhão o que está plantado e o próximo plantio planejado.
+    """
+    agora = agora or datetime.now(FUSO)
+    params = {
+        "faz": fazenda_id,
+        "agora": agora,
+        "ate": agora + timedelta(days=DIAS_PROXIMAS_OS),
+        "hoje": agora.date(),
+    }
+    with conectar() as conn:
+        talhoes = conn.execute(
+            "SELECT count(*) AS n, COALESCE(sum(area_ha), 0) AS ha FROM erp.talhoes"
+            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
+            params,
+        ).fetchone()
+        por_status = {
+            linha["status"]: linha["n"]
+            for linha in conn.execute(
+                "SELECT status, count(*) AS n FROM erp.ordens_servico"
+                " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) GROUP BY status",
+                params,
+            )
+        }
+        proximas = conn.execute(
+            """
+            SELECT os.id, os.inicio_previsto, os.status, t.nome AS talhao, i.produto, m.nome AS maquina
+            FROM erp.ordens_servico os
+            JOIN erp.talhoes t ON t.id = os.talhao_id
+            LEFT JOIN erp.insumos i ON i.id = os.insumo_id
+            LEFT JOIN erp.maquinas m ON m.id = os.maquina_id
+            WHERE os.status IN ('agendada', 'reagendada')
+              AND os.inicio_previsto >= %(agora)s AND os.inicio_previsto < %(ate)s
+              AND (%(faz)s::int IS NULL OR os.fazenda_id = %(faz)s)
+            ORDER BY os.inicio_previsto, os.id
+            """,
+            params,
+        ).fetchall()
+        insumos = conn.execute(
+            """
+            SELECT i.id, i.produto, i.tipo, i.unidade, i.estoque, f.nome AS fazenda,
+                   COALESCE(sum(t.area_ha * os.dose_por_ha)
+                            FILTER (WHERE os.status IN ('agendada', 'reagendada')), 0) AS comprometido,
+                   count(os.id) FILTER (WHERE os.status IN ('agendada', 'reagendada')) AS os_agendadas
+            FROM erp.insumos i
+            JOIN erp.fazendas f ON f.id = i.fazenda_id
+            LEFT JOIN erp.ordens_servico os ON os.insumo_id = i.id
+            LEFT JOIN erp.talhoes t ON t.id = os.talhao_id
+            WHERE (%(faz)s::int IS NULL OR i.fazenda_id = %(faz)s)
+            GROUP BY i.id, f.nome
+            ORDER BY f.nome, i.produto, i.id
+            """,
+            params,
+        ).fetchall()
+        maquinas = conn.execute(
+            "SELECT count(*) AS total, count(*) FILTER (WHERE status = 'manutencao') AS manutencao,"
+            " COALESCE(string_agg(nome, ', ' ORDER BY nome)"
+            "          FILTER (WHERE status = 'manutencao'), '') AS nomes"
+            " FROM erp.maquinas WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
+            params,
+        ).fetchone()
+        plantio = conn.execute(
+            """
+            SELECT t.id, t.nome, t.area_ha, t.cultura, t.data_plantio, t.estagio_fenologico,
+                   f.nome AS fazenda, p.safra AS proxima_safra, p.cultura AS proxima_cultura,
+                   p.plantio_previsto
+            FROM erp.talhoes t
+            JOIN erp.fazendas f ON f.id = t.fazenda_id
+            LEFT JOIN LATERAL (
+                SELECT safra, cultura, plantio_previsto FROM erp.planejamento_safra
+                WHERE talhao_id = t.id AND status = 'planejado' AND plantio_previsto >= %(hoje)s
+                ORDER BY plantio_previsto LIMIT 1
+            ) p ON true
+            WHERE (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
+            ORDER BY f.nome, t.id
+            """,
+            params,
+        ).fetchall()
+    for i in insumos:
+        i["saldo"] = float(i["estoque"]) - float(i["comprometido"])
+        i["cobre"] = i["saldo"] >= 0
+    for t in plantio:
+        t["dias_de_plantio"] = (agora.date() - t["data_plantio"]).days if t["data_plantio"] else None
+        t["dias_ate_plantar"] = (t["plantio_previsto"] - agora.date()).days if t["plantio_previsto"] else None
+    return {
+        "talhoes": talhoes["n"],
+        "area_ha": float(talhoes["ha"]),
+        "os_por_status": {s: por_status.get(s, 0) for s in STATUS_DA_OS},
+        "os_proximas": proximas,
+        "dias_proximas": DIAS_PROXIMAS_OS,
+        "insumos": insumos,
+        "insumos_sem_cobertura": [i for i in insumos if not i["cobre"]],
+        "maquinas": dict(maquinas),
+        "plantio": plantio,
+    }

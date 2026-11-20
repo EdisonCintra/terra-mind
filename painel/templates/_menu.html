@@ -1,5 +1,5 @@
 <nav class="menu" aria-label="Telas">
-  {% for caminho, rotulo in [("/os", "Visão geral"), ("/agenda", "Agenda"), ("/perda", "Perda evitada"), ("/relatorios", "Relatórios"), ("/bula", "Pergunte à bula")] %}
+  {% for caminho, rotulo in [("/os", "Visão geral"), ("/indicadores", "Fazenda"), ("/agenda", "Agenda"), ("/perda", "Perda evitada"), ("/relatorios", "Relatórios"), ("/bula", "Pergunte à bula")] %}
   <a href="{{ caminho }}"{% if request.url.path == caminho %} class="ativa" aria-current="page"{% endif %}>{{ rotulo }}</a>
   {% endfor %}
   {# F2: a fazenda escolhida filtra todas as telas (cookie `fazenda`). O E1 troca isto pelo seletor do design novo. #}
