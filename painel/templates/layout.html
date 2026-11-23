@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}TerraMind{% endblock %}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/painel.css">
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/painel.js" defer></script>
+  {% block scripts %}{% endblock %}
+</head>
+<body class="com-menu">
+  <nav class="menu" aria-label="Menu principal">
+    <div class="marca">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16Z"/><path d="M4 21c2-5 5-8 10-10"/></svg></span>
+      <strong>TerraMind</strong>
+    </div>
+    <ul>
+      {# No celular (barra inferior) só ficam itens com tela; com mais de 4, a 5ª vaga vira "Mais". #}
+      {% for item in itens_menu %}
+      <li{% if not item.na_barra %} class="fora-da-barra"{% endif %}><a href="{{ item.rota }}"{% if item.rota == ativa %} aria-current="page"{% endif %}{% if not item.existe %} aria-disabled="true" tabindex="-1"{% endif %}>{{ item.rotulo }}</a></li>
+      {% endfor %}
+      {% if menu_mais %}
+      <li class="mais">
+        <details>
+          <summary>Mais</summary>
+          <ul>
+            {% for item in menu_mais %}<li><a href="{{ item.rota }}"{% if item.rota == ativa %} class="atual"{% endif %}>{{ item.rotulo }}</a></li>{% endfor %}
+          </ul>
+        </details>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  <div class="pagina">
+    <header class="topo">
+      <div class="topo-inicio">
+        {% if fazendas %}
+        <form class="seletor-fazenda" method="post" action="/fazenda/selecionar">
+          <input type="hidden" name="voltar" value="{{ request.url.path }}">
+          <label for="fazenda_id">Fazenda</label>
+          <select id="fazenda_id" name="fazenda_id" onchange="this.form.submit()">
+            {% for f in fazendas %}<option value="{{ f.id }}"{% if f.id == fazenda_id %} selected{% endif %}>{{ f.nome }}</option>{% endfor %}
+          </select>
+          <noscript><button type="submit">Trocar</button></noscript>
+        </form>
+        {% endif %}
+      </div>
+      <div class="acoes">
+        {% block acoes_topo %}{% endblock %}
+        {% if usuario %}<span class="usuario">{{ usuario.nome }}{% if usuario.papel %} · {{ usuario.papel }}{% endif %}</span>{% endif %}
+      </div>
+    </header>
+    <main class="conteudo">
+      {% block conteudo %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

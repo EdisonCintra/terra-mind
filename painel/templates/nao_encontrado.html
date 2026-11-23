@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}{{ futura.rotulo if futura else "Página não encontrada" }} · TerraMind{% endblock %}
+{% block conteudo %}
+  <div class="pagina-interna">
+    <header class="cabecalho-pagina">
+      <h1>{{ futura.rotulo if futura else "Página não encontrada" }}</h1>
+    </header>
+    <section class="cartao">
+      {% if futura %}
+      {{ c.vazio("Esta tela ainda está em construção.", "Ir para a Visão geral", "/visao-geral") }}
+      {% else %}
+      {{ c.vazio("Não existe nenhuma tela neste endereço.", "Ir para a Visão geral", "/visao-geral") }}
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

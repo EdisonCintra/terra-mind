@@ -1,0 +1,60 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Componentes · TerraMind{% endblock %}
+{% block conteudo %}
+  <div class="pagina-interna">
+    <header class="cabecalho-pagina">
+      <h1>Componentes</h1>
+      <p class="nota">Vitrine para quem cria telas novas. Importe com <code>{% raw %}{% import "componentes.html" as c %}{% endraw %}</code>.</p>
+    </header>
+
+    <section class="cartao">
+      <h2>Indicadores (c.kpi)</h2>
+      <div class="kpis-vitrine">
+        {{ c.kpi("Neutro", "42", "nota opcional") }}
+        {{ c.kpi("Bom", "R$ 1.250,00", "tom bom (verde)", "bom") }}
+        {{ c.kpi("Atenção", "3", "tom atenção (amarelo)", "atencao") }}
+        {{ c.kpi("Risco", "78 mm", "tom risco (vermelho)", "risco") }}
+        {{ c.kpi("Azul", "5", "tom azul", "azul", id="kpi-exemplo") }}
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h2>Selos (c.selo)</h2>
+      <p>{{ c.selo("Neutro", "neutro") }} {{ c.selo("Bom", "bom") }} {{ c.selo("Atenção", "atencao") }} {{ c.selo("Risco", "risco") }} {{ c.selo("Azul", "azul") }}</p>
+    </section>
+
+    <section class="cartao">
+      <h2>Faixas (c.faixa)</h2>
+      {{ c.faixa("ok", "Tudo certo: plano aprovado.") }}
+      {{ c.faixa("aviso", "Atenção: janela de chuva em 18 h.") }}
+      {{ c.faixa("erro", "Erro: não foi possível falar com o Monitor.") }}
+    </section>
+
+    <section class="cartao">
+      <h2>Tabela (c.tabela)</h2>
+      {{ c.tabela(["Talhão", "Operação", "Status"], [["T-01", "Pulverização", c.selo("Agendada", "bom")], ["T-02", "Colheita", c.selo("Suspensa", "atencao")]]) }}
+    </section>
+
+    <section class="cartao">
+      <h2>Tabela sem linhas (c.tabela com lista vazia)</h2>
+      <p class="nota">Sem linhas, a macro mostra só o texto de vazio:</p>
+      {{ c.tabela(["Talhão", "Operação"], [], "Nenhuma ordem cadastrada") }}
+    </section>
+
+    <section class="cartao">
+      <h2>Estado vazio (c.vazio)</h2>
+      {{ c.vazio("Nenhuma fazenda cadastrada ainda.", "Cadastrar fazenda", "/cadastros") }}
+    </section>
+
+    <section class="cartao">
+      <h2>Formulário (c.campo)</h2>
+      <form class="form" method="post" action="/componentes" onsubmit="return false">
+        {{ c.campo("nome", "Nome do talhão", valor="Talhão 7") }}
+        {{ c.campo("area", "Área (ha)", "number", erro="Informe um número maior que zero") }}
+        {{ c.campo("cultura", "Cultura", opcoes=["Soja", "Milho", "Café"], valor="Milho") }}
+        <button class="grande" type="submit">Salvar</button>
+      </form>
+    </section>
+  </div>
+{% endblock %}

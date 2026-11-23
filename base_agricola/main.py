@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from base_agricola import rotas_fatores, rotas_trechos
+from base_agricola import rotas_fatores, rotas_produtos, rotas_trechos
 from base_agricola.dependencias import get_busca, get_repo
 
 __all__ = ["app", "get_busca", "get_repo"]
@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TerraMind · Base agrícola", lifespan=lifespan)
 app.include_router(rotas_fatores.router)
+app.include_router(rotas_produtos.router)
 app.include_router(rotas_trechos.router)
 
 

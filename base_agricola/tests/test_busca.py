@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,12 +8,9 @@ from base_agricola.busca import buscar
 from base_agricola.chunking import dividir_em_trechos
 from base_agricola.embeddings import EmbedderDeterministico
 from base_agricola.main import app, get_busca
-from base_agricola.manifesto import carregar_manifesto
 from base_agricola.modelos import Trecho
 from base_agricola.pdf import extrair_paginas
 from base_agricola.qdrant import indexar
-
-DADOS = Path(__file__).resolve().parents[1] / "dados"
 
 
 def trecho(produto, secao, texto, ordem=0):
@@ -74,11 +70,11 @@ LIMITES = {"Abacus HC": 7, "Ativum": 6, "Brucia": 9, "Amplexus": 5}
 
 @pytest.mark.skipif(not os.environ.get("RODAR_LENTOS"), reason="baixa o modelo de embeddings; RODAR_LENTOS=1")
 @pytest.mark.parametrize("produto", LIMITES)
-def test_aceitacao_bulas_reais_trecho_do_limite_no_top3(produto):
+def test_aceitacao_bulas_reais_trecho_do_limite_no_top3(produto, fontes_reais):
     from base_agricola.embeddings import FastEmbedEmbedder
 
     client, emb = QdrantClient(":memory:"), FastEmbedEmbedder()
-    for f in carregar_manifesto(DADOS / "fontes.yaml"):
+    for f in fontes_reais:
         indexar(client, emb, dividir_em_trechos(f, extrair_paginas(f.arquivo)), "trechos")
     top3 = buscar(client, emb, "trechos", "chuva após a aplicação", produto=produto, limite=3)
     assert any(t.pagina == LIMITES[produto] and "horas" in t.texto for t in top3), [t.pagina for t in top3]
@@ -90,11 +86,11 @@ ESTAGIOS = {"milho": ("Estádio V6 seis folhas desenvolvidas ponto de cresciment
 
 @pytest.mark.skipif(not os.environ.get("RODAR_LENTOS"), reason="baixa o modelo de embeddings; RODAR_LENTOS=1")
 @pytest.mark.parametrize("cultura", ESTAGIOS)
-def test_aceitacao_fenologia_acha_o_estagio_e_nao_mistura_com_a_bula(cultura):
+def test_aceitacao_fenologia_acha_o_estagio_e_nao_mistura_com_a_bula(cultura, fontes_reais):
     from base_agricola.embeddings import FastEmbedEmbedder
 
     client, emb = QdrantClient(":memory:"), FastEmbedEmbedder()
-    for f in carregar_manifesto(DADOS / "fontes.yaml"):
+    for f in fontes_reais:
         indexar(client, emb, dividir_em_trechos(f, extrair_paginas(f.arquivo)), "trechos")
     consulta, estagio = ESTAGIOS[cultura]
     top3 = buscar(client, emb, "trechos", consulta, cultura=cultura, limite=3)

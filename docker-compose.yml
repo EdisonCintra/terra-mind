@@ -62,7 +62,7 @@ services:
       timeout: 3s
       retries: 20
 
-  # Roda uma vez a cada subida: PDFs → Qdrant e YAML → Postgres. Refazer não duplica.
+  # Roda uma vez a cada subida: PDFs novos ou alterados → Qdrant (registro em conhecimento.documentos); fatores YAML → Postgres. Refazer não duplica.
   conhecimento-carga:
     image: terramind-conhecimento
     build:
@@ -72,6 +72,12 @@ services:
     environment: &ambiente_conhecimento
       DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
       QDRANT_URL: http://qdrant:6333
+      # `arquivo` das bulas: procura primeiro aqui (volume, bulas novas), depois na imagem (as 6 do repo).
+      BULAS_DIR: /dados/bulas
+      AGROFIT_CLIENT_ID: ${AGROFIT_CLIENT_ID:-}
+      AGROFIT_CLIENT_SECRET: ${AGROFIT_CLIENT_SECRET:-}
+    volumes: &volumes_conhecimento
+      - bulas:/dados/bulas
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,6 +87,7 @@ services:
   conhecimento:
     image: terramind-conhecimento
     environment: *ambiente_conhecimento
+    volumes: *volumes_conhecimento
     ports:
       - "8010:8010"
     depends_on:
@@ -94,12 +101,16 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://terramind:terramind@postgres:5432/terramind
       AGENTS_URL: http://agents:8000
-      MONITOR_MODE: ${MONITOR_MODE:-replay}
       MONITOR_INTERVAL_MIN: ${MONITOR_INTERVAL_MIN:-30}
       LIMIAR_CHUVA_MM: ${LIMIAR_CHUVA_MM:-20}
       LIMIAR_VENTO_KMH: ${LIMIAR_VENTO_KMH:-11}
       LIMIAR_UMIDADE_MIN_PCT: ${LIMIAR_UMIDADE_MIN_PCT:-50}
+      LIMIAR_RAJADA_KMH: ${LIMIAR_RAJADA_KMH:-15}
+      LIMIAR_DELTA_T_MIN_C: ${LIMIAR_DELTA_T_MIN_C:-2}
+      LIMIAR_DELTA_T_MAX_C: ${LIMIAR_DELTA_T_MAX_C:-8}
+      LIMIAR_INVERSAO_VENTO_MAX_KMH: ${LIMIAR_INVERSAO_VENTO_MAX_KMH:-2}
       JANELA_RISCO_H: ${JANELA_RISCO_H:-48}
+      OPEN_METEO_API_KEY: ${OPEN_METEO_API_KEY:-}
     ports:
       - "8020:8020"
     depends_on:
@@ -132,4 +143,5 @@ services:
 volumes:
   pgdata:
   qdrantdata:
+  bulas:
 

@@ -1,24 +1,11 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pergunte à bula · TerraMind</title>
-  <link rel="stylesheet" href="/static/painel.css">
-  <script src="/static/htmx.min.js"></script>
-</head>
-<body>
-  <header class="topo">
-    <div class="marca">
-      <div>
-        <h1>Pergunte à bula</h1>
-        <p>Toda resposta mostra o trecho, a bula e a página. Sem trecho, não há resposta.</p>
-      </div>
+{% extends "layout.html" %}
+{% block titulo %}Pergunte à bula · TerraMind{% endblock %}
+{% block conteudo %}
+  <section class="bula">
+    <div class="cabecalho-bula">
+      <h1>Pergunte à bula</h1>
+      <p>Toda resposta mostra o trecho, a bula e a página. Sem trecho, não há resposta.</p>
     </div>
-    {% include "_menu.html" %}
-  </header>
-
-  <main class="bula">
     <form class="pergunta-bula" hx-post="/bula/perguntar" hx-target="#conversa" hx-swap="afterbegin"
           hx-disabled-elt="find button" hx-indicator="#pensando">
       <label for="produto">Produto</label>
@@ -33,6 +20,5 @@
       <span id="pensando" class="htmx-indicator nota">Consultando as bulas…</span>
     </form>
     <section id="conversa" class="conversa" aria-live="polite"></section>
-  </main>
-</body>
-</html>
+  </section>
+{% endblock %}

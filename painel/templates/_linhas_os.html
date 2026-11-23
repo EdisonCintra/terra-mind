@@ -1,11 +1,12 @@
+{# Linhas da tabela de OS (tabela empilha: no celular cada linha vira cartão com o rótulo de data-rotulo). #}
 {% for os in ordens %}
 <tr>
-  <td class="forte">{{ os.talhao }}</td>
-  <td>{{ {"pulverizacao": "Pulverização"}.get(os.tipo_operacao, os.tipo_operacao|capitalize) }}{% if os.produto %}<small>{{ os.produto }}</small>{% endif %}</td>
-  <td class="mono">{{ os.inicio_previsto|hora }}</td>
-  <td>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</td>
-  <td class="mono perda" data-os="{{ os.id }}">—</td>
-  <td><span class="status {{ STATUS_OS.get(os.status, (os.status, 'executada'))[1] }}">{{ STATUS_OS.get(os.status, (os.status, ''))[0] }}</span></td>
+  <td class="forte" data-rotulo="Talhão">{{ os.talhao }}</td>
+  <td data-rotulo="Operação"><div>{{ {"pulverizacao": "Pulverização"}.get(os.tipo_operacao, os.tipo_operacao|capitalize) }}{% if os.produto %}<small>{{ os.produto }}</small>{% endif %}</div></td>
+  <td class="mono" data-rotulo="Início">{{ os.inicio_previsto|hora }}</td>
+  <td data-rotulo="Máquina"><div>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</div></td>
+  <td class="mono perda" data-rotulo="Perda" data-os="{{ os.id }}">—</td>
+  <td data-rotulo="Status"><span class="status {{ STATUS_OS.get(os.status, (os.status, 'executada'))[1] }}">{{ STATUS_OS.get(os.status, (os.status, ''))[0] }}</span></td>
 </tr>
 {% else %}
 <tr><td colspan="6" class="vazio">Nenhuma ordem de serviço.</td></tr>

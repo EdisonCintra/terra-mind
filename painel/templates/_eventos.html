@@ -38,5 +38,9 @@
   {% endfor %}{% endif %}
 </article>
 {% else %}
+{% if escolhido %}
+<p class="vazio">Este incidente ainda não tem passos registrados.</p>
+{% else %}
 <p class="vazio">Nenhum incidente ainda. Quando a chuva for simulada, cada passo aparece aqui.</p>
+{% endif %}
 {% endfor %}

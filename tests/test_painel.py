@@ -16,13 +16,8 @@ def test_health(cliente):
     assert cliente.get("/health").json() == {"ok": True}
 
 
-def test_raiz_redireciona_para_a_tela_de_os(cliente):
-    r = cliente.get("/", follow_redirects=False)
-    assert r.status_code in (302, 307) and r.headers["location"] == "/os"
-
-
 def test_tela_os_atualiza_a_cada_2s_com_htmx_local(cliente):
-    html = cliente.get("/os").text
+    html = cliente.get("/visao-geral").text
     assert 'hx-get="/parcial/os"' in html and 'hx-trigger="every 2s"' in html
     assert 'src="/static/htmx.min.js"' in html and "://" not in html  # sem CDN
     assert cliente.get("/static/htmx.min.js").status_code == 200
@@ -47,11 +42,6 @@ def test_os_suspensa_fica_amarela(cliente):
     assert html.count('class="status suspensa"') == 1 and html.count('class="status agendada"') == 2
 
 
-def test_cenario_do_grafico_e_igual_ao_do_monitor(cliente):
-    from pathlib import Path
-
-    raiz = Path(__file__).resolve().parents[1]
-    copia = (raiz / "painel" / "static" / "chuva_80mm.json").read_bytes()
-    assert copia == (raiz / "monitor" / "scenarios" / "chuva_80mm.json").read_bytes()
-    assert cliente.get("/static/chuva_80mm.json").status_code == 200
+def test_painel_js_e_servido_e_resposta_invalida_da_aprovacao_da_422(cliente):
+    assert cliente.get("/static/chuva_80mm.json").status_code == 404  # o gráfico usa a previsão do Monitor
     assert cliente.get("/static/painel.js").status_code == 200

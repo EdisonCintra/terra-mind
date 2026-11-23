@@ -1,8 +1,12 @@
-{% extends "pagina.html" %}
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
 {% block titulo %}Perda evitada · TerraMind{% endblock %}
-{% block cabecalho %}Perda evitada{% endblock %}
-{% block resumo %}Quanto as suspensões e remarcações protegeram na safra. Todo valor sai de código, com a fonte do fator.{% endblock %}
 {% block conteudo %}
+<div class="pagina-interna">
+<header class="cabecalho-pagina">
+  <h1>Perda evitada</h1>
+  <p class="nota">Quanto as suspensões e remarcações protegeram na safra. Todo valor sai de código, com a fonte do fator.</p>
+</header>
 <form class="filtros" method="get" action="/perda">
   <label>De <input type="date" name="inicio" value="{{ p.inicio.isoformat() }}"></label>
   <label>Até <input type="date" name="fim" value="{{ p.fim.isoformat() }}"></label>
@@ -10,28 +14,15 @@
   <button type="submit" class="grande">Atualizar</button>
 </form>
 
+{# Cor só para estado: o tom vem do valor (sem perda evitada ou nada em aberto = neutro). #}
 <section class="kpis quatro" aria-label="Resumo da safra">
-  <div class="kpi">
-    <span class="rotulo">Perda evitada</span>
-    <strong class="bom">{{ p.total }}</strong>
-    <small>{{ p.os_protegidas }} OS remarcada(s) com plano aprovado{% if p.estimativa %} · inclui estimativa{% endif %}</small>
+  {% call c.kpi("Perda evitada", p.total, p.os_protegidas ~ " OS remarcada(s) com plano aprovado" ~ (" · inclui estimativa" if p.estimativa else ""), "bom" if p.total_rs > 0 else "neutro") %}
     {% if p.sem_fator %}<small>{{ p.sem_fator }} OS sem fator de perda cadastrado: não entram no total</small>{% endif %}
-  </div>
-  <div class="kpi">
-    <span class="rotulo">Em aberto</span>
-    <strong class="atencao">{{ p.em_aberto }}</strong>
-    <small>OS suspensas esperando a decisão</small>
-  </div>
-  <div class="kpi">
-    <span class="rotulo">Planos</span>
-    <strong>{{ p.planos.aprovados }} <span class="unidade">aprovados</span></strong>
-    <small>{{ p.planos.nao_aprovados }} recusado(s) ou trocado(s) · {{ p.planos.pendentes }} sem resposta · {{ p.planos.manuais }} em decisão manual</small>
-  </div>
-  <div class="kpi">
-    <span class="rotulo">Tempo até a resposta</span>
-    <strong>{{ p.planos.tempo_resposta or "—" }}</strong>
-    <small>média dos planos respondidos</small>
-  </div>
+  {% endcall %}
+  {{ c.kpi("Em aberto", p.em_aberto, "OS suspensas esperando a decisão", "atencao" if p.em_aberto_rs > 0 else "neutro") }}
+  {% set aprovados %}{{ p.planos.aprovados }} <span class="unidade">aprovados</span>{% endset %}
+  {{ c.kpi("Planos", aprovados, p.planos.nao_aprovados ~ " recusado(s) ou trocado(s) · " ~ p.planos.pendentes ~ " sem resposta · " ~ p.planos.manuais ~ " em decisão manual") }}
+  {{ c.kpi("Tempo até a resposta", p.planos.tempo_resposta or "—", "média dos planos respondidos") }}
 </section>
 
 {% if p.retorno %}
@@ -58,19 +49,19 @@
 
 <section class="painel">
   <div class="titulo-bloco"><h2>Ordens protegidas</h2><span class="nota">{{ p.linhas|length }} no período</span></div>
-  <div class="tabela">
+  <div class="tabela empilha">
     <table>
       <thead><tr><th>Data</th><th>Talhão</th><th>Produto</th><th>Motivo</th><th>Perda</th><th>Fonte do fator</th><th>Situação</th></tr></thead>
       <tbody>
         {% for l in p.linhas %}
         <tr>
-          <td class="mono">{{ l.criado_em|hora }}</td>
-          <td class="forte">{{ l.talhao }}<small>OS {{ l.os_id }} · <a href="/timeline?incidente={{ l.incidente_id }}">incidente {{ l.incidente_id }}</a>{% if l.origem == "replay" %} · simulação{% endif %}</small></td>
-          <td>{{ l.produto or "—" }}</td>
-          <td>{{ l.condicao }}</td>
-          <td class="mono">{{ l.perda }}{% if l.estimativa and l.perda_rs is not none %}<small>estimativa</small>{% endif %}</td>
-          <td class="fonte">{{ l.fonte }}</td>
-          <td><span class="status {{ {'evitada': 'agendada', 'suspensa': 'suspensa', 'recusada': 'cancelada'}.get(l.situacao, 'executada') }}">{{ l.situacao_rotulo }}</span></td>
+          <td class="mono" data-rotulo="Data">{{ l.criado_em|hora }}</td>
+          <td class="forte" data-rotulo="Talhão"><div>{{ l.talhao }}<small>OS {{ l.os_id }} · <a href="/visao-geral?incidente={{ l.incidente_id }}">incidente {{ l.incidente_id }}</a>{% if l.origem == "replay" %} · simulação{% endif %}</small></div></td>
+          <td data-rotulo="Produto">{{ l.produto or "—" }}</td>
+          <td data-rotulo="Motivo">{{ l.condicao }}</td>
+          <td class="mono" data-rotulo="Perda"><div>{{ l.perda }}{% if l.estimativa and l.perda_rs is not none %}<small>estimativa</small>{% endif %}</div></td>
+          <td class="fonte" data-rotulo="Fonte do fator">{{ l.fonte }}</td>
+          <td data-rotulo="Situação"><span class="status {{ {'evitada': 'agendada', 'suspensa': 'suspensa', 'recusada': 'cancelada'}.get(l.situacao, 'executada') }}">{{ l.situacao_rotulo }}</span></td>
         </tr>
         {% else %}
         <tr><td colspan="7" class="vazio">Nenhuma OS foi suspensa no período.{% if not replay %} As simulações ficam de fora: marque "Incluir simulações" para vê-las.{% endif %}</td></tr>
@@ -79,4 +70,5 @@
     </table>
   </div>
 </section>
+</div>
 {% endblock %}

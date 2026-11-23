@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from datetime import datetime, timedelta
 
 import httpx
@@ -57,6 +58,55 @@ def test_perda_soma_so_o_que_foi_evitado_e_deixa_o_replay_de_fora(cliente):
 
     com_replay = cliente.get("/perda", params={"replay": 1})
     assert "R$ 13.329,00" in com_replay.text and "simulação" in com_replay.text
+
+
+def _kpi(html, rotulo):
+    """(atributos do <strong>, valor) do KPI com este rótulo."""
+    m = re.search(rf'{rotulo}</span><strong([^>]*)>(.*?)</strong>', html)
+    return m.group(1), m.group(2)
+
+
+def test_kpis_da_perda_tem_tom_do_valor(cliente):
+    """Merge E1 × G1: perda.html usa o layout e os KPIs de componentes.html; sem valor, tom neutro."""
+    vazio = cliente.get("/perda").text
+    assert '<nav class="menu"' in vazio and "<h1>Perda evitada</h1>" in vazio
+    assert _kpi(vazio, "Perda evitada") == ("", "R$ 0,00") and _kpi(vazio, "Em aberto") == ("", "R$ 0,00")
+    inc = novo_incidente("encerrado")
+    impacto(inc, 1, 3330.00)
+    impacto(inc, 2, 1200.50, situacao="suspensa")
+    html = cliente.get("/perda").text
+    assert _kpi(html, "Perda evitada") == (' class="bom"', "R$ 3.330,00")
+    assert _kpi(html, "Em aberto") == (' class="atencao"', "R$ 1.200,50")
+
+
+def test_kpi_da_visao_geral_e_o_total_do_servidor(cliente):
+    """G1 tirou a soma do navegador: o KPI da Visão geral é o mesmo total de /perda (simulação fora) e o
+    tom segue esse valor; o painel.js relê de /api/perda-evitada."""
+    real, simulado = novo_incidente("encerrado"), novo_incidente("encerrado")
+    sql("UPDATE agente.incidentes SET origem = 'replay' WHERE id = %s", (simulado,))
+    assert re.search(r'<strong id="kpi-perda">R\$ 0,00</strong>', cliente.get("/visao-geral").text)
+    impacto(real, 1, 3330.00)
+    impacto(simulado, 3, 9999.00)
+    html = cliente.get("/visao-geral").text
+    assert re.search(r'<strong id="kpi-perda" class="bom">R\$ 3.330,00</strong>', html)
+    assert cliente.get("/api/perda-evitada").json() == {"total_rs": 3330.0, "total": "R$ 3.330,00"}
+    js = cliente.get("/static/painel.js").text
+    assert 'fetch("/api/perda-evitada")' in js and 'tom("kpi-perda", perda.total_rs > 0 ? "bom" : "")' in js
+
+
+def test_perda_indisponivel_deixa_o_kpi_neutro_com_traco(cliente, monkeypatch):
+    def cai(*_args, **_kwargs):
+        raise psycopg.errors.UndefinedTable("agente.impactos não existe (020 não aplicada)")
+
+    monkeypatch.setattr(dados, "perda_evitada", cai)
+    assert re.search(r'<strong id="kpi-perda">—</strong>', cliente.get("/visao-geral").text)
+    assert cliente.get("/api/perda-evitada").status_code == 503
+
+
+def test_numero_do_formulario_nao_sobrescreve_o_dos_cartoes_de_clima():
+    """Os dois lados definiam `_numero` em painel/main.py; o do G7 (texto → float) apagaria o do E3."""
+    assert main._numero(3.5) is True and main._numero("3,5") is False and main._numero(None) is False
+    assert main._numero_do_formulario(" 0,300 ") == 0.3 and main._numero_do_formulario("") is None
 
 
 def test_perda_bate_com_os_planos_e_mostra_o_tempo_de_resposta(cliente):

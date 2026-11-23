@@ -32,7 +32,7 @@ async def pg_url(postgres_url):
     conn = await asyncpg.connect(postgres_url)
     try:
         await conn.execute("DROP SCHEMA IF EXISTS agente CASCADE; DROP SCHEMA IF EXISTS erp CASCADE;")
-        await conn.execute("DROP SCHEMA IF EXISTS conhecimento CASCADE;")
+        await conn.execute("DROP SCHEMA IF EXISTS conhecimento CASCADE; DROP SCHEMA IF EXISTS clima CASCADE;")
         sem_o_seed = (p for p in MIGRATIONS.glob("*.sql") if not p.name.startswith("9"))
         for arquivo in sorted(sem_o_seed):
             await conn.execute(arquivo.read_text(encoding="utf-8"))

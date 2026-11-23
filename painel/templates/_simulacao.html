@@ -5,6 +5,7 @@
 <div class="mensagem-erro">{{ falha }}</div>
 {% else %}
 <div class="mensagem-ok">Replay executado: {{ incidentes|length }} incidente(s), {{ erros|length }} erro(s).</div>
+{% if not incidentes %}<div class="mensagem-aviso">Nenhum incidente aberto: pode ser que já há incidente ativo no talhão (o ciclo não abre outro) ou que o cenário não passou dos limites.</div>{% endif %}
 {% for i in incidentes %}<div class="linha-sim">Incidente · {{ item(i) }}</div>{% endfor %}
 {% for e in erros %}<div class="linha-sim erro">Erro · {{ item(e) }}</div>{% endfor %}
 {% endif %}

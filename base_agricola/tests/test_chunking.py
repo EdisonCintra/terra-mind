@@ -4,10 +4,8 @@ from pathlib import Path
 import pytest
 
 from base_agricola.chunking import dividir_em_trechos
-from base_agricola.manifesto import Fonte, carregar_manifesto
+from base_agricola.modelos import Fonte
 from base_agricola.pdf import PaginaTexto, extrair_paginas
-
-DADOS = Path(__file__).resolve().parents[1] / "dados"
 
 
 def fonte(tipo_doc="bula", produto="Fungicida X"):
@@ -60,8 +58,8 @@ LIMITES = {
 
 
 @pytest.mark.parametrize("produto", LIMITES)
-def test_bulas_reais_trecho_do_limite_de_chuva(produto):
-    [f] = [f for f in carregar_manifesto(DADOS / "fontes.yaml") if f.produto == produto]
+def test_bulas_reais_trecho_do_limite_de_chuva(produto, fontes_reais):
+    [f] = [f for f in fontes_reais if f.produto == produto]
     pagina, secao, padrao = LIMITES[produto]
     trechos = dividir_em_trechos(f, extrair_paginas(f.arquivo))
     achados = [t for t in trechos if re.search(padrao, " ".join(t.texto.split()))]
@@ -73,8 +71,8 @@ FENOLOGIA = {"fenologia-milho": ("milho", "V6", 8), "fenologia-soja": ("soja", "
 
 
 @pytest.mark.parametrize("doc_id", FENOLOGIA)
-def test_fenologia_real_traz_o_estagio_da_fazenda(doc_id):
-    [f] = [f for f in carregar_manifesto(DADOS / "fontes.yaml") if f.id == doc_id]
+def test_fenologia_real_traz_o_estagio_da_fazenda(doc_id, fontes_reais):
+    [f] = [f for f in fontes_reais if f.id == doc_id]
     cultura, estagio, pagina = FENOLOGIA[doc_id]
     trechos = dividir_em_trechos(f, extrair_paginas(f.arquivo))
     assert f.culturas == [cultura] and {(t.secao, t.produto) for t in trechos} == {("geral", None)}

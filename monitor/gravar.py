@@ -13,7 +13,7 @@ from monitor.fontes import OPEN_METEO, parametros_open_meteo
 
 
 def gravar(lat: float, lon: float, saida: Path) -> None:
-    resposta = httpx.get(OPEN_METEO, params=parametros_open_meteo(lat, lon), timeout=10)
+    resposta = httpx.get(OPEN_METEO, params=parametros_open_meteo(lat, lon), timeout=30)
     resposta.raise_for_status()
     Path(saida).write_text(json.dumps(resposta.json(), ensure_ascii=False, indent=1), encoding="utf-8")
 
