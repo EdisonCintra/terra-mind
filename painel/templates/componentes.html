@@ -1,0 +1,54 @@
+{# Componentes base do painel. Uso: {% import "componentes.html" as c %} — veja docs/painel-telas.md. #}
+
+{# Indicador. tom: neutro, bom, atencao, risco ou azul. Com id, o valor vira <strong id=id> e a nota <small id="id-nota"> (o painel.js atualiza por esses ids). Com {% call %}, o corpo entra depois da nota. #}
+{% macro kpi(rotulo, valor, nota="", tom="neutro", id=None) -%}
+{%- set classe = {"neutro": "", "bom": "bom", "atencao": "atencao", "risco": "quente", "azul": "azul"}[tom] -%}
+<div class="kpi"><span class="rotulo">{{ rotulo }}</span><strong{% if id %} id="{{ id }}"{% endif %}{% if classe %} class="{{ classe }}"{% endif %}>{{ valor }}</strong>{% if nota or id %}<small{% if id %} id="{{ id }}-nota"{% endif %}>{{ nota }}</small>{% endif %}{% if caller %}{{ caller() }}{% endif %}</div>
+{%- endmacro %}
+
+{# Tabela que vira cartões empilhados no celular. Células são escapadas; passe Markup para HTML. #}
+{% macro tabela(colunas, linhas, vazio="Nada por aqui") -%}
+{%- if linhas -%}
+<div class="tabela empilha">
+  <table>
+    <thead><tr>{% for coluna in colunas %}<th>{{ coluna }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for linha in linhas %}<tr>{% for celula in linha %}<td data-rotulo="{{ colunas[loop.index0] }}">{{ celula }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- else -%}
+<p class="vazio">{{ vazio }}</p>
+{%- endif -%}
+{%- endmacro %}
+
+{# Selo de estado. tom: neutro, bom, atencao, risco ou azul. #}
+{% macro selo(texto, tom="neutro") -%}
+<span class="selo {{ tom }}">{{ texto }}</span>
+{%- endmacro %}
+
+{# Faixa de aviso. nivel: ok, aviso ou erro (mesmo de _mensagem.html). #}
+{% macro faixa(nivel, texto) -%}
+<div class="faixa mensagem-{{ nivel }}" role="{{ 'alert' if nivel == 'erro' else 'status' }}">{{ texto }}</div>
+{%- endmacro %}
+
+{# Estado vazio, com ação opcional. #}
+{% macro vazio(texto, acao_rotulo=None, acao_href=None) -%}
+<div class="vazio"><p>{{ texto }}</p>{% if acao_rotulo and acao_href %}<a class="botao" href="{{ acao_href }}">{{ acao_rotulo }}</a>{% endif %}</div>
+{%- endmacro %}
+
+{# Campo de formulário. Com opcoes (lista de valores ou pares [valor, rotulo]) vira <select>. #}
+{% macro campo(nome, rotulo, tipo="text", valor="", erro=None, opcoes=None) -%}
+<div class="campo{% if erro %} com-erro{% endif %}">
+  <label for="campo-{{ nome }}">{{ rotulo }}</label>
+  {% if opcoes -%}
+  <select id="campo-{{ nome }}" name="{{ nome }}"{% if erro %} aria-invalid="true"{% endif %}>
+    {% for o in opcoes %}{% set v = o[0] if o is not string else o %}{% set r = o[1] if o is not string else o %}<option value="{{ v }}"{% if v == valor %} selected{% endif %}>{{ r }}</option>{% endfor %}
+  </select>
+  {%- else -%}
+  <input id="campo-{{ nome }}" name="{{ nome }}" type="{{ tipo }}" value="{{ valor }}"{% if erro %} aria-invalid="true"{% endif %}>
+  {%- endif %}
+  {% if erro %}<small class="erro-campo">{{ erro }}</small>{% endif %}
+</div>
+{%- endmacro %}

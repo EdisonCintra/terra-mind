@@ -7,6 +7,8 @@ from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import psycopg
+
 from erp_mcp import leitura
 from erp_mcp.db import conectar
 
@@ -14,6 +16,15 @@ FUSO = ZoneInfo("America/Sao_Paulo")  # contrato 12
 
 # O `agents` escreve a citação no motivo da suspensão: "<justificativa> (fonte: <doc>, p. <n>)".
 CITACAO = re.compile(r"\(fonte:\s*(.+?),\s*p\.\s*(\d+)\)")
+
+
+def listar_fazendas() -> list[dict]:
+    """Fazendas do seletor do topo; `[]` enquanto `erp.fazendas` não existir (antes do F2)."""
+    try:
+        with conectar() as conn:
+            return conn.execute("SELECT id, nome FROM erp.fazendas ORDER BY nome").fetchall()
+    except psycopg.errors.UndefinedTable:
+        return []
 
 
 def listar_ordens() -> list[dict]:
@@ -36,12 +47,123 @@ def listar_incidentes(limite: int = 8) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             """
-            SELECT i.id, i.status, i.criado_em, t.nome AS talhao
+            SELECT i.id, i.status, i.criado_em, i.talhao_id, i.origem, t.nome AS talhao
             FROM agente.incidentes i JOIN erp.talhoes t ON t.id = i.talhao_id
             ORDER BY i.id DESC LIMIT %s
             """,
             (limite,),
         ).fetchall()
+
+
+ROTULO_CLASSE = {"correta": "Correta", "falso_alarme": "Falso alarme", "sem_dado": "Sem dado"}
+
+
+def _mm(valor) -> str:
+    return f"{float(valor):.1f}".replace(".", ",") + " mm" if valor is not None else "—"
+
+
+def _janela(inicio: datetime | None, fim: datetime | None) -> str:
+    if inicio is None or fim is None:
+        return "—"
+    return f"{inicio.astimezone(FUSO):%d/%m %H:%M}–{fim.astimezone(FUSO):%d/%m %H:%M}"
+
+
+def resumo_historico(fazenda_id: int | None) -> dict:
+    """Suspensões ao vivo conferidas contra a chuva observada (E6), mais recentes primeiro.
+
+    `fazenda_id` é aceito e ignorado: ainda não há fazendas (TODO contrato 20)."""
+    with conectar() as conn:
+        linhas = conn.execute(
+            """
+            SELECT c.incidente_id, c.os_id, t.nome AS talhao, c.janela_inicio, c.janela_fim,
+                   c.chuva_prevista_mm, c.chuva_observada_mm, c.limite_mm, c.limite_fonte,
+                   c.fonte_observado, c.classe, c.motivo
+            FROM clima.conferencias c
+            JOIN agente.incidentes i ON i.id = c.incidente_id
+            JOIN erp.talhoes t ON t.id = i.talhao_id
+            ORDER BY c.janela_inicio DESC NULLS LAST, c.incidente_id DESC, c.os_id
+            """
+        ).fetchall()
+    corretas = sum(1 for r in linhas if r["classe"] == "correta")
+    falsos = sum(1 for r in linhas if r["classe"] == "falso_alarme")
+    erros = [
+        abs(float(r["chuva_prevista_mm"]) - float(r["chuva_observada_mm"]))
+        for r in linhas
+        if r["chuva_prevista_mm"] is not None and r["chuva_observada_mm"] is not None
+    ]
+    itens = []
+    for r in linhas:
+        limite = _mm(r["limite_mm"]).replace(",0 mm", " mm") if r["limite_mm"] is not None else "—"
+        if r["limite_mm"] is not None and r["limite_fonte"]:
+            limite += f" ({r['limite_fonte']})"
+        itens.append(
+            {
+                **r,
+                "janela": _janela(r["janela_inicio"], r["janela_fim"]),
+                "prevista": _mm(r["chuva_prevista_mm"]),
+                "observada": _mm(r["chuva_observada_mm"]),
+                "limite": limite,
+                "rotulo_classe": ROTULO_CLASSE[r["classe"]],
+                "reanalise": r["fonte_observado"] == "reanalise",
+            }
+        )
+    return {
+        "total": len(linhas),
+        "corretas": corretas,
+        "falsos_alarmes": falsos,
+        "sem_dado": sum(1 for r in linhas if r["classe"] == "sem_dado"),
+        "pct_corretas": round(100 * corretas / (corretas + falsos), 1) if corretas + falsos else None,
+        "erro_medio_mm": round(sum(erros) / len(erros), 1) if erros else None,
+        "itens": itens,
+    }
+
+
+def talhao_padrao() -> int | None:
+    """Primeiro talhão: o gráfico da Visão geral usa ele quando nenhum incidente está selecionado."""
+    with conectar() as conn:
+        linha = conn.execute("SELECT id FROM erp.talhoes ORDER BY id LIMIT 1").fetchone()
+    return linha["id"] if linha else None
+
+
+def listar_talhoes() -> list[dict]:
+    """Talhões do seletor dos cartões de clima (E3) e do formulário "Agendar aplicação" (G3)."""
+    with conectar() as conn:
+        return conn.execute("SELECT id, nome, area_ha, cultura FROM erp.talhoes ORDER BY id").fetchall()
+
+
+def talhoes_com_geometria() -> list[dict]:
+    """Talhões do mapa: id, nome, lat/lon e `geom` (GeoJSON). Sem a coluna `geom` (contrato 18 ainda não entregue), `geom` é None."""
+    with conectar() as conn:
+        tem_geom = conn.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = 'erp' AND table_name = 'talhoes' AND column_name = 'geom'"
+        ).fetchone()
+        coluna = "geom" if tem_geom else "NULL AS geom"
+        linhas = conn.execute(f"SELECT id, nome, lat, lon, {coluna} FROM erp.talhoes ORDER BY id").fetchall()
+    return [{**t, "lat": float(t["lat"]), "lon": float(t["lon"])} for t in linhas]
+
+
+def ordens_do_talhao(talhao_id: int, de: datetime, ate: datetime) -> list[dict]:
+    """Ordens do talhão que começam entre `de` e `ate`, com o produto do insumo."""
+    with conectar() as conn:
+        return conn.execute(
+            """
+            SELECT os.id, os.tipo_operacao, os.inicio_previsto, os.status, i.produto
+            FROM erp.ordens_servico os
+            LEFT JOIN erp.insumos i ON i.id = os.insumo_id
+            WHERE os.talhao_id = %s AND os.inicio_previsto >= %s AND os.inicio_previsto <= %s
+            ORDER BY os.inicio_previsto, os.id
+            """,
+            (talhao_id, de, ate),
+        ).fetchall()
+
+
+RUMOS = ("N", "NE", "L", "SE", "S", "SO", "O", "NO")
+
+
+def rumo(graus: float) -> str:
+    """Direção do vento (de onde sopra) em texto: 8 pontos, cada um com 45 graus de largura."""
+    return RUMOS[int(((graus % 360) + 22.5) // 45) % 8]
 
 
 def auditoria_do_incidente(incidente_id: int) -> list[dict]:
@@ -244,6 +366,7 @@ def perda_evitada(inicio: date, fim: date, incluir_replay: bool = False) -> dict
     por_situacao = {s["situacao"]: s for s in situacoes}
     evitada = por_situacao.get("evitada") or {"os": 0, "perda_rs": 0, "sem_fator": 0, "estimativa": False}
     total = float(evitada["perda_rs"])
+    em_aberto = float((por_situacao.get("suspensa") or {}).get("perda_rs", 0))
     resultado = {
         "inicio": inicio,
         "fim": fim,
@@ -252,7 +375,8 @@ def perda_evitada(inicio: date, fim: date, incluir_replay: bool = False) -> dict
         "os_protegidas": evitada["os"],
         "sem_fator": evitada["sem_fator"],
         "estimativa": bool(evitada["estimativa"]),
-        "em_aberto": reais(float((por_situacao.get("suspensa") or {}).get("perda_rs", 0))),
+        "em_aberto_rs": em_aberto,  # o tom do KPI vem do valor (painel: cor só para estado)
+        "em_aberto": reais(em_aberto),
         "situacoes": [
             {
                 "rotulo": rotulo,
@@ -316,11 +440,6 @@ def listar_insumos() -> list[dict]:
         return conn.execute(
             "SELECT id, produto, tipo, unidade, estoque FROM erp.insumos ORDER BY produto"
         ).fetchall()
-
-
-def listar_talhoes() -> list[dict]:
-    with conectar() as conn:
-        return conn.execute("SELECT id, nome, area_ha, cultura FROM erp.talhoes ORDER BY id").fetchall()
 
 
 def maquinas_livres(inicio: datetime, fim: datetime) -> list[dict]:

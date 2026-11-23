@@ -5,8 +5,7 @@ from qdrant_client import QdrantClient
 
 from base_agricola.embeddings import EmbedderDeterministico
 from base_agricola.ingest import indexar_fontes
-from base_agricola.manifesto import Fonte
-from base_agricola.modelos import Trecho
+from base_agricola.modelos import Fonte, Trecho
 from base_agricola.qdrant import indexar
 
 
@@ -55,8 +54,8 @@ class RepoFalso:
     def __init__(self):
         self.documentos = []
 
-    def upsert_documento(self, **campos):
-        self.documentos.append(campos["id"])
+    def marcar_indexado(self, id, sha256):
+        self.documentos.append(id)
 
 
 def test_indexar_fontes_segue_quando_um_pdf_falha(client_mem, tmp_path):
@@ -70,3 +69,16 @@ def test_indexar_fontes_segue_quando_um_pdf_falha(client_mem, tmp_path):
     resultado = indexar_fontes(fontes, repo, client_mem, EmbedderDeterministico(), "trechos")
     assert isinstance(resultado["ruim"], str) and resultado["bula-abacus-hc"] > 0
     assert repo.documentos == ["bula-abacus-hc"]
+
+
+class EmbedderQuebrado(EmbedderDeterministico):
+    def embed(self, textos):
+        raise RuntimeError("embedder fora do ar")
+
+
+def test_falha_no_embedding_nao_apaga_trechos_antigos(client_mem):
+    indexar(client_mem, EmbedderDeterministico(), [trecho(ordem=i) for i in range(3)], "trechos")
+    antes = sorted(p.id for p in client_mem.scroll("trechos", limit=100)[0])
+    with pytest.raises(RuntimeError):
+        indexar(client_mem, EmbedderQuebrado(), [trecho(texto="novo")], "trechos")
+    assert sorted(p.id for p in client_mem.scroll("trechos", limit=100)[0]) == antes

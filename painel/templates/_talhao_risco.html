@@ -1,0 +1,46 @@
+{% import "componentes.html" as c %}
+{% set niveis = {"verde": ("Risco baixo", "bom"), "amarelo": ("Atenção", "atencao"), "vermelho": ("Risco alto", "risco")} %}
+{% set TOM_OS = {"agendada": "bom", "suspensa_preventiva": "atencao", "reagendada": "azul", "executada": "neutro", "cancelada": "risco"} %}
+{% if risco_indisponivel %}
+  {{ c.faixa("aviso", "Risco indisponível: o Monitor não respondeu. As ordens abaixo continuam valendo.") }}
+{% elif risco %}
+  {% set nivel = niveis.get(risco.nivel, ("Sem cálculo", "neutro")) %}
+  <div class="risco-cabecalho">
+    {{ c.selo(nivel[0], nivel[1]) }}
+    {% if risco.ate %}<span class="nota">até <span class="mono">{{ risco.ate | quando }}</span></span>{% endif %}
+  </div>
+  {% if linhas %}
+  <ul class="riscos">
+    {% for l in linhas %}
+    <li class="risco-linha tom-{{ l.tom }}">
+      <div class="risco-topo">
+        <span class="risco-rotulo">{{ l.rotulo }}</span>
+        <span class="risco-valor mono">{{ l.destaque }}</span>
+      </div>
+      {% if l.comparacao %}<div class="risco-limite">{{ l.comparacao }}</div>{% endif %}
+      {% if l.periodo %}<div class="risco-periodo mono">{{ l.periodo }}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif risco.motivos %}
+  <ul class="motivos">{% for m in risco.motivos %}<li>{{ m }}</li>{% endfor %}</ul>
+  {% else %}
+  <p class="nota">Nada preocupa nas próximas 48 h.</p>
+  {% endif %}
+{% else %}
+  <p class="nota">Sem previsão utilizável para este talhão.</p>
+{% endif %}
+<h3 class="subtitulo">Ordens nas próximas 48 h</h3>
+{% if ordens %}
+  {% set linhas_os = [] %}
+  {% for o in ordens %}
+    {% set inicio %}<span class="mono">{{ o.inicio_previsto | hora }}</span>{% endset %}
+    {% set status = c.selo(STATUS_OS.get(o.status, (o.status,))[0], TOM_OS.get(o.status, "neutro")) %}
+    {% set _ = linhas_os.append((o.produto or o.tipo_operacao, inicio, status)) %}
+  {% endfor %}
+  {{ c.tabela(["Produto", "Início", "Status"], linhas_os) }}
+{% elif risco and risco.nivel != "verde" and risco.ate %}
+  {{ c.vazio("Nenhuma ordem de serviço nas próximas 48 h. Evite agendar aplicação neste talhão até " ~ (risco.ate | quando) ~ ".") }}
+{% else %}
+  {{ c.vazio("Nenhuma ordem de serviço nas próximas 48 h.") }}
+{% endif %}

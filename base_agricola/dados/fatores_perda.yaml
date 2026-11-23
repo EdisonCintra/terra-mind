@@ -1,6 +1,6 @@
 # Fração do valor aplicado (área × dose × preço) que se perde quando a condição viola a bula.
 # Toda linha tem fonte: "<doc_id>:p.<N>" ou "estimativa: <justificativa>" (contrato 11).
-# As bulas dizem que a chuva "pode afetar o desempenho", mas não dizem quanto: por isso os
+# 'atraso' é fração perdida POR DIA de demora. As bulas dizem que a chuva "pode afetar o desempenho", mas não dizem quanto: por isso os
 # valores abaixo são ESTIMATIVAS PARAMETRIZADAS e devem ser apresentados assim no pitch.
 fatores:
   - tipo_insumo: fungicida
@@ -11,3 +11,51 @@ fatores:
     condicao: chuva
     fator: 0.5
     fonte_ou_estimativa: "estimativa: chuva até 4 h após a aplicação reduz a eficiência; Brucia (p. 9) e Amplexus (p. 5) não quantificam a perda"
+  - tipo_insumo: fungicida
+    condicao: vento
+    fator: 0.25
+    fonte_ou_estimativa: "estimativa: vento fora de 2 a 10 km/h (bulas Abacus HC p.7, Brucia p.7, Amplexus p.5; Embrapa CT 73 recomenda 3 a 9 km/h) causa deriva ou calda sem pouso; as fontes não quantificam a perda"
+  - tipo_insumo: herbicida
+    condicao: vento
+    fator: 0.35
+    fonte_ou_estimativa: "estimativa: vento fora de 2 a 10 km/h (bulas Abacus HC p.7, Brucia p.7, Amplexus p.5; Embrapa CT 73 recomenda 3 a 9 km/h) causa deriva ou calda sem pouso; as fontes não quantificam a perda, herbicida pesa mais por risco de deriva em área não alvo"
+  - tipo_insumo: inseticida
+    condicao: vento
+    fator: 0.25
+    fonte_ou_estimativa: "estimativa: vento fora de 2 a 10 km/h (bulas Abacus HC p.7, Brucia p.7, Amplexus p.5; Embrapa CT 73 recomenda 3 a 9 km/h) causa deriva ou calda sem pouso; as fontes não quantificam a perda"
+  - tipo_insumo: fungicida
+    condicao: umidade
+    fator: 0.17
+    fonte_ou_estimativa: "estimativa: UR abaixo de 50 a 60% acelera a evaporação da calda; ordem de grandeza de Embrapa Circular Técnica 73 (Souza e Palladini, 2007, https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/541888/1/cir073.pdf) p. 3 da PDF: depósito foliar cai de 100% para 83% quando a UR vai de 76% a 58% e a temperatura de 24 a 28 °C; a bula não quantifica"
+  - tipo_insumo: fungicida
+    condicao: temperatura
+    fator: 0.17
+    fonte_ou_estimativa: "estimativa: acima de 30 °C a calda evapora e a eficácia cai (bulas Abacus HC p.7, Brucia p.7); ordem de grandeza de Embrapa Circular Técnica 73 (Souza e Palladini, 2007, https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/541888/1/cir073.pdf) p. 3 da PDF: depósito foliar cai de 100% para 83% quando a UR vai de 76% a 58% e a temperatura de 24 a 28 °C; a bula não quantifica"
+  - tipo_insumo: herbicida
+    condicao: umidade
+    fator: 0.17
+    fonte_ou_estimativa: "estimativa: UR abaixo de 50 a 60% acelera a evaporação da calda; ordem de grandeza de Embrapa Circular Técnica 73 (Souza e Palladini, 2007, https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/541888/1/cir073.pdf) p. 3 da PDF: depósito foliar cai de 100% para 83% quando a UR vai de 76% a 58% e a temperatura de 24 a 28 °C; a bula não quantifica"
+  - tipo_insumo: herbicida
+    condicao: temperatura
+    fator: 0.17
+    fonte_ou_estimativa: "estimativa: acima de 30 °C a calda evapora e a eficácia cai (bulas Abacus HC p.7, Brucia p.7); ordem de grandeza de Embrapa Circular Técnica 73 (Souza e Palladini, 2007, https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/541888/1/cir073.pdf) p. 3 da PDF: depósito foliar cai de 100% para 83% quando a UR vai de 76% a 58% e a temperatura de 24 a 28 °C; a bula não quantifica"
+  - tipo_insumo: inseticida
+    condicao: umidade
+    fator: 0.17
+    fonte_ou_estimativa: "estimativa: UR abaixo de 50 a 60% acelera a evaporação da calda; ordem de grandeza de Embrapa Circular Técnica 73 (Souza e Palladini, 2007, https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/541888/1/cir073.pdf) p. 3 da PDF: depósito foliar cai de 100% para 83% quando a UR vai de 76% a 58% e a temperatura de 24 a 28 °C; a bula não quantifica"
+  - tipo_insumo: inseticida
+    condicao: temperatura
+    fator: 0.17
+    fonte_ou_estimativa: "estimativa: acima de 30 °C a calda evapora e a eficácia cai (bulas Abacus HC p.7, Brucia p.7); ordem de grandeza de Embrapa Circular Técnica 73 (Souza e Palladini, 2007, https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/541888/1/cir073.pdf) p. 3 da PDF: depósito foliar cai de 100% para 83% quando a UR vai de 76% a 58% e a temperatura de 24 a 28 °C; a bula não quantifica"
+  - tipo_insumo: fungicida
+    condicao: atraso
+    fator: 0.1
+    fonte_ou_estimativa: "estimativa: fração do valor perdida por dia de demora; a doença avança e a bula do Abacus HC (p.4) manda aplicar no início dos sintomas; nenhuma fonte lida quantifica, valor parametrizável"
+  - tipo_insumo: herbicida
+    condicao: atraso
+    fator: 0.05
+    fonte_ou_estimativa: "estimativa: fração do valor perdida por dia de demora; a bula do Brucia (p.5) pede aplicação com o milho entre V3 e V6 e plantas daninhas nos estádios iniciais; nenhuma fonte lida quantifica, valor parametrizável"
+  - tipo_insumo: inseticida
+    condicao: atraso
+    fator: 0.08
+    fonte_ou_estimativa: "estimativa: fração do valor perdida por dia de demora; a praga se multiplica e o dano cresce a cada dia; nenhuma fonte lida quantifica, valor parametrizável"

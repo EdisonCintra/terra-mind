@@ -1,0 +1,85 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Visão geral · TerraMind{% endblock %}
+{% block acoes_topo %}
+  <span class="ao-vivo">Ao vivo</span>
+  <button class="grande" hx-post="/simular/chuva" hx-target="#simulacao" hx-swap="innerHTML"
+          hx-disabled-elt="this">Simular chuva</button>
+{% endblock %}
+{% block conteudo %}
+  {# Só acompanhamento: a decisão do gerente acontece no canal (Telegram). Os blocos se atualizam pelas rotas /parcial; painel.js só deriva números do que elas trazem. #}
+  {% set incidente = "?incidente=" ~ escolhido if escolhido else "" %}
+  {% set nome_talhao = (talhoes | selectattr("id", "equalto", talhao) | map(attribute="nome") | first) if talhoes else none %}
+  <div class="pagina-interna">
+  <header class="cabecalho-pagina">
+    <h1>Visão geral</h1>
+    <p class="nota">Ordens de serviço, previsão do talhão e o que os agentes fizeram em cada incidente.</p>
+  </header>
+  <div id="simulacao" aria-live="polite"></div>
+  <div class="faixas" hx-get="/parcial/alertas" hx-trigger="load, every 2s" hx-swap="innerHTML"></div>
+
+  {# Cor só para estado: os KPI começam neutros e o painel.js colore conforme o dado (ex.: chuva acima do limiar). #}
+  <section class="kpis" aria-label="Resumo">
+    {{ c.kpi("Chuva prevista 48 h", "—", "Sem previsão para o talhão", id="kpi-chuva") }}
+    {{ c.kpi("Ordens suspensas", "—", "Suspensão automática e reversível", id="kpi-suspensas") }}
+    {{ c.kpi("Ordens reagendadas", "—", "Com plano aprovado", id="kpi-reagendadas") }}
+    {# G1: o total vem do servidor (agente.impactos, como em /perda); o tom segue esse valor. #}
+    {% call c.kpi("Perda evitada", perda.total if perda else "—", "Na safra, com plano executado · simulações fora", "bom" if perda and perda.total_rs > 0 else "neutro", id="kpi-perda") %}<small id="kpi-perda-acao" class="acao-kpi"></small>{% endcall %}
+    {{ c.kpi("Próximo dia sem chuva", "—", "Sem previsão para o talhão", id="kpi-seco") }}
+  </section>
+
+  <div class="grade">
+    <div class="coluna">
+      <section class="painel">
+        <div class="titulo-bloco"><h2>Ordens de serviço</h2><span id="os-total" class="nota"></span></div>
+        <div class="tabela empilha">
+          <table>
+            <thead>
+              <tr><th>Talhão</th><th>Operação</th><th>Início</th><th>Máquina</th><th>Perda</th><th>Status</th></tr>
+            </thead>
+            <tbody id="ordens" hx-get="/parcial/os" hx-trigger="every 2s" hx-swap="innerHTML">
+              {% include "_linhas_os.html" %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {# Um seletor só: muda os cartões de clima (HTMX) e o gráfico (painel.js). Escolher um incidente na linha do tempo leva o seletor ao talhão dele. #}
+      <section class="painel" id="previsao" data-incidente="{{ escolhido if escolhido is not none else '' }}" data-talhao-padrao="{{ talhao_padrao if talhao_padrao is not none else '' }}">
+        <div class="titulo-bloco">
+          <h2>Previsão{% if nome_talhao %} · <span id="previsao-talhao">{{ nome_talhao }}</span>{% endif %}</h2>
+          {% if talhoes %}
+          <div class="seletor-talhao">
+            <label for="talhao-previsao">Talhão</label>
+            <select id="talhao-previsao" name="talhao_id">
+              {% for t in talhoes %}<option value="{{ t.id }}"{% if t.id == talhao %} selected{% endif %}>{{ t.nome }}</option>{% endfor %}
+            </select>
+          </div>
+          {% endif %}
+        </div>
+        {% if talhoes %}
+        <div id="clima" hx-get="/parcial/clima" hx-trigger="load, every 60s, change from:#talhao-previsao" hx-include="#talhao-previsao" hx-swap="innerHTML"></div>
+        {% else %}
+        {{ c.vazio("Nenhum talhão cadastrado ainda.") }}
+        {% endif %}
+        <div class="titulo-bloco sub"><h3>Chuva nas próximas 120 h</h3><span class="nota" id="previsao-fonte">previsão · 120 h</span></div>
+        <div id="previsao-numeros" class="numeros" hidden>
+          <div><span class="rotulo">Chuva 48 h</span><strong id="prev-chuva"></strong></div>
+          <div><span class="rotulo">Vento máx. 48 h</span><strong id="prev-vento"></strong></div>
+        </div>
+        <div id="grafico"><p class="vazio">Sem previsão guardada para este talhão ainda.</p></div>
+      </section>
+    </div>
+
+    <aside class="painel lateral">
+      <div class="titulo-bloco"><h2>Linha do tempo</h2><span id="status-incidente" class="selo" hidden></span></div>
+      <div id="seletor" hx-get="/parcial/seletor{{ incidente }}" hx-trigger="load, every 2s" hx-swap="innerHTML">
+        {% if incidentes %}{% include "_seletor.html" %}{% endif %}
+      </div>
+      <div id="eventos" class="eventos" hx-get="/parcial/timeline{{ incidente }}" hx-trigger="every 2s" hx-swap="innerHTML">
+        {% include "_eventos.html" %}
+      </div>
+    </aside>
+  </div>
+  </div>
+{% endblock %}

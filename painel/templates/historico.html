@@ -1,0 +1,29 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Histórico · TerraMind{% endblock %}
+{% block conteudo %}
+  <div class="pagina-interna">
+    <header class="cabecalho-pagina">
+      <h1>Histórico</h1>
+      <p class="nota">Previsto × observado. Só incidentes ao vivo; simulações ficam fora.</p>
+    </header>
+    {% if usa_reanalise %}{{ c.faixa("aviso", "Alguns itens usam chuva de reanálise, não de estação: o observado é aproximado.") }}{% endif %}
+    <section class="kpis kpis-3" aria-label="Resumo">
+      {{ c.kpi("Suspensões corretas", pct_texto, resumo.corretas ~ " de " ~ (resumo.corretas + resumo.falsos_alarmes) ~ " conferidas", pct_tom) }}
+      {{ c.kpi("Erro médio da previsão", erro_texto, "|prevista − observada|") }}
+      {{ c.kpi("Suspensões", resumo.total, resumo.falsos_alarmes ~ " falsos alarmes · " ~ resumo.sem_dado ~ " sem dado") }}
+    </section>
+    {% set linhas = [] %}
+    {% for i in resumo.itens %}
+      {% set observada %}<span class="mono">{{ i.observada }}</span>{% if i.reanalise %} <small>(reanálise, não estação)</small>{% endif %}{% endset %}
+      {% set janela %}<span class="mono">{{ i.janela }}</span>{% endset %}
+      {% set prevista %}<span class="mono">{{ i.prevista }}</span>{% endset %}
+      {% set classe %}{{ c.selo(i.rotulo_classe, {"correta": "bom", "falso_alarme": "risco", "sem_dado": "neutro"}[i.classe]) }}{% endset %}
+      {% set _ = linhas.append([i.talhao, "OS " ~ i.os_id, janela, prevista, observada, i.limite, classe]) %}
+    {% endfor %}
+    <section class="painel">
+      <div class="titulo-bloco"><h2>Suspensões conferidas</h2>{% if resumo.itens %}<span class="nota">{{ resumo.itens | length }} itens</span>{% endif %}</div>
+      {{ c.tabela(["Talhão", "OS", "Janela", "Prevista", "Observada", "Limite", "Classe"], linhas, "Nenhuma suspensão conferida ainda.") }}
+    </section>
+  </div>
+{% endblock %}

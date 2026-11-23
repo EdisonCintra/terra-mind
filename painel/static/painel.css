@@ -17,8 +17,8 @@ a { color: inherit; }
 small { color: var(--suave); font-size: .82rem; }
 h1, h2, h3, p { margin: 0; }
 
-/* Topo */
-.topo, .kpis, .grade, #simulacao:not(:empty), .faixas:not(:empty) { max-width: 1520px; margin-inline: auto; padding-inline: 2rem; }
+/* Topo. O conteúdo de toda tela vai em .pagina-interna (mesma largura do topo; ver docs/painel-telas.md). */
+.topo { max-width: 1520px; margin-inline: auto; padding-inline: 2rem; }
 .topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.25rem; border-bottom: 1px solid var(--linha); }
 .marca { display: flex; align-items: center; gap: .8rem; }
 .logo { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--bom-fundo); color: #06140d; }
@@ -29,7 +29,7 @@ h1 { font-size: 1.15rem; font-weight: 650; line-height: 1.2; }
 .ao-vivo::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--bom); animation: pulso 2.4s ease-in-out infinite; }
 @keyframes pulso { 50% { opacity: .3; } }
 
-#simulacao:not(:empty), .faixas:not(:empty) { padding-top: 1rem; }
+#simulacao:empty, .faixas:empty, #mapa-aviso:empty { display: none; }
 
 button { font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; border-radius: 8px; padding: .6rem 1.25rem; transition: background-color .15s, border-color .15s; }
 button.grande { color: var(--ceu); background: rgba(93, 169, 238, .1); border: 1px solid rgba(93, 169, 238, .55); }
@@ -37,7 +37,8 @@ button.grande:hover { background: rgba(93, 169, 238, .18); border-color: var(--c
 button[disabled] { opacity: .5; cursor: wait; }
 
 /* Indicadores */
-.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; padding-block: 1.25rem 0; }
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; }
+.kpis.kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .kpi { display: grid; align-content: start; gap: .3rem; padding: 1.1rem 1.25rem; background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px; min-width: 0; }
 .rotulo { color: var(--suave); font-size: .7rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
 .kpi strong { font: 500 1.65rem/1.2 var(--mono); white-space: nowrap; letter-spacing: -.02em; }
@@ -46,12 +47,16 @@ button[disabled] { opacity: .5; cursor: wait; }
 .acao-kpi:empty { display: none; }
 
 /* Grade: ordens e previsão à esquerda, a linha do tempo inteira à direita */
-.grade { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1rem; align-items: start; padding-block: 1rem 3rem; }
+.grade { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
 .coluna { display: grid; gap: 1rem; min-width: 0; }
 .painel { background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px; padding: 1.25rem; min-width: 0; }
 .lateral { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--linha-forte) transparent; }
-.titulo-bloco { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.titulo-bloco { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: 1rem; }
 h2 { font-size: .98rem; font-weight: 600; }
+h3 { font-size: .88rem; font-weight: 600; }
+.titulo-bloco.sub { margin: 1.25rem 0 .75rem; }
+.subtitulo { margin: 1.25rem 0 .6rem; }
+.cabecalho-pagina { display: grid; gap: .3rem; }
 .nota { color: var(--suave); font-size: .8rem; }
 .vazio { color: var(--suave); font-size: .92rem; }
 
@@ -135,11 +140,11 @@ tr:has(.status.reagendada) .perda { color: var(--bom); }
 @media (max-width: 1100px) {
   .grade { grid-template-columns: minmax(0, 1fr); }
   .lateral { position: static; max-height: none; }
-  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpis, .kpis.kpis-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
-  .topo, .kpis, .grade, #simulacao:not(:empty), .faixas:not(:empty) { padding-inline: 1rem; }
-  .kpis { grid-template-columns: minmax(0, 1fr); }
+  .topo { padding-inline: 1rem; }
+  .kpis, .kpis.kpis-3 { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .ao-vivo::before { animation: none; } button { transition: none; } }
 
@@ -157,13 +162,108 @@ tr:has(.status.reagendada) .perda { color: var(--bom); }
 .resposta-bula .trecho { margin: .6rem 0 0; padding-left: .7rem; border-left: 3px solid var(--ceu); color: var(--suave); font-size: .85rem; overflow-wrap: anywhere; }
 .voltar, .link-bula { color: var(--ceu); text-decoration: none; }
 
-/* Telas de perda evitada (G1), agenda (G2 e G3) e relatórios (G7): menu, filtros e formulários. */
-.menu { display: flex; flex-wrap: wrap; gap: .25rem 1.1rem; font-size: .86rem; }
-.menu a { color: var(--suave); text-decoration: none; padding-block: .2rem; border-bottom: 2px solid transparent; }
-.menu a:hover { color: var(--tinta); }
-.menu a.ativa { color: var(--tinta); border-bottom-color: var(--bom); }
-.pagina { max-width: 1520px; margin-inline: auto; padding: 1.25rem 2rem 3rem; display: grid; gap: 1rem; }
-.pagina .kpis { max-width: none; padding: 0; }
+/* Layout com menu lateral (E1): menu fixo à esquerda, topo com fazenda e usuário, conteúdo ao lado. */
+body.com-menu { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+.menu { background: var(--superficie); border-right: 1px solid var(--linha); padding: 1.25rem .75rem; position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; }
+.menu .marca { padding: 0 .5rem 1.25rem; }
+.menu ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.menu a { display: block; padding: .5rem .75rem; border-radius: 8px; color: var(--suave); text-decoration: none; }
+.menu a:hover { background: var(--superficie-2); color: var(--tinta); }
+.menu a[aria-current="page"] { background: var(--superficie-2); color: var(--tinta); box-shadow: inset 3px 0 0 var(--bom); }
+.menu a[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+.pagina { min-width: 0; }
+.topo-inicio { min-height: 2rem; }
+.seletor-fazenda { display: flex; align-items: center; gap: .6rem; }
+.seletor-fazenda label, .seletor-talhao label, .usuario { color: var(--suave); font-size: .85rem; }
+.seletor-talhao { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.seletor-talhao select { max-width: 100%; min-width: 0; }
+.seletor-fazenda select, .seletor-talhao select { font: inherit; color: var(--tinta); background: var(--superficie-2); border: 1px solid var(--linha-forte); border-radius: 8px; padding: .35rem .6rem; }
+.cabecalho-bula p { color: var(--suave); font-size: .85rem; }
+/* Componentes base (componentes.html) */
+.pagina-interna { max-width: 1520px; margin: 0 auto; padding: 1.25rem 2rem 3rem; display: grid; gap: 1rem; min-width: 0; }
+.cartao { background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px; padding: 1.25rem; min-width: 0; display: grid; gap: .75rem; }
+.kpis-vitrine { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
+code { font-family: var(--mono); font-size: .85em; color: var(--ceu); }
+.selo.bom { color: var(--bom); border-color: rgba(69, 207, 142, .4); background: rgba(69, 207, 142, .08); }
+.selo.atencao { color: var(--atencao); border-color: rgba(233, 174, 63, .4); background: rgba(233, 174, 63, .1); }
+.selo.risco { color: var(--risco); border-color: rgba(240, 112, 93, .45); background: rgba(240, 112, 93, .1); }
+.selo.azul { color: var(--ceu); border-color: rgba(93, 169, 238, .45); background: rgba(93, 169, 238, .1); }
+.faixa { margin-bottom: 0; }
+div.vazio { display: grid; justify-items: start; gap: .6rem; padding: 1rem 0; }
+.botao { color: var(--ceu); text-decoration: none; padding: .45rem 1rem; border: 1px solid rgba(93, 169, 238, .55); border-radius: 8px; font-size: .9rem; font-weight: 600; }
+.botao:hover { background: rgba(93, 169, 238, .15); }
+.form { display: grid; gap: .9rem; max-width: 460px; }
+.campo { display: grid; gap: .3rem; }
+.campo label { color: var(--suave); font-size: .8rem; }
+.campo input, .campo select { font: inherit; color: var(--tinta); background: var(--superficie-2); border: 1px solid var(--linha-forte); border-radius: 8px; padding: .55rem .7rem; min-width: 0; }
+.campo.com-erro input, .campo.com-erro select { border-color: var(--risco); }
+.erro-campo { color: var(--risco); }
+.form button { justify-self: start; }
+
+/* "Mais" do menu só existe na barra do celular */
+.menu .mais { display: none; }
+
+/* Celular: menu vira barra inferior (só itens com tela; com mais de 4, a 5ª vaga é "Mais") e tabelas viram cartões. */
+@media (max-width: 720px) {
+  body.com-menu { grid-template-columns: minmax(0, 1fr); padding-bottom: 4rem; }
+  .menu { position: fixed; inset: auto 0 0 0; z-index: 1100; /* acima das camadas do Leaflet (até 1000) */ height: auto; padding: .35rem .25rem; border-right: 0; border-top: 1px solid var(--linha); overflow: visible; }
+  .menu .marca { display: none; }
+  .menu > ul { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: .1rem; }
+  .menu li.fora-da-barra { display: none; }
+  .menu a, .menu summary { padding: .6rem .15rem; text-align: center; font-size: .72rem; overflow-wrap: anywhere; }
+  .menu a[aria-current="page"] { box-shadow: inset 0 3px 0 var(--bom); }
+  .menu .mais { display: block; position: relative; }
+  .menu summary { display: block; list-style: none; color: var(--suave); border-radius: 8px; cursor: pointer; }
+  .menu summary::-webkit-details-marker { display: none; }
+  .menu details[open] summary { background: var(--superficie-2); color: var(--tinta); }
+  .menu .mais ul { position: absolute; right: 0; bottom: calc(100% + .45rem); min-width: 12rem; padding: .35rem; background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+  .menu .mais a { text-align: left; font-size: .9rem; padding: .55rem .75rem; }
+  .menu .mais a.atual { background: var(--superficie-2); color: var(--tinta); }
+  .pagina-interna { padding: 1rem; }
+  .tabela.empilha { margin: 0; overflow-x: visible; }
+  .tabela.empilha table, .tabela.empilha tbody, .tabela.empilha tr, .tabela.empilha td { display: block; width: 100%; }
+  .tabela.empilha thead { display: none; }
+  .tabela.empilha tr { margin-bottom: .6rem; padding: .5rem .9rem; background: var(--superficie-2); border: 1px solid var(--linha); border-radius: 8px; }
+  .tabela.empilha td, .tabela.empilha td:first-child, .tabela.empilha td:last-child { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 0; text-align: right; }
+  .tabela.empilha td > div { text-align: right; }
+  .tabela.empilha td[data-rotulo]::before { content: attr(data-rotulo); color: var(--suave); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; text-align: left; }
+}
+
+/* Cartões de clima por talhão (E3) */
+.clima-cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; margin-bottom: .75rem; }
+.clima-dias { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: .5rem; margin-bottom: 1rem; }
+.clima-dias .dia { display: grid; gap: .15rem; padding: .6rem .7rem; border: 1px solid var(--linha); border-radius: 8px; font-size: .85rem; }
+.clima-dias .dia strong, .clima-dias .dia span { font-family: var(--mono); font-size: .8rem; }
+.clima-obs .mono { font-size: .82rem; }
+.clima-cartoes .kpi strong { font-size: 1.3rem; white-space: normal; overflow-wrap: anywhere; }
+.clima-obs { color: var(--suave); font-size: .85rem; margin-bottom: 1rem; }
+
+/* Mapa de risco (E4) */
+.mapa { height: 60vh; min-height: 320px; border-radius: 8px; border: 1px solid var(--linha); background: var(--superficie-2); }
+.legenda-mapa { display: flex; flex-wrap: wrap; gap: .4rem 1rem; color: var(--suave); font-size: .85rem; margin: .75rem 0 0; }
+.legenda-mapa .chave { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .3rem; }
+.chave.bom { background: var(--bom); } .chave.atencao { background: var(--atencao); }
+.chave.risco { background: var(--risco); } .chave.suave { background: var(--suave); }
+.motivos { margin: .25rem 0 1rem; padding-left: 1.1rem; }
+/* Cartão do talhão no mapa: um motivo por linha, valor em destaque, limite e período embaixo. */
+.risco-cabecalho { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; margin-bottom: .85rem; }
+.riscos { list-style: none; margin: 0 0 1.25rem; padding: 0; display: grid; gap: .5rem; }
+.risco-linha { padding: .7rem .85rem; border-radius: 8px; border: 1px solid var(--linha); background: var(--superficie-2); display: grid; gap: .15rem; }
+.risco-linha.tom-risco { border-color: rgba(240, 112, 93, .35); background: rgba(240, 112, 93, .06); }
+.risco-linha.tom-atencao { border-color: rgba(233, 174, 63, .35); background: rgba(233, 174, 63, .06); }
+.risco-topo { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+.risco-rotulo { font-weight: 600; }
+.risco-valor { font-size: 1.05rem; font-weight: 600; }
+.tom-risco .risco-valor { color: var(--risco); } .tom-atencao .risco-valor { color: var(--atencao); }
+.risco-limite { color: var(--suave); font-size: .85rem; }
+.risco-periodo { color: var(--tinta); font-size: .8rem; white-space: normal; }
+#detalhe .tabela { margin: 0; border: 1px solid var(--linha); border-radius: 8px; }
+#detalhe .tabela th:first-child, #detalhe .tabela td:first-child { padding-left: 1rem; }
+#detalhe .tabela th:last-child, #detalhe .tabela td:last-child { padding-right: 1rem; }
+@media (max-width: 720px) { #detalhe .tabela { border: 0; } }
+
+/* Telas de perda evitada (G1), agenda (G2 e G3) e relatórios (G7): filtros e formulários. O menu e o contêiner
+   (.pagina-interna) são os do layout (E1). */
 .kpis.quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .kpi .unidade { font: .8rem "Segoe UI", system-ui, sans-serif; color: var(--suave); letter-spacing: 0; }
 .filtros { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem 1.25rem; }
@@ -189,13 +289,14 @@ button.discreto:hover { color: var(--tinta); border-color: var(--suave); }
 .trilho div { height: 100%; border-radius: 3px; background: var(--bom-fundo); }
 .fonte { color: var(--suave); font-size: .78rem; max-width: 26rem; overflow-wrap: anywhere; }
 
-/* Agenda: uma linha por dia, uma célula por hora de trabalho (06h às 18h). */
+/* Agenda: uma linha por dia, uma célula por hora de trabalho (06h às 18h). `.dia` e `.motivos` presos a .semana:
+   os mesmos nomes existem nos cartões de clima (E3) e no mapa (E4). */
 .selos { display: flex; flex-wrap: wrap; }
 .citacao.generico { color: var(--suave); border-color: var(--linha-forte); }
 .ler-bula { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; margin-top: 1rem; }
 .ler-bula p { margin: 0; flex: 1 1 22rem; }
 .semana { display: grid; gap: .55rem; }
-.dia { display: grid; grid-template-columns: 5.5rem 3rem minmax(0, 1fr); align-items: center; gap: .2rem .75rem; }
+.semana .dia { display: grid; grid-template-columns: 5.5rem 3rem minmax(0, 1fr); align-items: center; gap: .2rem .75rem; }
 .horas { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 3px; }
 .cabecalho-horas .horas span { color: var(--suave); font: .68rem var(--mono); text-align: center; }
 .hora { display: inline-block; height: 1.5rem; border-radius: 4px; background: var(--superficie-2); }
@@ -203,7 +304,7 @@ button.discreto:hover { color: var(--tinta); border-color: var(--suave); }
 .hora.ruim { background: rgba(240, 112, 93, .75); }
 .hora.passou { background: var(--linha); }
 .hora.sem { background: repeating-linear-gradient(45deg, var(--superficie-2) 0 4px, var(--linha) 4px 8px); }
-.motivos { grid-column: 3; margin: 0; padding: 0; list-style: none; color: var(--suave); font-size: .78rem; }
+.semana .motivos { grid-column: 3; margin: 0; padding: 0; list-style: none; color: var(--suave); font-size: .78rem; }
 .legenda { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; color: var(--suave); font-size: .78rem; }
 .legenda .hora { width: 1rem; height: .8rem; margin-right: -.6rem; }
 .janela-resultado { display: grid; gap: .5rem; }
@@ -217,6 +318,5 @@ button.sugestao small { font-weight: 400; }
 @media (max-width: 900px) {
   .kpis.quatro, .duas-colunas { grid-template-columns: minmax(0, 1fr); }
   .formulario { grid-template-columns: minmax(0, 1fr); }
-  .pagina { padding-inline: 1rem; }
-  .dia { grid-template-columns: 4.5rem 2.5rem minmax(0, 1fr); }
+  .semana .dia { grid-template-columns: 4.5rem 2.5rem minmax(0, 1fr); }
 }

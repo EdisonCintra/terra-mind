@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Mapa · TerraMind{% endblock %}
+{% block conteudo %}
+  {# Cada talhão é colorido pelo risco das próximas 48 h (/api/risco); o clique carrega o detalhe em #detalhe. Leaflet e mapa.js são locais; só os tiles vêm de fora (URL no mapa.js). #}
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <script type="application/json" id="talhoes">{{ talhoes | tojson }}</script>
+  <div class="pagina-interna">
+    <header class="cabecalho-pagina">
+      <h1>Mapa de risco</h1>
+      <p class="nota">Cada talhão com a cor do risco das próximas 48 h. Toque em um talhão para ver os motivos e as ordens.</p>
+    </header>
+    {# mapa.js põe aqui o aviso de Monitor fora do ar ou de talhões sem previsão #}
+    <div id="mapa-aviso" aria-live="polite"></div>
+    <div class="grade">
+      <section class="painel">
+        <div class="titulo-bloco"><h2>Risco das próximas 48 h</h2><span id="mapa-nota" class="nota"></span></div>
+        {% if not talhoes %}{{ c.faixa("aviso", "Nenhum talhão cadastrado ainda: o mapa fica vazio.") }}{% endif %}
+        <div id="mapa" class="mapa" data-fazenda="{{ fazenda_id if fazenda_id is not none else '' }}" aria-label="Mapa dos talhões"></div>
+        <p class="legenda-mapa">
+          <span><span class="chave bom"></span>baixo</span>
+          <span><span class="chave atencao"></span>atenção</span>
+          <span><span class="chave risco"></span>alto</span>
+          <span><span class="chave suave"></span>sem previsão</span>
+        </p>
+      </section>
+      <aside class="painel lateral">
+        <div class="titulo-bloco"><h2 id="detalhe-titulo">Talhão</h2></div>
+        <div id="detalhe" aria-live="polite">{{ c.vazio("Clique em um talhão no mapa.") }}</div>
+      </aside>
+    </div>
+  </div>
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/mapa.js"></script>
+{% endblock %}

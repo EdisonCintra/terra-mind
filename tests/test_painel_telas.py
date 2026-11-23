@@ -71,13 +71,13 @@ def test_resumo_mostra_so_o_que_mudou():
 
 # --- tela 2: linha do tempo --------------------------------------------------------------------
 def test_timeline_sem_incidentes(cliente):
-    assert "Nenhum incidente" in cliente.get("/timeline").text
+    assert "Nenhum incidente" in cliente.get("/visao-geral").text
 
 
 def test_timeline_mostra_citacao_e_mudanca_de_status(cliente):
     inc = novo_incidente()
     assert escrita.suspender_os(1, inc, "Chuva prevista antes das 4 h (fonte: bula-abacus-hc, p. 7)")["ok"]
-    html = cliente.get(f"/timeline?incidente={inc}").text
+    html = cliente.get(f"/visao-geral?incidente={inc}").text
     assert "bula-abacus-hc, p. 7" in html and 'class="citacao"' in html
     assert "Ordem suspensa" in html and "status: agendada" not in html  # só o título, sem o JSON cru
     assert "(fonte:" not in html  # a citação sai do texto e vira selo
@@ -119,7 +119,7 @@ def test_timeline_usa_o_incidente_mais_recente_por_padrao(cliente):
     insere = "INSERT INTO agente.auditoria (incidente_id, no, acao) VALUES (%s, %s, 'a')"
     sql(insere, (novo_incidente("encerrado"), "no_antigo"))
     sql(insere, (novo_incidente(), "no_novo"))
-    html = cliente.get("/timeline").text
+    html = cliente.get("/visao-geral").text
     assert "no_novo" in html and "no_antigo" not in html
 
 
@@ -184,7 +184,7 @@ def test_alerta_vermelho_para_decisao_manual(cliente):
     )
     html = cliente.get("/parcial/alertas").text
     assert "alerta-vermelho" in html and f"Incidente #{inc}" in html and "Sem evidência na bula" in html
-    assert 'hx-get="/parcial/alertas"' in cliente.get("/os").text
+    assert 'hx-get="/parcial/alertas"' in cliente.get("/visao-geral").text
     sql("UPDATE agente.incidentes SET status = 'encerrado' WHERE id = %s", (inc,))
     assert "alerta-vermelho" not in cliente.get("/parcial/alertas").text
 
@@ -215,8 +215,10 @@ def test_simular_chuva_com_monitor_fora_do_ar(cliente, monkeypatch):
     assert "Não consegui falar com o Monitor" in cliente.post("/simular/chuva").text
 
 
-def test_tela_simular_tem_o_botao(cliente):
-    assert 'hx-post="/simular/chuva"' in cliente.get("/simular").text
+def test_simular_antigo_redireciona_para_a_visao_geral_que_tem_o_botao(cliente):
+    r = cliente.get("/simular", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/visao-geral"
+    assert 'hx-post="/simular/chuva"' in cliente.get("/visao-geral").text
 
 
 def test_simular_chuva_usa_o_talhao_configurado(cliente, monkeypatch):
@@ -226,10 +228,53 @@ def test_simular_chuva_usa_o_talhao_configurado(cliente, monkeypatch):
     assert json.loads(vistas[0].content)["talhao_id"] == 2
 
 
+def test_simular_chuva_com_incidente_ativo_avisa(cliente, monkeypatch):
+    http_falso(monkeypatch, lambda req: httpx.Response(200, json={"incidentes": [], "erros": []}))
+    html = cliente.post("/simular/chuva").text
+    assert "já há incidente ativo no talhão" in html and "0 incidente(s)" in html
+
+
+# --- E2: gráfico com a previsão real -----------------------------------------------------------
+def test_api_previsao_repassa_o_monitor(cliente, monkeypatch):
+    horas = [{"ts": "2026-11-17T10:00:00-03:00", "chuva_mm": 1.5, "vento_kmh": 9.0, "umidade_pct": 70, "temp_c": 25}]
+    cab = {"X-Previsao-Buscada-Em": "2026-11-17T09:55:00+00:00", "X-Previsao-Fonte": "open-meteo"}
+    vistas = http_falso(monkeypatch, lambda req: httpx.Response(200, json=horas, headers=cab))
+    monkeypatch.setenv("MONITOR_URL", "http://monitor:8020")
+    r = cliente.get("/api/previsao/3")
+    assert str(vistas[0].url) == "http://monitor:8020/previsao/3"
+    assert r.status_code == 200 and r.json() == horas
+    assert r.headers["X-Previsao-Fonte"] == "open-meteo"
+    assert r.headers["X-Previsao-Buscada-Em"] == cab["X-Previsao-Buscada-Em"]
+
+
+def test_api_previsao_sem_previsao_repassa_404(cliente, monkeypatch):
+    http_falso(monkeypatch, lambda req: httpx.Response(404, json={"detail": "sem_previsao"}))
+    r = cliente.get("/api/previsao/3")
+    assert r.status_code == 404 and r.json() == {"detail": "sem_previsao"}
+
+
+def test_api_previsao_monitor_fora_503(cliente, monkeypatch):
+    def cai(req):
+        raise httpx.ConnectError("sem rede")
+
+    http_falso(monkeypatch, cai)
+    r = cliente.get("/api/previsao/3")
+    assert r.status_code == 503 and r.json() == {"detail": "monitor_indisponivel"}
+    http_falso(monkeypatch, lambda req: httpx.Response(502))
+    assert cliente.get("/api/previsao/3").status_code == 503
+
+
+def test_visao_geral_expoe_o_talhao_padrao_e_o_seletor_o_talhao_do_incidente(cliente):
+    assert 'data-talhao-padrao="1"' in cliente.get("/visao-geral").text
+    inc = novo_incidente("aberto")
+    seletor = cliente.get("/parcial/seletor").text
+    assert f'data-id="{inc}"' in seletor and "data-talhao=" in seletor
+
+
 def test_tela_e_so_de_acompanhamento_sem_botoes_de_decisao(cliente):
     inc = novo_incidente("aguardando_aprovacao")
     novo_plano(inc, "Remarcar OS 1 para sexta")
-    for rota in ("/os", "/timeline", "/aprovacao"):
+    for rota in ("/visao-geral", f"/visao-geral?incidente={inc}"):
         html = cliente.get(rota).text
         assert "Remarcar OS 1 para sexta" not in html and 'hx-post="/aprovacao/' not in html
         assert "Decisão" not in html and 'id="status-incidente"' in html
@@ -291,7 +336,7 @@ def test_timeline_mostra_o_custo_so_enquanto_espera_o_gerente(cliente):
 def test_tela_da_bula_lista_os_produtos_do_erp(cliente):
     html = cliente.get("/bula").text
     assert 'hx-post="/bula/perguntar"' in html and "Abacus HC" in html
-    assert 'href="/bula"' in cliente.get("/os").text
+    assert 'href="/bula"' in cliente.get("/visao-geral").text
 
 
 def test_pergunta_vai_ao_agents_e_mostra_trecho_fonte_e_pagina(cliente, monkeypatch):

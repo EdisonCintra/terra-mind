@@ -1,8 +1,7 @@
 import re
 import unicodedata
 
-from base_agricola.manifesto import Fonte
-from base_agricola.modelos import Secao, Trecho
+from base_agricola.modelos import Fonte, Secao, Trecho
 from base_agricola.pdf import PaginaTexto
 
 CABECALHOS: dict[str, Secao] = {

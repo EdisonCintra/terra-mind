@@ -5,7 +5,7 @@ import pytest
 from psycopg.errors import CheckViolation, UniqueViolation
 from psycopg.rows import dict_row
 
-from tests.conftest import DATABASE_URL
+from tests.conftest import DATABASE_URL, SEED
 
 
 @pytest.fixture
@@ -146,3 +146,93 @@ def test_indice_unico_parcial_incidente_por_talhao(conn):
         (inc2,),
     ).fetchone()
     assert plano["criado_em"] is not None and plano["escalado_em"] is None
+
+
+def test_previsoes_aceita_horas_e_recusa_objeto(conn):
+    """E2: clima.previsoes guarda `horas` como array JSON; objeto é recusado."""
+    conn.execute("INSERT INTO clima.previsoes (talhao_id, fonte, horas) VALUES (1, 'replay', '[]'::jsonb)")
+    linha = conn.execute("SELECT dias, buscada_em FROM clima.previsoes WHERE talhao_id = 1").fetchone()
+    assert linha["dias"] == [] and linha["buscada_em"] is not None
+
+    with pytest.raises(CheckViolation):
+        with conn.transaction():
+            conn.execute("INSERT INTO clima.previsoes (talhao_id, fonte, horas) VALUES (1, 'replay', '{}'::jsonb)")
+
+
+def test_incidente_nasce_live_e_recusa_origem_invalida(conn):
+    """E2: agente.incidentes.origem assume 'live' e só aceita 'live' ou 'replay'."""
+    origem = conn.execute(
+        """
+        INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status)
+        VALUES (1, '[{"tipo":"chuva"}]'::jsonb, '[]'::jsonb, 'aberto')
+        RETURNING origem
+        """
+    ).fetchone()["origem"]
+    assert origem == "live"
+
+    with pytest.raises(CheckViolation):
+        with conn.transaction():
+            conn.execute(
+                """
+                INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status, origem)
+                VALUES (2, '[{"tipo":"chuva"}]'::jsonb, '[]'::jsonb, 'aberto', 'simulado')
+                """
+            )
+
+
+def test_fatores_aceita_atraso_e_recusa_condicao_desconhecida(conn):
+    """E7: conhecimento.fatores_perda aceita 'atraso' (fração por dia de demora) e recusa condição fora do contrato."""
+    conn.execute(
+        "INSERT INTO conhecimento.fatores_perda (tipo_insumo, condicao, fator, fonte_ou_estimativa) "
+        "VALUES ('inseticida', 'atraso', 0.05, 'estimativa: teste')"
+    )
+    with pytest.raises(CheckViolation):
+        with conn.transaction():
+            conn.execute(
+                "INSERT INTO conhecimento.fatores_perda (tipo_insumo, condicao, fator, fonte_ou_estimativa) "
+                "VALUES ('inseticida', 'lavagem', 0.05, 'estimativa: teste')"
+            )
+
+
+def test_observacoes_chave_por_estacao_e_hora_e_fonte_valida(conn):
+    """E3: uma linha por (estação, hora); fonte de estação só 'inmet' ou 'fazenda'."""
+    conn.execute("INSERT INTO clima.estacoes VALUES ('A1', 'Perto', -17.80, -50.92, 'inmet')")
+    conn.execute("INSERT INTO clima.observacoes (estacao, ts, chuva_mm) VALUES ('A1', '2026-11-05T10:00Z', 1.5)")
+    with pytest.raises(UniqueViolation):
+        with conn.transaction():
+            conn.execute("INSERT INTO clima.observacoes (estacao, ts) VALUES ('A1', '2026-11-05T10:00Z')")
+    with pytest.raises(CheckViolation):
+        with conn.transaction():
+            conn.execute("INSERT INTO clima.estacoes VALUES ('A2', 'X', -17.8, -50.9, 'outra')")
+
+
+def test_011_marca_incidentes_antigos_como_replay_e_e_idempotente(conn):
+    """I1: incidente anterior à coluna `origem` vira 'replay'; novo nasce 'live'; re-rodar não muda nada."""
+    migracao = (SEED.parent / "011_clima.sql").read_text(encoding="utf-8")
+    conn.execute("ALTER TABLE agente.incidentes DROP COLUMN origem")
+    antigo = conn.execute(
+        """
+        INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status)
+        VALUES (1, '[{"tipo":"chuva"}]'::jsonb, '[]'::jsonb, 'encerrado')
+        RETURNING id
+        """
+    ).fetchone()["id"]
+
+    conn.execute(migracao)
+    assert conn.execute(
+        "SELECT origem FROM agente.incidentes WHERE id = %s", (antigo,)
+    ).fetchone()["origem"] == "replay"
+
+    novo = conn.execute(
+        """
+        INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status)
+        VALUES (2, '[{"tipo":"chuva"}]'::jsonb, '[]'::jsonb, 'aberto')
+        RETURNING id
+        """
+    ).fetchone()["id"]
+
+    conn.execute(migracao)
+    origens = dict(
+        (r["id"], r["origem"]) for r in conn.execute("SELECT id, origem FROM agente.incidentes").fetchall()
+    )
+    assert origens == {antigo: "replay", novo: "live"}

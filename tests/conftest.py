@@ -23,7 +23,8 @@ def banco_limpo():
         conn.execute(
             "TRUNCATE erp.leituras_solo, erp.ordens_servico, erp.operadores, erp.maquinas,"
             " erp.insumos, erp.talhoes, agente.auditoria, agente.planos, agente.incidentes,"
-            " conhecimento.limites_produto"
+            " conhecimento.limites_produto, clima.previsoes, clima.observacoes, clima.estacoes,"
+            " clima.conferencias"
             " RESTART IDENTITY CASCADE"
         )
         # Os ids dos incidentes recomeçam em 1; sem limpar as sessões do ADK (criadas pelo `agents`),

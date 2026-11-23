@@ -23,11 +23,12 @@ def garantir_colecao(client: QdrantClient, nome: str, dimensao: int) -> None:
 
 
 def indexar(client: QdrantClient, embedder: Embedder, trechos: list[Trecho], colecao: str = COLECAO) -> int:
-    """Substitui todos os pontos de cada documento presente em `trechos`; rodar de novo não duplica."""
+    """Substitui os pontos de cada documento presente em `trechos`; rodar de novo não duplica.
+
+    Ordem segura: embeddings, depois upsert (ids determinísticos sobrescrevem), e só então apaga os pontos
+    antigos que sobraram. Uma falha em qualquer passo nunca deixa o documento sem trechos.
+    """
     garantir_colecao(client, colecao, embedder.dimensao)
-    for doc_id in {t.doc_id for t in trechos}:
-        client.delete(colecao, models.FilterSelector(filter=models.Filter(must=[
-            models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))])))
     if not trechos:
         return 0
     vetores = embedder.embed([t.texto for t in trechos])
@@ -35,4 +36,9 @@ def indexar(client: QdrantClient, embedder: Embedder, trechos: list[Trecho], col
         models.PointStruct(id=_id_ponto(t), vector=v, payload=t.model_dump())
         for t, v in zip(trechos, vetores, strict=True)
     ])
+    for doc_id in {t.doc_id for t in trechos}:
+        novos = [_id_ponto(t) for t in trechos if t.doc_id == doc_id]
+        client.delete(colecao, models.FilterSelector(filter=models.Filter(
+            must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))],
+            must_not=[models.HasIdCondition(has_id=novos)])))
     return len(trechos)

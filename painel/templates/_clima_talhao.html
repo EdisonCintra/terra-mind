@@ -1,0 +1,30 @@
+{% import "componentes.html" as c %}
+{# Parcial dos cartões de clima: cada bloco vem de uma chamada própria ao Monitor e some sozinho se ela falhar.
+   O seletor de talhão fica na Visão geral (#talhao-previsao), fora deste parcial, e vale também para o gráfico. #}
+
+{% if agora %}
+<div class="clima-cartoes">
+  {{ c.kpi("Delta T agora", agora.valor or "sem dado", agora.faixa, agora.tom if agora.valor else "neutro") }}
+  {{ c.kpi("Inversão térmica", inversao.texto if inversao else "sem dado", "próximas 48 h", inversao.tom if inversao else "neutro") }}
+  {{ c.kpi("Vento a 2 m", (vento.valor or "sem dado") ~ ((" · " ~ vento.rumo) if vento.rumo else ""), ("rajada " ~ vento.rajada) if vento.rajada else "sem rajada") }}
+</div>
+{% else %}
+{{ c.vazio("Sem previsão guardada para este talhão ainda.") }}
+{% endif %}
+
+{% if observado %}
+<p class="clima-obs">Última leitura (<span class="mono">{{ observado.hora }}</span>):
+  {% if observado.fonte == "estacao" %}estação {{ observado.estacao }}{% if observado.distancia %}, a {{ observado.distancia }}{% endif %}{% else %}reanálise Open-Meteo — não é estação{% endif %}
+  · <span class="mono">{{ observado.temp }}</span> · umidade <span class="mono">{{ observado.umidade }}</span> · chuva <span class="mono">{{ observado.chuva }}</span> · vento a 2 m (altura da barra) <span class="mono">{{ observado.vento }} {{ observado.rumo }}</span></p>
+{% else %}
+{{ c.vazio("Sem leitura observada para este talhão.") }}
+{% endif %}
+
+{% if dias %}
+<div class="clima-dias" aria-label="Próximos 7 dias">
+  {% for d in dias %}<div class="dia"><strong>{{ d.data }}</strong><span>{{ d.chuva }} · {{ d.prob }}</span><span>{{ d.min }} / {{ d.max }}</span><span>{{ d.vento }} {{ d.rumo }}</span></div>{% endfor %}
+</div>
+<p class="clima-obs"><small>Vento a 2 m (altura da barra), como na previsão e na leitura.</small></p>
+{% else %}
+{{ c.vazio("Sem previsão diária para este talhão.") }}
+{% endif %}

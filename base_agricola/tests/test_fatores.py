@@ -52,3 +52,17 @@ def test_yaml_da_demo_tem_chuva_para_fungicida_e_herbicida():
     ids = {"bula-abacus-hc", "bula-ativum", "bula-brucia", "bula-amplexus"}
     fatores = carregar_fatores(DADOS / "fatores_perda.yaml", ids)
     assert {("fungicida", "chuva"), ("herbicida", "chuva")} <= {(f.tipo_insumo, f.condicao) for f in fatores}
+
+
+def test_carrega_fator_de_atraso(tmp_path):
+    fatores = carregar_fatores(yaml_fatores(tmp_path, ["estimativa: perda por dia de demora"], condicao="atraso"), set())
+    assert fatores[0].condicao == "atraso"
+
+
+def test_yaml_da_demo_cobre_condicoes_alem_da_chuva():
+    ids = {"bula-abacus-hc", "bula-ativum", "bula-brucia", "bula-amplexus", "fenologia-milho", "fenologia-soja"}
+    fatores = carregar_fatores(DADOS / "fatores_perda.yaml", ids)
+    pares = {(f.tipo_insumo, f.condicao) for f in fatores}
+    esperados = {(t, c) for t in ("fungicida", "herbicida", "inseticida")
+                 for c in ("vento", "umidade", "temperatura", "atraso")}
+    assert esperados <= pares
