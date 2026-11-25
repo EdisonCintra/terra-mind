@@ -147,7 +147,8 @@ class Orquestrador:
             )
             await self.deps.repo.auditar(incidente_id, "runner", "falha_interna")
             await self.deps.canal.enviar_alerta(
-                f"Incidente {incidente_id}: falha interna no TerraMind. Verifique as OS no painel."
+                f"Incidente {incidente_id}: falha interna no TerraMind. Verifique as OS no painel.",
+                incidente_id=incidente_id,
             )
         except Exception:  # noqa: BLE001
             logger.exception("incidente %s: falha ao registrar a falha interna", incidente_id)

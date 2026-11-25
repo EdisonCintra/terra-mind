@@ -54,7 +54,7 @@ def test_mapa_sem_url_externa_no_html(cliente):
 
 def test_mapa_embute_talhoes_como_json(cliente, monkeypatch):
     monkeypatch.setattr(
-        dados, "talhoes_com_geometria", lambda: [{"id": 7, "nome": "T </script>", "lat": -17.8, "lon": -50.9, "geom": None}]
+        dados, "talhoes_com_geometria", lambda *_: [{"id": 7, "nome": "T </script>", "lat": -17.8, "lon": -50.9, "geom": None}]
     )
     html = cliente.get("/mapa").text
     assert '<script type="application/json" id="talhoes">' in html

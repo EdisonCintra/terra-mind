@@ -292,9 +292,9 @@ def repo_pg(engine_pg):
 
     with engine_pg.begin() as conn:
         conn.execute(text("TRUNCATE clima.previsoes, agente.incidentes, erp.talhoes RESTART IDENTITY CASCADE"))
-        conn.execute(text("INSERT INTO erp.talhoes (nome, area_ha, cultura, data_plantio, "
+        conn.execute(text("INSERT INTO erp.talhoes (fazenda_id, nome, area_ha, cultura, data_plantio, "
                           "estagio_fenologico, lat, lon) "
-                          "VALUES ('T1', 120, 'milho', current_date, 'V6', -17.79, -50.92)"))
+                          "VALUES (1, 'T1', 120, 'milho', current_date, 'V6', -17.79, -50.92)"))
     return RepositorioMonitor(engine_pg)
 
 
@@ -368,8 +368,8 @@ def inserir_os(engine, inicio, duracao=8, status="agendada", insumo=True):
 
     with engine.begin() as conn:
         if insumo:
-            conn.execute(text("INSERT INTO erp.insumos (id, produto, tipo, unidade, estoque, preco_unitario) "
-                              "VALUES (1, 'X', 'fungicida', 'L', 100, 10) ON CONFLICT (id) DO NOTHING"))
+            conn.execute(text("INSERT INTO erp.insumos (id, fazenda_id, produto, tipo, unidade, estoque, preco_unitario) "
+                              "VALUES (1, 1, 'X', 'fungicida', 'L', 100, 10) ON CONFLICT (id) DO NOTHING"))
         conn.execute(text("INSERT INTO erp.ordens_servico (talhao_id, tipo_operacao, insumo_id, "
                           "inicio_previsto, duracao_horas, status) "
                           "VALUES (1, 'pulverizacao', :ins, :i, :d, :s)"),

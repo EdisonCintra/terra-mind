@@ -84,7 +84,7 @@ def _numero_br(valor: float | int | None) -> str:
 
 
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
-templates.env.filters.update(hora=_hora, hms=_hms, dia=_dia, quando=_quando, num=_numero_br)
+templates.env.filters.update(hora=_hora, hms=_hms, dia=_dia, quando=_quando, num=_numero_br, numero=dados.numero)
 templates.env.globals.update(STATUS_OS=STATUS_OS, STATUS_INCIDENTE=STATUS_INCIDENTE)
 
 
@@ -100,6 +100,12 @@ def _url(variavel: str, padrao: str) -> str:
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
+
+
+def _fazenda(request: Request) -> int | None:
+    """Fazenda escolhida no seletor do topo (cookie `fazenda_id`); `None` = todas (contrato 20)."""
+    valor = request.cookies.get("fazenda_id", "")
+    return int(valor) if valor.isascii() and valor.isdecimal() else None
 
 
 def contexto_base(request: Request, ativa: str = "/visao-geral") -> dict:
@@ -182,7 +188,10 @@ def selecionar_fazenda(fazenda_id: int = Form(...), voltar: str = Form("/visao-g
     if not _caminho_local(voltar):
         voltar = "/visao-geral"
     resposta = RedirectResponse(voltar, status_code=303)
-    resposta.set_cookie("fazenda_id", str(fazenda_id), max_age=365 * 24 * 3600, samesite="lax")
+    if fazenda_id > 0:
+        resposta.set_cookie("fazenda_id", str(fazenda_id), max_age=365 * 24 * 3600, samesite="lax")
+    else:  # 0 = "Todas as fazendas"
+        resposta.delete_cookie("fazenda_id")
     return resposta
 
 
@@ -191,19 +200,20 @@ def selecionar_fazenda(fazenda_id: int = Form(...), voltar: str = Form("/visao-g
 def tela_visao_geral(request: Request, incidente: int | None = None):
     """Um seletor de talhão só (bloco Previsão) alimenta cartões de clima e gráfico; começa no talhão
     do incidente escolhido na linha do tempo ou, sem incidente, no primeiro talhão."""
-    linha_do_tempo = _contexto_timeline(incidente)
-    padrao = dados.talhao_padrao()
+    fazenda = _fazenda(request)
+    linha_do_tempo = _contexto_timeline(incidente, fazenda)
+    padrao = dados.talhao_padrao(fazenda)
     do_incidente = next(
         (i["talhao_id"] for i in linha_do_tempo["incidentes"] if i["id"] == linha_do_tempo["escolhido"]), None
     )
     contexto = {
         **contexto_base(request),
         **linha_do_tempo,
-        "ordens": dados.listar_ordens(),
+        "ordens": dados.listar_ordens(fazenda),
         "talhao_padrao": padrao,
-        "talhoes": dados.listar_talhoes(),
+        "talhoes": dados.listar_talhoes(fazenda),
         "talhao": do_incidente if do_incidente is not None else padrao,
-        "perda": _perda_da_safra(),
+        "perda": _perda_da_safra(fazenda),
     }
     return templates.TemplateResponse(request, "visao_geral.html", contexto)
 
@@ -217,20 +227,20 @@ def vitrine(request: Request):
 @app.get("/parcial/os", response_class=HTMLResponse)
 def parcial_os(request: Request):
     """Só as `<tr>` da tabela: o HTMX troca o corpo da tabela a cada 2 s."""
-    return templates.TemplateResponse(request, "_linhas_os.html", {"ordens": dados.listar_ordens()})
+    return templates.TemplateResponse(request, "_linhas_os.html", {"ordens": dados.listar_ordens(_fazenda(request))})
 
 
 @app.get("/parcial/alertas", response_class=HTMLResponse)
 def parcial_alertas(request: Request):
     """Faixa vermelha para incidentes em `aguardando_decisao_manual` (telas 1 e 3)."""
     return templates.TemplateResponse(
-        request, "_alertas.html", {"manuais": dados.incidentes_decisao_manual()}
+        request, "_alertas.html", {"manuais": dados.incidentes_decisao_manual(_fazenda(request))}
     )
 
 
 # --- Tela 2: linha do tempo ------------------------------------------------------------------
-def _contexto_timeline(incidente: int | None) -> dict:
-    incidentes = dados.listar_incidentes()
+def _contexto_timeline(incidente: int | None, fazenda_id: int | None = None) -> dict:
+    incidentes = dados.listar_incidentes(fazenda_id=fazenda_id)
     escolhido = incidente if incidente is not None else (incidentes[0]["id"] if incidentes else None)
     eventos = []
     for a in dados.auditoria_do_incidente(escolhido) if escolhido is not None else []:
@@ -253,12 +263,12 @@ def _agora() -> datetime:
 @app.get("/parcial/seletor", response_class=HTMLResponse)
 def parcial_seletor(request: Request, incidente: int | None = None):
     """Links dos incidentes no topo da linha do tempo (o HTMX troca a cada 2 s)."""
-    return templates.TemplateResponse(request, "_seletor.html", _contexto_timeline(incidente))
+    return templates.TemplateResponse(request, "_seletor.html", _contexto_timeline(incidente, _fazenda(request)))
 
 
 @app.get("/parcial/timeline", response_class=HTMLResponse)
 def parcial_timeline(request: Request, incidente: int | None = None):
-    return templates.TemplateResponse(request, "_eventos.html", _contexto_timeline(incidente))
+    return templates.TemplateResponse(request, "_eventos.html", _contexto_timeline(incidente, _fazenda(request)))
 
 
 # --- Aprovação: a decisão é no canal; estas rotas repassam ao `agents` ----------------------
@@ -266,7 +276,7 @@ def parcial_timeline(request: Request, incidente: int | None = None):
 def parcial_pendentes(request: Request):
     agora = _agora()
     planos = [
-        {**p, "atraso": dados.linhas_atraso(p["custos_atraso"], agora)} for p in dados.planos_pendentes()
+        {**p, "atraso": dados.linhas_atraso(p["custos_atraso"], agora)} for p in dados.planos_pendentes(_fazenda(request))
     ]
     return templates.TemplateResponse(request, "_pendentes.html", {"planos": planos})
 
@@ -302,7 +312,7 @@ TIMEOUT_BULA_S = 150  # o agente pode buscar até 3 vezes e o LLM tem 90 s por c
 @app.get("/bula", response_class=HTMLResponse)
 def tela_bula(request: Request):
     return templates.TemplateResponse(
-        request, "bula.html", {**contexto_base(request, "/bula"), "produtos": dados.listar_produtos()}
+        request, "bula.html", {**contexto_base(request, "/bula"), "produtos": dados.listar_produtos(_fazenda(request))}
     )
 
 
@@ -464,7 +474,7 @@ def _cartoes(previsao: list | None, diaria: list | None, observado: dict | None)
 @app.get("/parcial/clima", response_class=HTMLResponse)
 def parcial_clima(request: Request, talhao_id: int | None = None):
     """Cartões de clima do talhão; cada chamada ao Monitor falha sozinha (só o seu cartão fica vazio)."""
-    talhao = talhao_id if talhao_id is not None else dados.talhao_padrao()
+    talhao = talhao_id if talhao_id is not None else dados.talhao_padrao(_fazenda(request))
     previsao = diaria = observado = None
     if talhao is not None:
         with cliente_http() as http:
@@ -481,7 +491,7 @@ JANELA_MAPA_H = 48
 
 @app.get("/mapa", response_class=HTMLResponse)
 def tela_mapa(request: Request):
-    contexto = {**contexto_base(request, "/mapa"), "talhoes": dados.talhoes_com_geometria()}
+    contexto = {**contexto_base(request, "/mapa"), "talhoes": dados.talhoes_com_geometria(_fazenda(request))}
     return templates.TemplateResponse(request, "mapa.html", contexto)
 
 
@@ -620,12 +630,12 @@ def _mensagem(request: Request, nivel: str, texto: str, **cabecalhos: str) -> HT
 
 
 # --- Perda evitada (G1) ----------------------------------------------------------------------
-def _perda_da_safra() -> dict | None:
+def _perda_da_safra(fazenda_id: int | None = None) -> dict | None:
     """Total da safra para o KPI da Visão geral: o mesmo número da tela /perda (de `agente.impactos`,
     simulações fora). None se o banco ainda não tem a 020 ou está fora: o KPI mostra traço, neutro."""
     hoje = _agora().date()
     try:
-        p = dados.perda_evitada(dados.inicio_da_safra(hoje), hoje)
+        p = dados.perda_evitada(dados.inicio_da_safra(hoje), hoje, fazenda_id=fazenda_id)
     except psycopg.Error:
         log.warning("perda evitada indisponível", exc_info=True)
         return None
@@ -633,9 +643,9 @@ def _perda_da_safra() -> dict | None:
 
 
 @app.get("/api/perda-evitada")
-def api_perda_evitada() -> JSONResponse:
+def api_perda_evitada(request: Request) -> JSONResponse:
     """Total da safra para o painel.js atualizar o KPI sem recarregar; o tom segue este valor."""
-    perda = _perda_da_safra()
+    perda = _perda_da_safra(_fazenda(request))
     if perda is None:
         return JSONResponse({"detail": "perda_indisponivel"}, status_code=503)
     return JSONResponse(perda)
@@ -649,10 +659,20 @@ def tela_perda(request: Request, inicio: date | None = None, fim: date | None = 
     fim = fim or hoje
     contexto = {
         **contexto_base(request, "/perda"),
-        "p": dados.perda_evitada(inicio, fim, replay),
+        "p": dados.perda_evitada(inicio, fim, replay, _fazenda(request)),
         "replay": replay,
     }
     return templates.TemplateResponse(request, "perda.html", contexto)
+
+
+# --- Fazenda: indicadores (F5) ---------------------------------------------------------------
+@app.get("/fazenda", response_class=HTMLResponse)
+def tela_fazenda(request: Request):
+    """Talhões, OS por status, estoque, máquinas e o que está (e vai ser) plantado, da fazenda escolhida."""
+    fazenda = _fazenda(request)
+    nome = next((f["nome"] for f in dados.listar_fazendas() if f["id"] == fazenda), None)
+    contexto = {**contexto_base(request, "/fazenda"), "i": dados.indicadores(fazenda, _agora()), "fazenda": nome}
+    return templates.TemplateResponse(request, "indicadores.html", contexto)
 
 
 # --- Agenda e janela da OS (G2 e G3) ---------------------------------------------------------
@@ -698,9 +718,9 @@ def _motivos(dia: dict) -> list[str]:
 def tela_agenda(request: Request):
     contexto = {
         **contexto_base(request, "/agenda"),
-        "insumos": dados.listar_insumos(),
-        "talhoes": dados.listar_talhoes(),
-        "operadores": dados.listar_operadores(),
+        "insumos": dados.listar_insumos(_fazenda(request)),
+        "talhoes": dados.listar_talhoes(_fazenda(request)),
+        "operadores": dados.listar_operadores(_fazenda(request)),
         "horas": list(HORAS_AGENDA),
     }
     return templates.TemplateResponse(request, "agenda.html", contexto)
@@ -709,6 +729,8 @@ def tela_agenda(request: Request):
 @app.get("/parcial/agenda", response_class=HTMLResponse)
 def parcial_agenda(request: Request, insumo_id: int, duracao_horas: float = 8, dias: int = 7):
     params = {"insumo_id": insumo_id, "duracao_horas": duracao_horas, "dias": dias}
+    if (fazenda := _fazenda(request)) is not None:
+        params["fazenda_id"] = fazenda  # o agents só devolve os talhões da fazenda do insumo
     agenda, falha = _agents("GET", "/agenda", params=params)
     if agenda:
         for talhao in agenda["talhoes"]:
@@ -765,7 +787,9 @@ def avaliar_janela(
     for s in avaliacao["sugestoes"]:
         s["valor"] = datetime.fromisoformat(s["inicio"]).astimezone(FUSO).strftime("%Y-%m-%dT%H:%M")
     livres = (
-        dados.maquinas_livres(quando, quando + timedelta(hours=duracao_horas)) if avaliacao["serve"] else []
+        dados.maquinas_livres(quando, quando + timedelta(hours=duracao_horas), talhao_id)
+        if avaliacao["serve"]
+        else []
     )
     return templates.TemplateResponse(request, "_janela.html", {"a": avaliacao, "maquinas": livres})
 
@@ -810,17 +834,20 @@ def _numero_do_formulario(texto: str) -> float | None:
 @app.get("/relatorios", response_class=HTMLResponse)
 def tela_relatorios(request: Request):
     return templates.TemplateResponse(
-        request, "relatorios.html", {**contexto_base(request, "/relatorios"), **_contexto_relatorios()}
+        request, "relatorios.html", {**contexto_base(request, "/relatorios"), **_contexto_relatorios(_fazenda(request))}
     )
 
 
 @app.get("/parcial/relatorios", response_class=HTMLResponse)
 def parcial_relatorios(request: Request):
-    return templates.TemplateResponse(request, "_relatorios.html", _contexto_relatorios())
+    return templates.TemplateResponse(request, "_relatorios.html", _contexto_relatorios(_fazenda(request)))
 
 
-def _contexto_relatorios() -> dict:
-    return {"abertas": dados.ordens_a_concluir(), "relatorios": dados.listar_relatorios()}
+def _contexto_relatorios(fazenda_id: int | None = None) -> dict:
+    return {
+        "abertas": dados.ordens_a_concluir(fazenda_id),
+        "relatorios": dados.listar_relatorios(fazenda_id),
+    }
 
 
 @app.get("/os/{os_id}/concluir", response_class=HTMLResponse)

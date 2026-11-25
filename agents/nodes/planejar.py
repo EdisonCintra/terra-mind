@@ -32,7 +32,10 @@ async def nomes_das_maquinas(deps: Dependencias, plano: PlanoProposto, os_por_id
         os = os_por_id[opcao.os_id]
         try:
             livres = await deps.erp.disponibilidade_maquinas(
-                opcao.novo_inicio, opcao.novo_inicio + timedelta(hours=os.duracao_horas), os.tipo_maquina
+                opcao.novo_inicio,
+                opcao.novo_inicio + timedelta(hours=os.duracao_horas),
+                os.tipo_maquina,
+                os.talhao_id,
             )
         except Exception:  # noqa: BLE001 - o nome é só apresentação
             logger.warning("não consegui buscar o nome da máquina %s", opcao.maquina_id)

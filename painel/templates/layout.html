@@ -42,6 +42,7 @@
           <input type="hidden" name="voltar" value="{{ request.url.path }}">
           <label for="fazenda_id">Fazenda</label>
           <select id="fazenda_id" name="fazenda_id" onchange="this.form.submit()">
+            <option value="0"{% if fazenda_id is none %} selected{% endif %}>Todas as fazendas</option>
             {% for f in fazendas %}<option value="{{ f.id }}"{% if f.id == fazenda_id %} selected{% endif %}>{{ f.nome }}</option>{% endfor %}
           </select>
           <noscript><button type="submit">Trocar</button></noscript>

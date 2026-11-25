@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # ("none" desliga o raciocínio). Vazio = o padrão do modelo (para modelos sem raciocínio).
     reasoning_effort: str | None = "low"
 
-    channel: Literal["telegram", "painel"] = "painel"
+    channel: Literal["telegram", "whatsapp", "painel"] = "painel"
 
     approval_timeout_min: int = 30
     intervalo_timeout_s: int = 60

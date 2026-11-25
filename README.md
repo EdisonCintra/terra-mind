@@ -9,7 +9,7 @@ Monitor (clima) ──incidente──→ agents (workflow) ──consulta──�
                                     │    ▲
                          lê/escreve │    │ SIM / NÃO / Ver opções
                                     ▼    │
-                            ERP via MCP   Telegram ou painel (gerente)
+                            ERP via MCP   Telegram, WhatsApp ou painel (gerente)
 ```
 
 <p align="center">
@@ -22,7 +22,7 @@ Monitor (clima) ──incidente──→ agents (workflow) ──consulta──�
 4. As OS que violam a bula são suspensas (`agendada → suspensa_preventiva`). É a única escrita feita sem aprovação. A perda evitada em R$ é calculada em código, com fatores de perda documentados.
 5. O Agronômico olha o estágio fenológico da cultura e o Operacional olha máquinas, operadores e estoque. Os dois analisam as OS suspensas ao mesmo tempo.
 6. O Supervisor (LLM) propõe um reagendamento e o Validador (código) confere clima, horário, horizonte e máquina. Se o Validador reprovar, o Supervisor revisa até 2 vezes; se continuar reprovado, o caso vai para decisão manual.
-7. O plano chega ao gerente pelo Telegram. O rodapé (perda, data, máquina, fonte e página) é montado a partir do estado, nunca do texto do LLM. Enquanto espera a resposta, a sessão fica pausada no Postgres e sobrevive a um restart.
+7. O plano chega ao gerente pelo Telegram ou pelo WhatsApp (o da fazenda do incidente). O rodapé (perda, data, máquina, fonte e página) é montado a partir do estado, nunca do texto do LLM. Enquanto espera a resposta, a sessão fica pausada no Postgres e sobrevive a um restart.
 8. Com SIM, o sistema reagenda a OS, aloca a máquina, reserva o estoque e avisa o operador. Ver opções gera um novo plano (até 2 vezes). NÃO manda o caso para decisão manual.
 
 Valores em R$ só saem de código, um clique duplo não executa nada duas vezes e o ERP recusa qualquer reagendamento sem plano aprovado no banco. Toda escrita grava auditoria na mesma transação.
@@ -37,7 +37,7 @@ O workflow é um grafo do Google ADK. Quatro nós são agentes LLM e o resto é 
 | Agronômico | Depois da suspensão, junto com o Operacional | `buscar_trechos`, `consultar_talhao` | Texto de até 6 frases, com fonte e página |
 | Operacional | Depois da suspensão, junto com o Agronômico | `janelas_validas`, `listar_os`, `disponibilidade_maquinas`, `listar_operadores` | Texto de até 8 frases, com datas e ids |
 | Supervisor | Depois das análises, e de novo quando o Validador reprova ou o gerente pede outras opções | `janelas_validas`, `calcular_impacto` | `PlanoProposto`: uma opção (novo início e máquina) por OS suspensa e a mensagem ao gerente |
-| Pergunte à bula | Fora do incidente, quando alguém pergunta no painel (`/bula`), no Telegram (qualquer mensagem de texto do gerente ou de um chat em `TELEGRAM_CHATS_BULA`) ou em `POST /bula/perguntar` | `buscar_na_bula` | `RespostaBula`: resposta curta com trecho literal, fonte e página |
+| Pergunte à bula | Fora do incidente, quando alguém pergunta no painel (`/bula`), no Telegram ou no WhatsApp (qualquer mensagem de texto do gerente ou de um chat em `TELEGRAM_CHATS_BULA` / `WHATSAPP_NUMEROS_BULA`) ou em `POST /bula/perguntar` | `buscar_na_bula` | `RespostaBula`: resposta curta com trecho literal, fonte e página |
 
 O Pergunte à bula tem a mesma garantia do Avaliador. O código confere que cada citação é literal de um trecho que a busca devolveu, com a mesma fonte e página. Sem citação conferida, a resposta é "A bula não traz isso." As 20 perguntas de teste estão em [agents/avaliacao/perguntas_bula.yaml](agents/avaliacao/perguntas_bula.yaml) e rodam contra o LLM e a base reais com `uv run python -m agents.avaliar_bula`.
 
@@ -99,12 +99,34 @@ docker compose up -d --build
 
 Abra `http://localhost:8080` e clique em Simular chuva para disparar o cenário de 80 mm.
 
-Banco criado antes da migration `020_decisao.sql`? Aplique-a sem apagar os dados (ela é idempotente):
+### Migrations
+
+O serviço `migrar` roda a cada `docker compose up` e aplica só as migrations novas de `db/migrations/`,
+registrando as aplicadas em `public.migracoes_aplicadas`. Cadastros e incidentes não são apagados:
+`docker compose down -v` só é preciso para recomeçar a demo do zero (as datas do seed contam a partir da
+criação do banco).
 
 ```bash
-docker compose exec -T postgres psql -U terramind -d terramind < db/migrations/020_decisao.sql
+docker compose run --rm migrar                # aplica o que falta (também roda sozinho na subida)
+docker compose run --rm migrar python -m db.migrar --listar   # aplicadas e pendentes
 ```
 
-As datas do seed contam a partir da criação do banco. Para recomeçar a demo do zero, rode `docker compose down -v && docker compose up -d --build`.
+Banco criado antes do runner (sem a tabela de registro) é adotado sozinho: o que já estava lá é só
+registrado e o que faltava (ex.: `003_fazendas.sql`, `020_decisao.sql`) é aplicado. Migration já aplicada
+não se edita: a correção vai numa migration nova. Faixas: Felipe `003`–`009` e seed `9xx`, Edison
+`011`–`019`, Gustavo `020`–`029`.
+
+### Fazendas
+
+Organização > fazenda > talhões, máquinas, operadores, insumos e OS (`fazenda_id` em todos). O seed traz
+a "Fazenda Exemplo" e a "Fazenda Demo" (organizações diferentes; a Demo é onde o replay roda). Cada
+fazenda tem seus gerentes em `erp.gerentes`: o canal manda cada mensagem ao gerente da fazenda do
+incidente. `GERENTE_CHAT_ID` é só o gerente padrão, para a fazenda sem gerente com chat. O painel filtra
+tudo pela fazenda escolhida no menu (cookie `fazenda`).
+
+### Canais
+
+`CHANNEL=painel` (padrão, sem token), `telegram` ou `whatsapp`. O WhatsApp recebe a resposta por webhook
+público e, fora da janela de 24 h, só manda modelo aprovado pela Meta: ver [docs/whatsapp.md](docs/whatsapp.md).
 
 Mais detalhes: [agents/README.md](agents/README.md) · [docs/contratos.md](docs/contratos.md) · [docs/plans/](docs/plans/)

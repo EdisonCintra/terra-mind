@@ -2,7 +2,7 @@
 
 O `agents` do Gustavo só conhece este módulo: ele chama `criar_canal(CHANNEL, ao_responder)`,
 depois `await canal.iniciar()` no `lifespan` e `await canal.parar()` no desligamento. A variável
-`CHANNEL` (`telegram` ou `painel`) escolhe a implementação, então trocar de canal no palco não
+`CHANNEL` (`telegram`, `whatsapp` ou `painel`) escolhe a implementação, então trocar de canal no palco não
 muda uma linha do fluxo.
 """
 
@@ -30,6 +30,30 @@ class Resposta:
             raise ValueError(f"resposta inválida: {self.resposta!r} (use {', '.join(RESPOSTAS_VALIDAS)})")
 
 
+# Botões de aprovação (iguais no Telegram e no WhatsApp). O identificador do botão leva a decisão:
+# r:{incidente_id}:{plano_id}:{resposta}. Cabe nos limites dos dois (Telegram 64 bytes, WhatsApp 256).
+PREFIXO = "r"
+# Rótulos com até 20 caracteres, o limite do botão do WhatsApp.
+ROTULOS = {"SIM": "Aceitar Proposta", "OPCOES": "Ver próxima opção", "NAO": "Recusar Proposta"}
+ECO = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
+DECISAO_JA_REGISTRADA = "Decisão já registrada para este plano. Nada foi alterado."
+
+
+def montar_callback(incidente_id: int, plano_id: int, resposta: str) -> str:
+    return f"{PREFIXO}:{incidente_id}:{plano_id}:{resposta}"
+
+
+def ler_callback(data: str) -> "Resposta | None":
+    """Converte o identificador do botão numa `Resposta` (sem `respondido_por`); `None` se não for nosso."""
+    partes = (data or "").split(":")
+    if len(partes) != 4 or partes[0] != PREFIXO:
+        return None
+    try:
+        return Resposta(int(partes[1]), int(partes[2]), partes[3], "")  # type: ignore[arg-type]
+    except ValueError:
+        return None
+
+
 class DecisaoJaRegistrada(Exception):
     """O `ao_responder` lança isto quando o plano já tem resposta (o equivalente ao 409 do painel).
 
@@ -50,6 +74,9 @@ class NotificationChannel(ABC):
     """Molde comum do Telegram e do painel."""
 
     ao_perguntar: AoPerguntar | None = None
+    # Coluna de `erp.operadores` com o contato do operador neste canal: o `agents` a lê para chamar
+    # `notificar_operador` (Telegram usa o chat; WhatsApp, o telefone).
+    campo_operador: str = "telegram_chat_id"
 
     def definir_ao_perguntar(self, ao_perguntar: AoPerguntar) -> None:
         """Liga a pergunta livre (Pergunte à bula). Sem isso o canal só notifica e aprova."""
@@ -82,12 +109,13 @@ class NotificationChannel(ABC):
 # nome do canal -> (módulo, classe). O import é tardio: `painel` não precisa do pacote do Telegram.
 _CANAIS: dict[str, tuple[str, str]] = {
     "telegram": ("channels.telegram", "TelegramChannel"),
+    "whatsapp": ("channels.whatsapp", "WhatsAppChannel"),
     "painel": ("channels.painel", "PainelChannel"),
 }
 
 
 def criar_canal(nome: str, ao_responder: AoResponder) -> NotificationChannel:
-    """Cria o canal `nome` (`telegram` ou `painel`).
+    """Cria o canal `nome` (`telegram`, `whatsapp` ou `painel`).
 
     O `ao_responder` é entregue ao canal; no Telegram o clique do gerente chama essa função.
     """

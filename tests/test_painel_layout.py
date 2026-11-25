@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 
 from starlette.requests import Request
 
-from painel import dados
+from painel import dados, main
 from painel.main import app, contexto_base
-from painel.navegacao import MENU
+from painel.navegacao import MENU, TODOS, ItemMenu
 
 
 @pytest.fixture
@@ -45,9 +45,15 @@ def test_menu_lateral_em_todas_as_telas(cliente, rota):
     assert len(atuais) == 1 and f'href="{rota}"' in atuais[0]
 
 
-def test_item_sem_rota_aparece_desabilitado(cliente):
+@pytest.fixture
+def menu_com_tela_futura(monkeypatch):
+    """Todas as telas do menu já existem; este item fica sem rota, para testar o estado "em construção"."""
+    monkeypatch.setattr(main, "MENU", [*main.MENU, ItemMenu("/em-breve", "Em breve", TODOS)])
+
+
+def test_item_sem_rota_aparece_desabilitado(cliente, menu_com_tela_futura):
     html = cliente.get("/visao-geral").text
-    assert re.search(r'<a [^>]*href="/fazenda"[^>]*aria-disabled="true"', html)  # /agenda já existe (G2)
+    assert re.search(r'<a [^>]*href="/em-breve"[^>]*aria-disabled="true"', html)  # as demais já existem
     assert not re.search(r'<a [^>]*href="/bula"[^>]*aria-disabled', html)
 
 

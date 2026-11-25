@@ -70,17 +70,64 @@ def test_detalhar_consultar_e_inexistentes():
 
 def test_disponibilidade_considera_sobreposicao_e_tipo():
     inicio = agora() + timedelta(hours=20)
-    ocupadas = leitura.disponibilidade_maquinas(inicio, inicio + timedelta(hours=2), "pulverizador")
+    ocupadas = leitura.disponibilidade_maquinas(
+        inicio, inicio + timedelta(hours=2), "pulverizador", talhao_id=1
+    )
     assert [m["nome"] for m in ocupadas] == ["Pulverizador B"]  # A está na OS 1
-    depois = leitura.disponibilidade_maquinas(inicio + timedelta(hours=9), inicio + timedelta(hours=12))
+    depois = leitura.disponibilidade_maquinas(
+        inicio + timedelta(hours=9), inicio + timedelta(hours=12), talhao_id=1
+    )
     assert {m["nome"] for m in depois} == {"Pulverizador A", "Pulverizador B"}
-    assert leitura.disponibilidade_maquinas(inicio, inicio + timedelta(hours=2), "colheitadeira") == []
+    colheitadeiras = leitura.disponibilidade_maquinas(
+        inicio, inicio + timedelta(hours=2), "colheitadeira", talhao_id=1
+    )
+    assert colheitadeiras == []
 
 
 def test_operadores_e_leituras_solo():
-    assert [o["nome"] for o in leitura.listar_operadores()] == ["João", "Carlos"]
+    assert [o["nome"] for o in leitura.listar_operadores(talhao_id=1)] == ["João", "Carlos"]
     leituras = leitura.leituras_solo(1, horas=24)
     assert 24 <= len(leituras) <= 25 and leituras[0]["ts"] > leituras[-1]["ts"]
+
+
+# ---------- várias fazendas (F2, contrato 20) ----------
+# Seed: fazenda 1 tem os talhões 1 e 2, os pulverizadores A e B e os operadores João e Carlos;
+# a fazenda 2 (Demo) tem o talhão 3, o Pulverizador Demo e o Operador Demo.
+
+
+def test_maquinas_e_operadores_so_da_fazenda_do_talhao():
+    inicio = agora() + timedelta(days=30)  # sem nenhuma OS: tudo livre, sobra só o filtro por fazenda
+    fim = inicio + timedelta(hours=4)
+    assert [m["nome"] for m in leitura.disponibilidade_maquinas(inicio, fim, talhao_id=1)] == [
+        "Pulverizador A",
+        "Pulverizador B",
+    ]
+    assert [m["nome"] for m in leitura.disponibilidade_maquinas(inicio, fim, talhao_id=3)] == [
+        "Pulverizador Demo"
+    ]
+    assert [o["nome"] for o in leitura.listar_operadores(talhao_id=3)] == ["Operador Demo"]
+    assert {o["fazenda_id"] for o in leitura.listar_operadores(talhao_id=1)} == {1}
+
+
+def test_filtro_por_fazenda_explicita_e_por_talhao_de_outra_fazenda():
+    inicio = agora() + timedelta(days=30)
+    fim = inicio + timedelta(hours=4)
+    assert [m["id"] for m in leitura.disponibilidade_maquinas(inicio, fim, fazenda_id=2)] == [3]
+    # talhão 3 é da fazenda 2: pedir a fazenda 1 para ele não devolve máquina de ninguém
+    assert leitura.disponibilidade_maquinas(inicio, fim, talhao_id=3, fazenda_id=1) == []
+    assert leitura.listar_operadores(talhao_id=3, fazenda_id=1) == []
+    assert leitura.disponibilidade_maquinas(inicio, fim, talhao_id=99) == []  # talhão inexistente
+
+
+def test_listar_talhoes_e_os_por_fazenda():
+    assert [t["id"] for t in leitura.listar_talhoes(fazenda_id=1)] == [1, 2]
+    assert [t["id"] for t in leitura.listar_talhoes(fazenda_id=2)] == [3]
+    assert len(leitura.listar_talhoes()) == 3
+    da_fazenda_1 = leitura.listar_os(agora(), agora() + timedelta(days=30), fazenda_id=1)
+    assert [o["id"] for o in da_fazenda_1] == [1, 2, 3]
+    assert leitura.listar_os(agora(), agora() + timedelta(days=30), fazenda_id=2) == []
+    assert leitura.consultar_talhao(3)["fazenda_id"] == 2
+    assert leitura.detalhar_os(1)["fazenda_id"] == 1
 
 
 # ---------- escrita ----------
@@ -151,6 +198,16 @@ def test_alocar_maquina_livre_ocupada_e_repetida():
     livre = escrita.alocar_maquina(1, 2, plano)
     assert livre["ok"] is True and livre["os"]["maquina_id"] == 2
     assert escrita.alocar_maquina(1, 2, plano)["ok"] is False  # já alocada
+
+
+def test_alocar_maquina_de_outra_fazenda_falha_e_nao_altera():
+    """Contrato 20: o Pulverizador Demo (fazenda 2) livre não pode ir para a OS 1 (fazenda 1)."""
+    escrita.suspender_os(1, criar_incidente(), "x")
+    plano = criar_plano(aprovado=True)
+    r = escrita.alocar_maquina(1, 3, plano)
+    assert r["ok"] is False and "não está livre" in r["erro"]
+    with psycopg.connect(DATABASE_URL) as conn:
+        assert conn.execute("SELECT maquina_id FROM erp.ordens_servico WHERE id = 1").fetchone()[0] == 1
 
 
 def test_alocar_maquina_em_manutencao_falha():
