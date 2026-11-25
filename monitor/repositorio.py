@@ -27,10 +27,11 @@ class RepositorioMonitor:
         self._os_ilegivel_avisado = False
 
     def talhoes(self, ids: list[int] | None = None) -> list[Talhao]:
-        sql = "SELECT id, nome, lat, lon FROM erp.talhoes"
+        # Talhão desativado no cadastro (F1) não é vigiado; o novo entra no ciclo seguinte.
+        sql = "SELECT id, nome, lat, lon FROM erp.talhoes WHERE ativo"
         params = {}
         if ids is not None:
-            sql += " WHERE id = ANY(:ids)"
+            sql += " AND id = ANY(:ids)"
             params["ids"] = ids
         with self.engine.connect() as conn:
             return [Talhao(**linha) for linha in conn.execute(text(sql + " ORDER BY id"), params).mappings()]

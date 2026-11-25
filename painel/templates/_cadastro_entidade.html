@@ -1,0 +1,73 @@
+{% import "componentes.html" as c %}
+{% if not form %}
+<p><a class="botao" href="/cadastros/{{ ent.slug }}?novo=1">Novo: {{ ent.singular|lower }}</a></p>
+{% else %}
+<section class="painel" id="formulario">
+  <div class="titulo-bloco"><h2>{{ "Editar" if form.id else "Novo" }}: {{ ent.singular|lower }}</h2></div>
+  {% if form.erro_geral %}{{ c.faixa("erro", form.erro_geral) }}{% endif %}
+  <form method="post" class="formulario" action="/cadastros/{{ ent.slug }}{% if form.id %}/{{ form.id }}{% endif %}">
+    {% if ent.slug == "talhoes" %}
+    <div class="largo editor-talhao" id="editor-talhao">
+      <input type="hidden" name="geom" id="campo-geom" value="{{ form.valores.get('geom', '') }}">
+      <div class="barra-editor" role="group" aria-label="Ferramentas do desenho">
+        <button type="button" data-modo="ponto">Ponto</button>
+        <button type="button" data-modo="poligono">Polígono</button>
+        <button type="button" data-acao="concluir">Concluir polígono</button>
+        <button type="button" data-acao="desfazer">Desfazer vértice</button>
+        <button type="button" data-acao="limpar">Limpar</button>
+        <span id="editor-info" class="nota" aria-live="polite">Escolha Ponto ou Polígono e clique no mapa.</span>
+      </div>
+      <div id="mapa-editor" class="mapa" aria-label="Mapa para desenhar o talhão"{% if linhas %} data-centro="{{ linhas[0].lat }},{{ linhas[0].lon }}"{% endif %}></div>
+      {% if form.erros.get("geom") %}<small class="erro-campo">{{ form.erros.geom }}</small>{% endif %}
+      <small class="ajuda">Ponto: um clique. Polígono: um clique em cada canto e depois "Concluir polígono". O centro e a área saem do desenho.</small>
+    </div>
+    {% elif ent.slug == "insumos" %}
+    <div class="largo busca-produto" id="busca-produto">
+      <label for="busca-q">Buscar produto no Agrofit (preenche nome, tipo e bula)</label>
+      <div class="linha-busca">
+        <input type="search" id="busca-q" placeholder="Nome comercial, ex.: Abacus HC" autocomplete="off">
+        <button type="button" id="busca-ir">Buscar</button>
+      </div>
+      <div id="busca-resultados" aria-live="polite"></div>
+    </div>
+    {% endif %}
+    {% for campo in ent.campos %}
+    {% set ops = campo.opcoes or opcoes.get(campo.nome) %}
+    {{ c.campo(campo.nome, campo.rotulo, campo.tipo if campo.tipo in ("date", "number") else "text",
+               form.valores.get(campo.nome, ""), form.erros.get(campo.nome), ops or None,
+               passo=campo.passo, minimo=campo.minimo, ajuda=campo.ajuda,
+               obrigatorio=campo.obrigatorio and not (ent.slug == "talhoes" and campo.nome == "area_ha"),
+               permitir_vazio=not campo.obrigatorio) }}
+    {% endfor %}
+    <div class="largo acoes-formulario">
+      <button type="submit" class="grande">Salvar</button>
+      <a href="/cadastros/{{ ent.slug }}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+<section class="painel">
+  <div class="titulo-bloco"><h2>{{ ent.titulo }}</h2><span class="nota">{{ linhas|length }} cadastrado(s)</span></div>
+  {% if linhas %}
+  <div class="tabela empilha">
+    <table>
+      <thead><tr>{% for rotulo, _ in ent.colunas %}<th>{{ rotulo }}</th>{% endfor %}<th>Situação</th><th>Ações</th></tr></thead>
+      <tbody>
+        {% for l in linhas %}
+        <tr{% if not l.ativo %} class="inativo"{% endif %}>
+          {% for rotulo, chave in ent.colunas %}<td data-rotulo="{{ rotulo }}"{% if loop.first %} class="forte"{% endif %}>{{ l[chave] if l[chave] is not none else "—" }}</td>{% endfor %}
+          <td data-rotulo="Situação">{{ c.selo("Ativo", "bom") if l.ativo else c.selo("Desativado", "neutro") }}</td>
+          <td data-rotulo="Ações" class="acoes-linha">
+            <a href="/cadastros/{{ ent.slug }}?editar={{ l.id }}">Editar</a>
+            <form method="post" action="/cadastros/{{ ent.slug }}/{{ l.id }}/{{ 'desativar' if l.ativo else 'reativar' }}">
+              <button type="submit" class="link">{{ "Desativar" if l.ativo else "Reativar" }}</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}{{ c.vazio("Nada cadastrado nesta fazenda ainda.", "Cadastrar o primeiro", "/cadastros/" ~ ent.slug ~ "?novo=1") }}{% endif %}
+</section>

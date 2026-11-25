@@ -38,17 +38,19 @@
 <div class="vazio"><p>{{ texto }}</p>{% if acao_rotulo and acao_href %}<a class="botao" href="{{ acao_href }}">{{ acao_rotulo }}</a>{% endif %}</div>
 {%- endmacro %}
 
-{# Campo de formulário. Com opcoes (lista de valores ou pares [valor, rotulo]) vira <select>. #}
-{% macro campo(nome, rotulo, tipo="text", valor="", erro=None, opcoes=None) -%}
+{# Campo de formulário. Com opcoes (lista de valores ou pares [valor, rotulo]) vira <select>. passo/minimo valem para tipo number; ajuda é a dica abaixo do campo; obrigatorio marca com * e exige no navegador (o servidor valida de qualquer jeito); permitir_vazio põe a opção "—" no select. #}
+{% macro campo(nome, rotulo, tipo="text", valor="", erro=None, opcoes=None, passo=None, minimo=None, ajuda=None, obrigatorio=False, permitir_vazio=False) -%}
 <div class="campo{% if erro %} com-erro{% endif %}">
-  <label for="campo-{{ nome }}">{{ rotulo }}</label>
+  <label for="campo-{{ nome }}">{{ rotulo }}{% if obrigatorio %} *{% endif %}</label>
   {% if opcoes -%}
-  <select id="campo-{{ nome }}" name="{{ nome }}"{% if erro %} aria-invalid="true"{% endif %}>
+  <select id="campo-{{ nome }}" name="{{ nome }}"{% if erro %} aria-invalid="true"{% endif %}{% if obrigatorio %} required{% endif %}>
+    {% if permitir_vazio %}<option value="">—</option>{% endif %}
     {% for o in opcoes %}{% set v = o[0] if o is not string else o %}{% set r = o[1] if o is not string else o %}<option value="{{ v }}"{% if v == valor %} selected{% endif %}>{{ r }}</option>{% endfor %}
   </select>
   {%- else -%}
-  <input id="campo-{{ nome }}" name="{{ nome }}" type="{{ tipo }}" value="{{ valor }}"{% if erro %} aria-invalid="true"{% endif %}>
+  <input id="campo-{{ nome }}" name="{{ nome }}" type="{{ tipo }}" value="{{ valor }}"{% if passo %} step="{{ passo }}"{% endif %}{% if minimo is not none %} min="{{ minimo }}"{% endif %}{% if obrigatorio %} required{% endif %}{% if erro %} aria-invalid="true"{% endif %}>
   {%- endif %}
+  {% if ajuda %}<small class="ajuda">{{ ajuda }}</small>{% endif %}
   {% if erro %}<small class="erro-campo">{{ erro }}</small>{% endif %}
 </div>
 {%- endmacro %}

@@ -45,7 +45,8 @@ def test_fazenda_escolhida_filtra_as_ordens(cliente, os_da_demo, fazenda, aparec
 
 
 def test_escolher_a_fazenda_guarda_o_cookie_e_volta_para_a_tela(cliente):
-    r = cliente.post("/fazenda/selecionar", data={"fazenda_id": 2, "voltar": "/perda"}, follow_redirects=False)
+    dados_ = {"fazenda_id": 2, "voltar": "/perda"}
+    r = cliente.post("/fazenda/selecionar", data=dados_, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/perda"
     assert "fazenda_id=2" in r.headers["set-cookie"]
     r = cliente.post("/fazenda/selecionar", data={"fazenda_id": 0}, follow_redirects=False)  # 0 = todas

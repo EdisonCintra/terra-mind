@@ -133,7 +133,8 @@ def talhao_padrao(fazenda_id: int | None = None) -> int | None:
     """Primeiro talhão (da fazenda escolhida): o gráfico da Visão geral usa ele sem incidente selecionado."""
     with conectar() as conn:
         linha = conn.execute(
-            "SELECT id FROM erp.talhoes WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY id LIMIT 1",
+            "SELECT id FROM erp.talhoes WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)"
+            " ORDER BY id LIMIT 1",
             {"faz": fazenda_id},
         ).fetchone()
     return linha["id"] if linha else None
@@ -150,7 +151,7 @@ def talhoes_com_geometria(fazenda_id: int | None = None) -> list[dict]:
         coluna = "geom" if tem_geom else "NULL AS geom"
         linhas = conn.execute(
             f"SELECT id, nome, lat, lon, {coluna} FROM erp.talhoes"
-            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY id",
+            " WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY id",
             {"faz": fazenda_id},
         ).fetchall()
     return [{**t, "lat": float(t["lat"]), "lon": float(t["lon"])} for t in linhas]
@@ -213,7 +214,7 @@ def listar_produtos(fazenda_id: int | None = None) -> list[str]:
             linha["produto"]
             for linha in conn.execute(
                 "SELECT DISTINCT produto FROM erp.insumos"
-                " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY produto",
+                " WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY produto",
                 {"faz": fazenda_id},
             )
         ]
@@ -471,7 +472,7 @@ def listar_insumos(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             "SELECT id, fazenda_id, produto, tipo, unidade, estoque FROM erp.insumos"
-            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY produto, id",
+            " WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY produto, id",
             {"faz": fazenda_id},
         ).fetchall()
 
@@ -480,22 +481,24 @@ def listar_talhoes(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             "SELECT id, fazenda_id, nome, area_ha, cultura FROM erp.talhoes"
-            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY id",
+            " WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY id",
             {"faz": fazenda_id},
         ).fetchall()
 
 
-def maquinas_livres(inicio: datetime, fim: datetime, talhao_id: int | None = None) -> list[dict]:
-    """Pulverizadores livres no intervalo, pela mesma regra do MCP (`disponibilidade_maquinas`):
-    com o `talhao_id`, só os da fazenda do talhão."""
-    return leitura.disponibilidade_maquinas(inicio, fim, "pulverizador", talhao_id)
+def maquinas_livres(
+    inicio: datetime, fim: datetime, talhao_id: int | None = None, ignorar_os_id: int | None = None
+) -> list[dict]:
+    """Pulverizadores livres no intervalo, pela mesma regra do MCP (`disponibilidade_maquinas`): com o
+    `talhao_id`, só os da fazenda do talhão; `ignorar_os_id` desconsidera a OS que está sendo editada."""
+    return leitura.disponibilidade_maquinas(inicio, fim, "pulverizador", talhao_id, None, ignorar_os_id)
 
 
 def listar_operadores(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             "SELECT id, fazenda_id, nome FROM erp.operadores"
-            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY nome",
+            " WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s) ORDER BY nome",
             {"faz": fazenda_id},
         ).fetchall()
 
@@ -583,7 +586,7 @@ def indicadores(fazenda_id: int | None = None, agora: datetime | None = None) ->
     with conectar() as conn:
         talhoes = conn.execute(
             "SELECT count(*) AS n, COALESCE(sum(area_ha), 0) AS ha FROM erp.talhoes"
-            " WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
+            " WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
             params,
         ).fetchone()
         por_status = {
@@ -618,7 +621,7 @@ def indicadores(fazenda_id: int | None = None, agora: datetime | None = None) ->
             JOIN erp.fazendas f ON f.id = i.fazenda_id
             LEFT JOIN erp.ordens_servico os ON os.insumo_id = i.id
             LEFT JOIN erp.talhoes t ON t.id = os.talhao_id
-            WHERE (%(faz)s::int IS NULL OR i.fazenda_id = %(faz)s)
+            WHERE i.ativo AND (%(faz)s::int IS NULL OR i.fazenda_id = %(faz)s)
             GROUP BY i.id, f.nome
             ORDER BY f.nome, i.produto, i.id
             """,
@@ -628,7 +631,7 @@ def indicadores(fazenda_id: int | None = None, agora: datetime | None = None) ->
             "SELECT count(*) AS total, count(*) FILTER (WHERE status = 'manutencao') AS manutencao,"
             " COALESCE(string_agg(nome, ', ' ORDER BY nome)"
             "          FILTER (WHERE status = 'manutencao'), '') AS nomes"
-            " FROM erp.maquinas WHERE (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
+            " FROM erp.maquinas WHERE ativo AND (%(faz)s::int IS NULL OR fazenda_id = %(faz)s)",
             params,
         ).fetchone()
         plantio = conn.execute(
@@ -643,7 +646,7 @@ def indicadores(fazenda_id: int | None = None, agora: datetime | None = None) ->
                 WHERE talhao_id = t.id AND status = 'planejado' AND plantio_previsto >= %(hoje)s
                 ORDER BY plantio_previsto LIMIT 1
             ) p ON true
-            WHERE (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
+            WHERE t.ativo AND (%(faz)s::int IS NULL OR t.fazenda_id = %(faz)s)
             ORDER BY f.nome, t.id
             """,
             params,

@@ -121,7 +121,7 @@ def alocar_maquina(os_id: int, maquina_id: int, plano_id: int) -> dict[str, Any]
         livre = conn.execute(
             """
             SELECT 1 FROM erp.maquinas m
-            WHERE m.id = %(maq)s AND m.status = 'disponivel'
+            WHERE m.id = %(maq)s AND m.status = 'disponivel' AND m.ativo
               AND m.fazenda_id = %(faz)s
               AND NOT EXISTS (
                   SELECT 1 FROM erp.ordens_servico o

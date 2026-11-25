@@ -320,3 +320,24 @@ button.sugestao small { font-weight: 400; }
   .formulario { grid-template-columns: minmax(0, 1fr); }
   .semana .dia { grid-template-columns: 4.5rem 2.5rem minmax(0, 1fr); }
 }
+
+/* --- Cadastros (F1) --------------------------------------------------------------------------- */
+.abas { display: flex; flex-wrap: wrap; gap: .25rem .5rem; border-bottom: 1px solid var(--linha); }
+.abas a { color: var(--suave); text-decoration: none; padding: .5rem .9rem; border-bottom: 2px solid transparent; font-size: .9rem; }
+.abas a:hover { color: var(--tinta); }
+.abas a[aria-current="page"] { color: var(--tinta); border-bottom-color: var(--bom); }
+tr.inativo td { color: var(--suave); }
+.acoes-linha { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; }
+.acoes-linha form { display: inline; margin: 0; }
+button.link { background: none; border: 0; padding: 0; color: var(--ceu); font: inherit; cursor: pointer; text-decoration: underline; }
+.campo .ajuda, .formulario .ajuda { color: var(--suave); font-size: .78rem; }
+.editor-talhao { display: grid; gap: .6rem; }
+.barra-editor { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.barra-editor button[aria-pressed="true"] { color: var(--bom); border-color: rgba(69, 207, 142, .6); background: rgba(69, 207, 142, .1); }
+.barra-editor button:disabled { opacity: .45; cursor: not-allowed; }
+.busca-produto { display: grid; gap: .4rem; }
+.linha-busca { display: flex; gap: .5rem; }
+.linha-busca input { flex: 1; min-width: 0; }
+.resultados-produto { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.resultados-produto button { display: grid; gap: .1rem; width: 100%; text-align: left; }
+.envio-bula { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .5rem; }

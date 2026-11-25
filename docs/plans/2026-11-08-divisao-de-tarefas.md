@@ -29,6 +29,34 @@
 
 **Pronto quando:** um gerente cadastra do zero 2 talhões (um ponto e um polígono), 1 máquina, 1 operador e 1 OS sem SQL, e o Monitor vigia o talhão novo no ciclo seguinte.
 
+**Status: concluído em 25/11/2026** (branch `feat/f1-cadastro`). Esta branch também **reconcilia o F2, o F4 e o F5 com o E1–E7 do Edison** (que já está no `main`): o merge teve 5 conflitos, resolvidos partindo do `painel/main.py` dele.
+
+- **Telas** em `/cadastros/<aba>` (item "Cadastros" do menu, só para gerente), no layout do E1: talhões, máquinas, operadores, insumos, ordens de serviço e planejamento de safra. Criar, editar e **desativar** (nada é apagado; desativar é recusado enquanto houver OS agendada ou incidente aberto que dependa do cadastro). Formulários são POST comuns com redirecionamento, funcionam sem JavaScript.
+- **Talhão (contrato 18):** ponto ou polígono desenhado no mapa (`editor_talhao.js`, sobre o `TerraMapa` do E4, com desenho próprio, **sem plugin de terceiros**). `erp.talhoes.geom` (GeoJSON) guarda a forma; `lat` e `lon` viram o centro e o `area_ha` é sugerido pela área do polígono. O servidor valida a forma e recalcula centro e área (`painel/geo.py`); o navegador não é confiável.
+- **OS:** criar, editar (dose, horário, máquina e operador) e cancelar, com as mesmas regras (máquina do tipo certo e livre no horário, estoque, tudo da mesma fazenda e ativo). Ao escolher a data, o formulário confere a janela e mostra o aviso e as sugestões do G3 (`agenda.js`). Editar uma OS não conta ela mesma como conflito.
+- **Insumo:** busca de produto no Agrofit (E5) pelo painel, que preenche nome, tipo e `bula_id`; produto sem bula na base aceita o PDF e o indexa. Classe fora de fungicida, herbicida e inseticida é avisada (contrato 15).
+- **Auditoria:** toda escrita grava `agente.auditoria` com o nó `painel` (`cadastro_<aba>_criar|editar|desativar|reativar`, `criar_os`, `editar_os`, `cancelar_os`), antes e depois.
+- **Banco:** `006_cadastro.sql` (`geom` e `ativo`). O Monitor, o MCP e as listas do painel ignoram o desativado.
+- **Fora desta entrega:** cadastro de gerentes (é o F3, com os usuários); edição de vértices arrastando (editar o desenho é redesenhar); a tela não foi revisada visualmente no navegador (só testes e `node --check` dos scripts; a área em JavaScript confere com a do Python: 120,2732 ha no polígono do seed).
+- **Testes:** 49 em `tests/test_cadastros.py` e 20 em `tests/test_painel_geo.py`, incluindo o critério de pronto (cadastrar tudo pela tela e o Monitor ver os dois talhões novos).
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F1)**
+
+- **`painel/escrita.py`:** `criar_os` mantém a assinatura, mas agora passa por `_validar_os` (as regras estão num lugar só) e exige talhão, produto, máquina e operador **ativos**. Novas `editar_os` e `cancelar_os`. Cancelar OS `suspensa_preventiva` é recusado: ela é do fluxo de incidente.
+- **MCP (`erp_mcp`):** `disponibilidade_maquinas` ganhou o parâmetro opcional `ignorar_os_id`; `listar_talhoes`, `listar_operadores` e `disponibilidade_maquinas` **ignoram cadastro desativado**, e `alocar_maquina` recusa máquina desativada. O `agents` já fica coberto por usar essas ferramentas. SQL novo que leia `erp.talhoes`, `maquinas`, `operadores` ou `insumos` direto deve filtrar `ativo`.
+- **Agenda/janela (G2, G3):** `POST /agenda/avaliar` aceita `os_id` e `maquina_atual` (opcionais, usados ao editar uma OS); `agenda.js` e `_janela.html` ajustados e compatíveis. A tela `/agenda` continua criando OS por `POST /os/nova`.
+- **Dados:** `dados.maquinas_livres(inicio, fim, talhao_id, ignorar_os_id)`; `listar_produtos` (Pergunte à bula) não lista insumo desativado.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F1)**
+
+- **Monitor:** uma mudança só, `monitor/repositorio.py::talhoes` filtra `WHERE ativo`. O talhão novo entra no ciclo seguinte e o desativado deixa de ser vigiado. Ajustei as fixtures de teste dele (`fazenda_id` em talhão e insumo). Os 2 testes do Monitor que falhavam passam com a sua reescrita.
+- **Contrato 18 entregue:** `erp.talhoes.geom` (jsonb: `Point` ou `Polygon`, `[lon, lat]`) existe e `lat`/`lon` são o centro. `dados.talhoes_com_geometria` ainda detecta a coluna por `information_schema`; pode simplificar.
+- **E1 (arquivos dele que toquei, de forma compatível):** o macro `campo` de `componentes.html` ganhou parâmetros opcionais (`passo`, `minimo`, `ajuda`, `obrigatorio`, `permitir_vazio`); o seletor de `layout.html` ganhou "Todas as fazendas" (`POST /fazenda/selecionar` com 0 apaga o cookie); o item `/fazenda` do menu é agora a tela de indicadores (F5), então os testes dele que usavam `/fazenda` como "tela futura" passaram a usar um item de menu sem rota.
+- **`painel/main.py`:** as rotas de cadastro são registradas direto no `app` (`painel/rotas_cadastros.py::registrar`), **não** por `include_router`: nesta versão do FastAPI o router incluído vira um objeto sem `path` em `app.routes`, e o `contexto_base` dele lê `r.path`. Se migrar para routers, ajuste o `contexto_base`.
+- **E4 (mapa):** `editor_talhao.js` reaproveita `TerraMapa.criar(...)` (usa `.leaflet`); o desenho de ponto e polígono é código próprio, sem plugin.
+- **E5:** o cadastro de insumo usa `GET /produtos/busca` e `POST /produtos/{registro}/bula` pelo painel (`/api/produtos/...`, com `tipo_insumo` mapeado da classe). Precisa de `CONHECIMENTO_URL` no `painel` (já no compose) e das credenciais `AGROFIT_*` no `conhecimento`; sem elas a tela avisa.
+- **TODOs do contrato 20 que fechei no código dele:** `resumo_historico`, `talhao_padrao` e `talhoes_com_geometria` filtram por fazenda; Visão geral, Mapa, Histórico, Agenda e Relatórios usam a fazenda escolhida. O `GET /risco?fazenda_id=` do Monitor (`monitor/main.py:206`) ainda ignora o parâmetro: continua com você.
+
 ### F2 · Várias fazendas e migrations incrementais (4)
 
 - Migration com `erp.organizacoes` e `erp.fazendas`, e `fazenda_id` nas tabelas do ERP (contrato 20, modelo da D7). Seed com uma fazenda de exemplo e uma "Fazenda Demo" só para o replay (ver E2).

@@ -25,6 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from painel import dados, escrita
 from painel.navegacao import MENU, barra_mobile
+from painel.rotas_cadastros import registrar as registrar_cadastros
 
 log = logging.getLogger("painel")
 AQUI = Path(__file__).parent
@@ -127,6 +128,17 @@ def contexto_base(request: Request, ativa: str = "/visao-geral") -> dict:
         "fazenda_id": int(fazenda) if fazenda.isascii() and fazenda.isdecimal() else None,
         "usuario": usuario,
     }
+
+
+# --- Cadastros (F1): /cadastros/<aba> e o proxy da busca de produto (E5) --------------------------
+registrar_cadastros(
+    app,
+    templates,
+    contexto_base,
+    _fazenda,
+    lambda: cliente_http(),  # `cliente_http` é trocada nos testes: procura pelo nome a cada chamada
+    lambda: _url("CONHECIMENTO_URL", "http://localhost:8010"),
+)
 
 
 @app.get("/", include_in_schema=False)
@@ -770,8 +782,12 @@ def avaliar_janela(
     insumo_id: int = Form(...),
     inicio: str = Form(...),
     duracao_horas: float = Form(8),
+    os_id: int | None = Form(None),
+    maquina_atual: str = Form(""),
 ):
-    """G3: ao escolher a data, mostra se a janela serve, o motivo e as sugestões com máquina livre."""
+    """G3: ao escolher a data, mostra se a janela serve, o motivo e as sugestões com máquina livre.
+
+    Ao editar uma OS (F1), `os_id` tira a própria OS da conta e `maquina_atual` fica pré-selecionada."""
     quando = _inicio_local(inicio)
     if quando is None:
         return _mensagem(request, "erro", "Escolha a data e a hora de início.")
@@ -787,11 +803,12 @@ def avaliar_janela(
     for s in avaliacao["sugestoes"]:
         s["valor"] = datetime.fromisoformat(s["inicio"]).astimezone(FUSO).strftime("%Y-%m-%dT%H:%M")
     livres = (
-        dados.maquinas_livres(quando, quando + timedelta(hours=duracao_horas), talhao_id)
+        dados.maquinas_livres(quando, quando + timedelta(hours=duracao_horas), talhao_id, os_id)
         if avaliacao["serve"]
         else []
     )
-    return templates.TemplateResponse(request, "_janela.html", {"a": avaliacao, "maquinas": livres})
+    contexto = {"a": avaliacao, "maquinas": livres, "maquina_atual": maquina_atual}
+    return templates.TemplateResponse(request, "_janela.html", contexto)
 
 
 @app.post("/os/nova", response_class=HTMLResponse)

@@ -1,5 +1,10 @@
 # Nota de migração: E1–E7 (migrations 011–015) e G1/G2/G3/G7 (020)
 
+> **Atualização (F2):** o runner de migrations existe (`python -m db.migrar`, serviço `migrar` do compose).
+> Com ele, a subida aplica sozinha só as migrations novas e **não precisa mais** de `down -v` nem do `psql` à
+> mão descritos abaixo. Um banco criado antes do runner é adotado automaticamente. O texto abaixo vale só
+> para quem ainda roda uma versão sem o F2.
+
 **Quem já tem a stack rodando precisa aplicar as migrations novas antes de subir esta versão.**
 
 Por quê: ainda não há runner de migrations (vem com o F2). O Postgres só roda `db/migrations/` pelo

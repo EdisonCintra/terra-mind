@@ -17,10 +17,15 @@ INSERT INTO erp.gerentes (fazenda_id, nome, telegram_chat_id) VALUES
     (2, 'Gerente Demo',    NULL);
 
 -- Coordenadas reais da região de Rio Verde - GO (usadas pelo Monitor no modo live).
-INSERT INTO erp.talhoes (fazenda_id, nome, area_ha, cultura, data_plantio, estagio_fenologico, lat, lon, tipo_solo) VALUES
-    (1, 'Talhão 1 - Sede',    120.00, 'milho', current_date - 30, 'V6', -17.790000, -50.920000, 'latossolo'),
-    (1, 'Talhão 2 - Baixada',  85.50, 'soja',  current_date - 45, 'R1', -17.810000, -50.900000, 'latossolo'),
-    (2, 'Talhão Demo',        100.00, 'milho', current_date - 30, 'V6', -17.850000, -50.880000, 'latossolo');
+INSERT INTO erp.talhoes
+    (fazenda_id, nome, area_ha, cultura, data_plantio, estagio_fenologico, lat, lon, tipo_solo, geom) VALUES
+    (1, 'Talhão 1 - Sede',    120.00, 'milho', current_date - 30, 'V6', -17.790000, -50.920000, 'latossolo',
+     -- polígono de ~120 ha em volta do centro (contrato 18); os outros dois talhões são pontos
+     '{"type":"Polygon","coordinates":[[[-50.92517,-17.79494],[-50.91483,-17.79494],[-50.91483,-17.78506],[-50.92517,-17.78506],[-50.92517,-17.79494]]]}'),
+    (1, 'Talhão 2 - Baixada',  85.50, 'soja',  current_date - 45, 'R1', -17.810000, -50.900000, 'latossolo',
+     '{"type":"Point","coordinates":[-50.9,-17.81]}'),
+    (2, 'Talhão Demo',        100.00, 'milho', current_date - 30, 'V6', -17.850000, -50.880000, 'latossolo',
+     '{"type":"Point","coordinates":[-50.88,-17.85]}');
 
 -- F5: o que vai ser plantado (planejamento de safra), datas relativas como o resto do seed.
 INSERT INTO erp.planejamento_safra (talhao_id, safra, cultura, plantio_previsto, observacoes) VALUES

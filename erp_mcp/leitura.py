@@ -71,25 +71,28 @@ def disponibilidade_maquinas(
     tipo: str | None = None,
     talhao_id: int | None = None,
     fazenda_id: int | None = None,
+    ignorar_os_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Lista as máquinas livres no intervalo `inicio`–`fim`.
 
     Livre = `status = 'disponivel'` e sem OS `agendada` ou `reagendada` que se sobreponha ao
     intervalo (o fim de cada OS é `inicio_previsto + duracao_horas`). Use `tipo` (ex.:
     'pulverizador') para filtrar. Informe o `talhao_id` (ou a `fazenda_id`): só entram máquinas da
-    fazenda do talhão, nunca de outra fazenda. Cada máquina traz `id`, `fazenda_id`, `nome`, `tipo`
+    fazenda do talhão, nunca de outra fazenda. Máquina desativada não aparece. `ignorar_os_id` desconsidera
+    uma OS (ao editar a própria OS, a máquina dela continua livre). Cada máquina traz `id`, `fazenda_id`, `nome`, `tipo`
     e `status`.
     """
     sql = """
         SELECT m.id, m.fazenda_id, m.nome, m.tipo, m.status
         FROM erp.maquinas m
-        WHERE m.status = 'disponivel'
+        WHERE m.status = 'disponivel' AND m.ativo
           AND (%(faz)s::int IS NULL OR m.fazenda_id = %(faz)s)
           AND (%(tipo)s::text IS NULL OR m.tipo = %(tipo)s)
           AND NOT EXISTS (
               SELECT 1 FROM erp.ordens_servico os
               WHERE os.maquina_id = m.id
                 AND os.status IN ('agendada', 'reagendada')
+                AND (%(ignorar)s::int IS NULL OR os.id <> %(ignorar)s)
                 AND os.inicio_previsto < %(fim)s
                 AND %(ini)s < os.inicio_previsto + os.duracao_horas * interval '1 hour'
           )
@@ -99,7 +102,7 @@ def disponibilidade_maquinas(
         ok, fazenda = _fazenda_do_talhao(conn, talhao_id, fazenda_id)
         if not ok:
             return []
-        params = {"faz": fazenda, "tipo": tipo, "fim": fim, "ini": inicio}
+        params = {"faz": fazenda, "tipo": tipo, "fim": fim, "ini": inicio, "ignorar": ignorar_os_id}
         return para_json(conn.execute(sql, params).fetchall())
 
 
@@ -116,7 +119,7 @@ def listar_operadores(talhao_id: int | None = None, fazenda_id: int | None = Non
         return para_json(
             conn.execute(
                 "SELECT id, fazenda_id, nome, telegram_chat_id, whatsapp_telefone FROM erp.operadores"
-                " WHERE (%s::int IS NULL OR fazenda_id = %s) ORDER BY id",
+                " WHERE ativo AND (%s::int IS NULL OR fazenda_id = %s) ORDER BY id",
                 (fazenda, fazenda),
             ).fetchall()
         )
@@ -150,11 +153,11 @@ def listar_talhoes(fazenda_id: int | None = None) -> list[dict[str, Any]]:
     """Lista os talhões com `id`, `fazenda_id`, `nome`, `area_ha`, `cultura`, `estagio_fenologico`,
     `lat` e `lon`.
 
-    Use `fazenda_id` para listar só os de uma fazenda.
+    Use `fazenda_id` para listar só os de uma fazenda. Talhão desativado não aparece.
     """
     sql = (
         "SELECT id, fazenda_id, nome, area_ha, cultura, estagio_fenologico, lat, lon FROM erp.talhoes"
-        " WHERE (%s::int IS NULL OR fazenda_id = %s) ORDER BY id"
+        " WHERE ativo AND (%s::int IS NULL OR fazenda_id = %s) ORDER BY id"
     )
     with conectar() as conn:
         return para_json(conn.execute(sql, (fazenda_id, fazenda_id)).fetchall())
