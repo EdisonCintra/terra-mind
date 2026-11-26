@@ -4,14 +4,13 @@ agenda e janelas (contrato 24), limites da bula (contrato 26) e relatório de ap
 import asyncio
 import contextlib
 import hmac
-import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from agents.agenda import AgendaIndisponivel, NaoEncontrado, PedidoJanela, ServicoAgenda
@@ -112,7 +111,7 @@ def _servico(request: Request, nome: str):
 
 def conferir_token(request: Request, x_agents_token: str | None = Header(None)) -> None:
     """Contrato 23: com `AGENTS_TOKEN` configurado, só o painel (que sabe o segredo) responde um plano.
-    Só esta rota exige: o webhook do WhatsApp usa a assinatura própria; o Monitor chama /iniciar."""
+    Só esta rota exige: o webhook do WhatsApp usa a assinatura do Twilio; o Monitor chama /iniciar."""
     settings = getattr(getattr(request.app.state.servicos.orquestrador, "deps", None), "settings", None)
     esperado = getattr(settings, "agents_token", None)
     if esperado and not hmac.compare_digest(x_agents_token or "", esperado):
@@ -145,32 +144,28 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
             raise HTTPException(status.HTTP_404_NOT_FOUND, "canal_whatsapp_inativo")
         return canal
 
-    @app.get("/whatsapp/webhook", include_in_schema=False)
-    async def whatsapp_verificar(
-        request: Request,
-        modo: str = Query("", alias="hub.mode"),
-        token: str = Query("", alias="hub.verify_token"),
-        desafio: str = Query("", alias="hub.challenge"),
-    ) -> PlainTextResponse:
-        """Verificação da Meta ao cadastrar o webhook: devolve o `hub.challenge` se o token confere."""
-        resposta = canal_whatsapp(request).verificar(modo, token, desafio)
-        if resposta is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "token_invalido")
-        return PlainTextResponse(resposta)
+    def url_do_webhook(request: Request) -> str:
+        """URL que o Twilio chamou, para a conta da assinatura: atrás de túnel ou proxy o `agents` vê http
+        e o host interno, então vale o que o proxy informa em `X-Forwarded-*` (ou `TWILIO_WEBHOOK_URL`)."""
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+        consulta = f"?{request.url.query}" if request.url.query else ""
+        return f"{proto}://{host.split(',')[0].strip()}{request.url.path}{consulta}"
 
     @app.post("/whatsapp/webhook", include_in_schema=False)
-    async def whatsapp_receber(request: Request) -> dict:
-        """Mensagens e cliques do WhatsApp. Só vale com a assinatura da Meta; processa em segundo plano."""
+    async def whatsapp_receber(request: Request) -> Response:
+        """Mensagens e cliques do WhatsApp (Twilio): só vale com `X-Twilio-Signature`; roda em 2º plano."""
         canal = canal_whatsapp(request)
-        corpo = await request.body()
-        if not canal.assinatura_valida(corpo, request.headers.get("X-Hub-Signature-256")):
+        formulario = await request.form()
+        parametros = [(k, v) for k, v in formulario.multi_items() if isinstance(v, str)]
+        url = canal.url_assinada(url_do_webhook(request))
+        if not canal.assinatura_valida(url, parametros, request.headers.get("X-Twilio-Signature")):
+            logger.warning("webhook do WhatsApp com assinatura inválida (URL conferida: %s)", url)
             raise HTTPException(status.HTTP_403_FORBIDDEN, "assinatura_invalida")
-        try:
-            payload = json.loads(corpo)
-        except ValueError as e:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "json_invalido") from e
-        canal.agendar(payload)
-        return {"status": "recebido"}
+        canal.agendar(dict(parametros))
+        return Response(
+            "<Response/>", media_type="text/xml"
+        )  # o Twilio espera TwiML; vazio = nada a responder
 
     @app.post("/incidentes/{incidente_id}/iniciar", status_code=status.HTTP_202_ACCEPTED)
     async def iniciar(incidente_id: int, request: Request) -> dict:

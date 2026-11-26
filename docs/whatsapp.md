@@ -1,101 +1,140 @@
-# WhatsApp como canal (F4)
+# WhatsApp como canal (F4), pelo Twilio
 
-`CHANNEL=whatsapp` troca o Telegram pelo WhatsApp Cloud API (Meta). Os nós do `agents` não mudam: o canal
-implementa a mesma interface (`channels/base.py`). O código está em [channels/whatsapp.py](../channels/whatsapp.py).
+`CHANNEL=whatsapp` troca o Telegram pelo WhatsApp via **Twilio** (a API direta da Meta foi retirada). Os nós do
+`agents` não mudam: o canal implementa a mesma interface (`channels/base.py`). O código está em
+[channels/whatsapp.py](../channels/whatsapp.py).
 
 ## Como funciona
 
-| | Telegram | WhatsApp |
+| | Telegram | WhatsApp (Twilio) |
 |---|---|---|
-| Resposta do gerente | polling dentro do `agents` | **webhook HTTPS público** em `/whatsapp/webhook`, com assinatura da Meta |
-| Mensagem fora de conversa | livre | só **modelo (template) aprovado** se passaram 24 h da última mensagem do contato |
-| Custo | grátis | **cada modelo enviado é cobrado** pela Meta (custo a levantar no BMC) |
-| Botões | 3 botões inline | 3 botões de resposta (dentro das 24 h) ou 3 respostas rápidas do modelo (fora delas) |
+| Resposta do gerente | polling dentro do `agents` | **webhook HTTPS público** `POST /whatsapp/webhook`, com `X-Twilio-Signature` |
+| Mensagem fora de conversa | livre | só **modelo (Content Template) aprovado** se passaram 24 h da última mensagem do contato |
+| Custo | grátis | tarifa do Twilio **mais** a taxa da Meta por mensagem (ver a tabela vigente dos dois antes de fechar o BMC) |
+| Botões | 3 botões inline | 3 botões de resposta rápida do modelo, ou o gerente escreve `SIM`, `OPCOES` ou `NAO` |
 
-- **Dentro da janela de 24 h:** mensagem interativa com os botões Aceitar Proposta, Ver próxima opção e Recusar Proposta
-  (rótulos de até 20 caracteres, o limite da Meta). Plano com mais de 1024 caracteres vai antes como texto.
-- **Fora da janela:** o modelo `terramind_aprovacao` com as 3 respostas rápidas. O canal guarda a última mensagem
-  recebida de cada telefone em `agente.whatsapp_janelas`; se a Meta recusar a mensagem livre (erro 131047), cai para o modelo.
-- **Clique:** chega ao webhook, vira a mesma `Resposta` do Telegram e retoma a sessão. O segundo clique responde
-  "Decisão já registrada". O nome de quem clicou (perfil do WhatsApp) vai em `respondido_por`.
-- **Quem aprova:** só o telefone de um gerente da fazenda do incidente (`erp.gerentes.whatsapp_telefone`).
+- **Dentro da janela de 24 h:** se `TWILIO_CONTENT_SID_APROVACAO` está definido, o plano vai no modelo de botões
+  (Aceitar Proposta, Ver próxima opção, Recusar Proposta); senão vai como texto terminando com "Responda SIM, OPCOES
+  ou NAO". Plano com mais de 1024 caracteres vai antes como texto.
+- **Fora da janela:** só o modelo aprovado (`TWILIO_CONTENT_SID_APROVACAO` ou `..._AVISO`). Sem ele, o envio
+  falha com um erro que explica isso. O canal guarda a última mensagem recebida de cada telefone em
+  `agente.whatsapp_janelas`; se o Twilio recusar a mensagem livre por janela fechada (erro 63016), cai para o modelo.
+- **Resposta:** o botão volta com o identificador fixo (`SIM`, `OPCOES`, `NAO`), sem o plano. O canal grava o SID de
+  cada mensagem de aprovação em `agente.whatsapp_mensagens` e, no clique, acha o plano pela mensagem respondida
+  (`OriginalRepliedMessageSid`) ou, na falta dela, pelo plano mais recente do telefone ainda sem resposta. Escrever
+  `SIM`, `não`, `opções` vale igual ao clique, **desde que haja plano esperando**; senão é pergunta à bula.
+- **Quem aprova:** só o telefone de um gerente da fazenda do incidente (`erp.gerentes.whatsapp_telefone`, cadastrado
+  em `/usuarios`). O segundo clique responde "Decisão já registrada". O nome do perfil do WhatsApp vai em
+  `respondido_por`.
 - **Destino:** cada mensagem vai aos gerentes ativos da fazenda do incidente. `WHATSAPP_GERENTE_TELEFONE` é só o padrão.
 - **Pergunte à bula:** texto de um gerente (ou de um número em `WHATSAPP_NUMEROS_BULA`) é uma pergunta à bula.
 - **Operador:** o aviso de OS remarcada vai ao `erp.operadores.whatsapp_telefone`.
 
-## Passo a passo na Meta (comece na primeira semana: leva dias)
+## Testar já, com a conta gratuita (Sandbox) e o seu número
 
-1. **Conta e app.** Em developers.facebook.com, crie um app do tipo *Business* e adicione o produto *WhatsApp*.
-   Anote o **App Secret** (Configurações do app → Básico) → `WHATSAPP_APP_SECRET`.
-2. **Número e empresa.** Em *WhatsApp → Configuração da API*, anote o **ID do número de telefone** →
-   `WHATSAPP_PHONE_NUMBER_ID`. Para falar com números reais (não só os de teste), é preciso cadastrar o número
-   da empresa e passar pela **verificação da empresa** na Meta (o passo que demora). Enquanto isso, o número de
-   teste da Meta aceita até 5 destinatários cadastrados.
-3. **Token permanente.** O token que aparece na tela de configuração expira em 24 h. Crie um *usuário do sistema*
-   no Business Manager, dê acesso ao app e gere um token com `whatsapp_business_messaging` e
-   `whatsapp_business_management` → `WHATSAPP_TOKEN`.
-4. **Modelos de mensagem** (seção abaixo): crie e espere a aprovação.
-5. **Webhook.** O `agents` precisa de uma URL pública em HTTPS: `https://<seu-domínio>/whatsapp/webhook`.
-   Em desenvolvimento use um túnel (`cloudflared tunnel --url http://localhost:8000` ou `ngrok http 8000`).
-   Em *WhatsApp → Configuração → Webhook*, informe a URL e um **token de verificação** qualquer que você inventa
-   (o mesmo em `WHATSAPP_VERIFY_TOKEN`) e assine o campo **messages**.
-6. **Telefones no banco.** Telefone no formato internacional, só dígitos (ex.: `5564999998888`):
+A conta **trial** do Twilio **não** permite número próprio de WhatsApp nem modelo próprio: isso exige conta paga e
+o cadastro na Meta. O que a conta gratuita permite é o **Sandbox do WhatsApp**: um número compartilhado do Twilio
+(hoje `+1 415 523 8886`, confira no console) que conversa com **o seu telefone**, depois de você "entrar" nele.
+Serve para testar o fluxo inteiro. Limites do trial: cerca de 100 mensagens de WhatsApp, só para números verificados
+(até 5) e a sessão do Sandbox vence em 3 dias (é só mandar o `join` de novo).
 
-   ```sql
-   UPDATE erp.gerentes   SET whatsapp_telefone = 5564999998888 WHERE fazenda_id = 1;
-   UPDATE erp.operadores SET whatsapp_telefone = 5564999997777 WHERE nome = 'João';
+1. **Conta.** Crie a conta em twilio.com, verifique o seu telefone e anote, em *Account Info* do console:
+   **Account SID** → `TWILIO_ACCOUNT_SID` e **Auth Token** → `TWILIO_AUTH_TOKEN`.
+2. **Entrar no Sandbox.** No console: *Messaging → Try it out → Send a WhatsApp message*. Ele mostra o número do
+   Sandbox e uma palavra (`join <duas-palavras>`). No **seu WhatsApp**, mande essa mensagem para o número. Ele
+   responde que você entrou. O número do Sandbox, em dígitos, vai em `TWILIO_WHATSAPP_FROM` (ex.: `+14155238886`).
+3. **URL pública do `agents`.** O Twilio precisa chamar o seu computador:
+
+   ```bash
+   ngrok http 8000        # ou: cloudflared tunnel --url http://localhost:8000
    ```
 
-7. **`.env`:** `CHANNEL=whatsapp` e as variáveis da tabela abaixo; depois `docker compose up -d --build agents`.
+   Copie a URL `https://....` que ele mostra.
+4. **Webhook no Sandbox.** No console, *Sandbox settings* → campo **"When a message comes in"**:
+   `https://<sua-url>/whatsapp/webhook`, método **POST**. Salve. (É por aqui que o clique, o `SIM` e o `join` chegam
+   ao TerraMind; o `join` abre a janela de 24 h.)
+5. **Seu telefone no banco** (só dígitos com país e DDD, sem `+`). Pelo painel, em `/usuarios`, no seu usuário
+   gerente (campo "Telefone do WhatsApp"), ou:
+
+   ```sql
+   UPDATE erp.gerentes SET whatsapp_telefone = 5564999998888 WHERE fazenda_id = 1;
+   ```
+
+6. **`.env`** (veja `.env.example`) e suba o `agents`:
+
+   ```
+   CHANNEL=whatsapp
+   TWILIO_ACCOUNT_SID=AC...
+   TWILIO_AUTH_TOKEN=...
+   TWILIO_WHATSAPP_FROM=+14155238886
+   ```
+
+   ```bash
+   docker compose up -d --build agents
+   ```
+
+   Se o `agents` está atrás do túnel, a assinatura do Twilio é conferida com a URL que o túnel informa. Se der
+   `assinatura_invalida` nos logs (`docker compose logs agents`), defina `TWILIO_WEBHOOK_URL` com **exatamente** a
+   URL do passo 4.
+7. **Teste.**
+   - Só o envio: `uv run python -m channels.teste_whatsapp 5564999998888` (o `agents` não precisa estar no ar para
+     enviar, mas precisa estar para receber a resposta).
+   - Ponta a ponta: no painel, **Simular chuva**. O plano chega ao seu WhatsApp. Responda `SIM` (ou toque no botão,
+     se criou o modelo) e confira no painel que o plano foi aceito e que a auditoria mostra o seu nome.
+
+No Sandbox, deixe `TWILIO_CONTENT_SID_*` vazio no primeiro teste: a aprovação vai como texto e você responde
+escrevendo. Se quiser ver os botões, rode `uv run python -m channels.twilio_modelos criar` e ponha os dois
+`ContentSid` no `.env`; dentro da janela de 24 h o modelo de botões funciona sem aprovação da Meta (se a conta
+trial recusar criar o modelo, o script mostra o erro e o texto continua valendo).
+
+## Produção (número próprio): precisa de conta paga
+
+1. Promova a conta do Twilio para paga (*Upgrade*).
+2. Registre um **remetente do WhatsApp** (*Messaging → Senders → WhatsApp senders*): o número tem de ser dedicado
+   (sem estar no app do WhatsApp comum) e o fluxo passa pelo **Meta Business Manager e pela verificação da empresa**,
+   que é a parte que leva dias.
+3. Crie os modelos e peça a aprovação: `uv run python -m channels.twilio_modelos criar` e depois
+   `uv run python -m channels.twilio_modelos aprovar HX... terramind_aprovacao` (e o mesmo para o de aviso).
+   Idioma `pt_BR`, categoria *utility*. Só com modelo aprovado dá para falar fora da janela de 24 h.
+4. Troque `TWILIO_WHATSAPP_FROM` pelo seu número e aponte o webhook do **remetente** (não o do Sandbox) para
+   `https://<domínio>/whatsapp/webhook`. Em produção use um domínio fixo e `TWILIO_WEBHOOK_URL`.
 
 ## Variáveis de ambiente
 
 | Variável | Obrigatória | Para quê |
 |---|---|---|
-| `WHATSAPP_TOKEN` | sim | token de acesso da Cloud API |
-| `WHATSAPP_PHONE_NUMBER_ID` | sim | ID do número que envia |
-| `WHATSAPP_APP_SECRET` | sim, para receber | confere a assinatura `X-Hub-Signature-256`; sem ele o webhook recusa tudo (403) |
-| `WHATSAPP_VERIFY_TOKEN` | sim, para cadastrar o webhook | token da verificação (GET) |
+| `TWILIO_ACCOUNT_SID` | sim | identifica a conta (`AC...`) |
+| `TWILIO_AUTH_TOKEN` | sim | autentica o envio **e** confere a assinatura do webhook; sem ele o webhook recusa tudo (403) |
+| `TWILIO_WHATSAPP_FROM` | sim | número que envia: o do Sandbox ou o seu remetente (`+14155238886`) |
+| `TWILIO_CONTENT_SID_APROVACAO` | não | modelo com os 3 botões (`HX...`); sem ele a aprovação vai como texto |
+| `TWILIO_CONTENT_SID_AVISO` | não | modelo de aviso simples (`HX...`); necessário só para falar fora da janela de 24 h |
+| `TWILIO_WEBHOOK_URL` | não | URL exata que o Twilio chama; vazio = o `agents` usa a que o túnel ou proxy informa |
+| `TWILIO_API_URL` | não | só para testes (`https://api.twilio.com`) |
 | `WHATSAPP_GERENTE_TELEFONE` | não | gerente padrão, para fazenda sem gerente com telefone |
 | `WHATSAPP_NUMEROS_BULA` | não | outros números que podem perguntar à bula (`5564...,5511...`) |
-| `WHATSAPP_TEMPLATE_APROVACAO` | não (`terramind_aprovacao`) | nome do modelo com os 3 botões |
-| `WHATSAPP_TEMPLATE_AVISO` | não (`terramind_aviso`) | nome do modelo de aviso simples |
-| `WHATSAPP_TEMPLATE_IDIOMA` | não (`pt_BR`) | idioma dos modelos |
-| `WHATSAPP_API_VERSION` | não (`v22.0`) | versão da Graph API; confira a vigente no painel da Meta |
 
-## Modelos a cadastrar (WhatsApp Manager → Modelos de mensagem)
+## Modelos (Content Templates)
 
-Idioma **Português (BR)**, categoria **Utilidade**. A variável `{{1}}` recebe o texto do plano ou do alerta; o canal
-troca as quebras de linha por " · " (a Meta não aceita quebra nem 4+ espaços numa variável) e corta em 1000 caracteres.
-A Meta pede um exemplo para a variável: use um plano real encurtado.
+Criados por `python -m channels.twilio_modelos criar`:
 
-**`terramind_aprovacao`** (3 botões de resposta rápida, nesta ordem):
+- **`terramind_aprovacao`** (`twilio/quick-reply`): corpo `{{1}}` e três botões com identificadores fixos:
+  `SIM` ("Aceitar Proposta"), `OPCOES` ("Ver próxima opção") e `NAO` ("Recusar Proposta").
+- **`terramind_aviso`** (`twilio/text`): corpo `{{1}}`.
 
-- Corpo: `TerraMind, aviso para o gerente da fazenda: {{1}} Responda com um dos botões abaixo.`
-- Botões: `Aceitar Proposta`, `Ver próxima opção`, `Recusar Proposta`
+`{{1}}` recebe o texto do plano ou do alerta. Para o modelo **aprovado** (fora da janela), o canal troca as quebras de
+linha por " · " (a Meta não aceita quebra nem 4+ espaços numa variável) e corta em 1000 caracteres; dentro da janela o
+texto vai inteiro (até 1024 no modelo de botões).
 
-**`terramind_aviso`** (sem botões):
+## Testes automáticos
 
-- Corpo: `TerraMind, aviso da fazenda: {{1}} Mais detalhes no painel.`
+`uv run pytest tests/test_channels_whatsapp.py`: o Twilio é simulado (`httpx.MockTransport`), com o Postgres real.
+Cobrem a janela de 24 h, o envio com e sem modelo, o clique achando o plano, o texto `SIM`/`NAO`, a assinatura, a
+URL assinada atrás de proxy e o destino por fazenda.
 
-Os nomes precisam ser iguais aos de `WHATSAPP_TEMPLATE_*`. O texto antes e depois da variável é exigência da Meta
-(o modelo não pode começar nem terminar numa variável).
+## O que ainda não foi validado contra o Twilio real
 
-## Testar
-
-1. Testes automáticos (Cloud API simulada): `uv run pytest tests/test_channels_whatsapp.py`.
-2. Contra a Meta de verdade, depois de cadastrar o número de teste como destinatário:
-
-   ```bash
-   uv run python -m channels.teste_whatsapp 5564999998888
-   ```
-
-   Manda um plano de exemplo com os botões; clique e a resposta aparece no terminal. Para o webhook funcionar nesse
-   teste, o `agents` precisa estar no ar com `CHANNEL=whatsapp` (é ele que recebe o clique); o script só envia.
-3. Ponta a ponta: **Simular chuva** no painel e confira a mensagem no WhatsApp com os 3 botões.
-
-## O que não foi validado contra a Meta
-
-O canal foi testado contra uma Cloud API simulada (formato das mensagens, janela de 24 h, assinatura, destino por fazenda).
-Ainda precisa de uma rodada real depois da conta, do número e dos modelos aprovados: o formato exato do JSON dos modelos
-e a versão da Graph API são os pontos a conferir.
+Foi escrito a partir da documentação do Twilio e testado contra uma API simulada. Os pontos a conferir na primeira
+rodada real: os campos do webhook (`ButtonPayload`, `OriginalRepliedMessageSid`, `ProfileName`), o código de erro de
+janela fechada (63016, que também pode chegar depois, no status da mensagem, e não na resposta do envio), o formato
+do pedido de criação e de aprovação dos modelos na Content API e a conferência da assinatura atrás do túnel.
+Se algo divergir, os logs do `agents` dizem o que chegou.

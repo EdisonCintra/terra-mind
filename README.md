@@ -127,6 +127,6 @@ tudo pela fazenda escolhida no menu (cookie `fazenda`).
 ### Canais
 
 `CHANNEL=painel` (padrão, sem token), `telegram` ou `whatsapp`. O WhatsApp recebe a resposta por webhook
-público e, fora da janela de 24 h, só manda modelo aprovado pela Meta: ver [docs/whatsapp.md](docs/whatsapp.md).
+público (Twilio) e, fora da janela de 24 h, só manda modelo aprovado: ver [docs/whatsapp.md](docs/whatsapp.md).
 
 Mais detalhes: [agents/README.md](agents/README.md) · [docs/contratos.md](docs/contratos.md) · [docs/plans/](docs/plans/)

@@ -165,23 +165,31 @@
 - Pergunte à bula pelo WhatsApp. Botões, rótulos e identificadores compartilhados com o Telegram (`channels/base.py`).
 - Testado com a Cloud API simulada (32 testes). Teste manual contra a Meta: `python -m channels.teste_whatsapp <telefone>`.
 
+**Atualização de 25/11/2026: o canal passou da Meta (Cloud API) para o Twilio.** O texto acima descreve o plano original; o que vale agora está em [docs/whatsapp.md](../whatsapp.md). A parte externa deixou de ser "conta e verificação na Meta" e virou: **conta no Twilio, Sandbox para testar já (grátis, com o telefone de quem testa) e, para produção, conta paga mais remetente próprio registrado** (a verificação da empresa na Meta continua existindo nesse caminho, conduzida pelo Twilio).
+
+- `channels/whatsapp.py` foi reescrito para o Twilio e o canal da Meta foi **retirado** (a `WhatsAppChannel` e o `CHANNEL=whatsapp` são os mesmos nomes; o que muda é por baixo). Envio pela API REST do Twilio (`Messages.json`, Account SID e Auth Token), modelos por `ContentSid` (Content Templates) e resposta por `POST /whatsapp/webhook` em formulário, com `X-Twilio-Signature` (HMAC-SHA1 da URL mais os parâmetros). Não existe mais o `GET` de verificação da Meta.
+- **O botão volta sem o plano:** o identificador do botão é fixo (`SIM`, `OPCOES`, `NAO`). O canal grava o SID de cada mensagem de aprovação (`agente.whatsapp_mensagens`, migration `008_whatsapp_twilio.sql`) e acha o plano pela mensagem respondida ou pelo mais recente do telefone ainda sem resposta. Sem modelo de botões, a aprovação vai como texto e o gerente escreve `SIM`, `OPCOES` ou `NAO` (vale igual ao clique, só se há plano esperando).
+- `python -m channels.twilio_modelos criar|aprovar` cria os dois modelos (aprovação com 3 botões e aviso) e pede a aprovação. Variáveis novas: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `TWILIO_CONTENT_SID_APROVACAO`, `TWILIO_CONTENT_SID_AVISO`, `TWILIO_WEBHOOK_URL`. As `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_TEMPLATE_*` e `WHATSAPP_API_VERSION` saíram.
+- Testes: 52 em `tests/test_channels_whatsapp.py`, com o Twilio simulado. **Ainda não validado contra o Twilio real** (ver "O que ainda não foi validado" em docs/whatsapp.md).
+- **Custo (BMC):** passa a ser a tarifa do Twilio mais a taxa da Meta por mensagem. Segue "a levantar": confira as tabelas vigentes dos dois.
+
 **Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F4)**
 
-- **`agents/api.py`:** rotas novas `GET` e `POST /whatsapp/webhook` (fora do schema). Só existem com `CHANNEL=whatsapp`; com outro canal respondem 404. O `POST` confere a assinatura da Meta e processa em segundo plano.
-- **Atenção ao contrato 23 (F3):** quando o `agents` passar a exigir o `AGENTS_TOKEN` em `POST /incidentes/{id}/resposta`, a rota `/whatsapp/webhook` **tem de ficar de fora** dessa exigência: a Meta não manda o nosso token, e a autenticação dela é a assinatura `X-Hub-Signature-256`. Combinar antes de implementar o F3.
+- **`agents/api.py`:** rota nova `POST /whatsapp/webhook` (fora do schema). Só existe com `CHANNEL=whatsapp`; com outro canal responde 404. Desde a troca para o Twilio ela lê **formulário**, confere `X-Twilio-Signature` (a URL entra na conta: atrás de túnel o `agents` usa `X-Forwarded-Proto` e `X-Forwarded-Host`, ou `TWILIO_WEBHOOK_URL`), processa em segundo plano e responde TwiML vazio. O `GET` de verificação da Meta foi removido.
+- **Atenção ao contrato 23 (F3):** quando o `agents` passar a exigir o `AGENTS_TOKEN` em `POST /incidentes/{id}/resposta`, a rota `/whatsapp/webhook` **tem de ficar de fora** dessa exigência: o Twilio não manda o nosso token, e a autenticação dele é a assinatura `X-Twilio-Signature`. Combinar antes de implementar o F3.
 - **`agents/config.py`:** `channel` aceita `whatsapp`.
 - **`agents/nodes/executor.py`:** o contato do operador sai da coluna que o canal indica (`campo_operador`: `telegram_chat_id` no Telegram, `whatsapp_telefone` no WhatsApp). O MCP `listar_operadores` agora devolve também `whatsapp_telefone`. Fakes de canal sem o atributo caem no Telegram (comportamento antigo).
 - **`notificar_operador(chat_id, texto)`:** no WhatsApp o `chat_id` é o telefone (inteiro, só dígitos, ex.: `5564999998888`).
 - **Desligamento:** `canal.parar()` espera as respostas em segundo plano terminarem; nada a fazer no `montar_servicos`.
-- **Infra:** o `agents` precisa de uma **URL HTTPS pública** para a Meta chamar o webhook (túnel em desenvolvimento). Hoje a porta 8000 só existe na rede local.
-- **Variáveis novas** no `.env`: `WHATSAPP_*` (lista em `.env.example` e em [docs/whatsapp.md](../whatsapp.md)); nenhuma é obrigatória com `CHANNEL=painel` ou `telegram`.
+- **Infra:** o `agents` precisa de uma **URL HTTPS pública** para o Twilio chamar o webhook (túnel em desenvolvimento, como ngrok). Hoje a porta 8000 só existe na rede local.
+- **Variáveis novas** no `.env`: `TWILIO_*` e `WHATSAPP_GERENTE_TELEFONE`/`WHATSAPP_NUMEROS_BULA` (lista em `.env.example` e em [docs/whatsapp.md](../whatsapp.md)); nenhuma é obrigatória com `CHANNEL=painel` ou `telegram`.
 
 **Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F4)**
 
 - **Nenhum arquivo do Monitor, do conhecimento ou do `base_agricola` foi alterado.**
-- **Migration `004_whatsapp.sql`** (faixa do Felipe): `whatsapp_telefone` em `erp.gerentes` e `erp.operadores` e a tabela `agente.whatsapp_janelas`. Se o cadastro de operador/gerente do F1 ou o teu cadastro de insumos mexer nessas tabelas, o telefone é uma coluna a mais.
+- **Migrations `004_whatsapp.sql` e `008_whatsapp_twilio.sql`** (faixa do Felipe): `whatsapp_telefone` em `erp.gerentes` e `erp.operadores`, e as tabelas `agente.whatsapp_janelas` e `agente.whatsapp_mensagens`. Se o cadastro de operador/gerente do F1 ou o teu cadastro de insumos mexer nessas tabelas, o telefone é uma coluna a mais.
 - **E3/E4 (alertas):** o Monitor continua avisando o `agents` por `POST /incidentes/{id}/iniciar`; nada muda. A mensagem ao gerente sai pelo canal configurado (Telegram, WhatsApp ou painel).
-- **Pendência de negócio no BMC:** cada mensagem de **modelo** do WhatsApp é cobrada pela Meta (fora da janela de 24 h); o custo está "a levantar" no BMC e é um número que você pode precisar para o pitch. Não coloquei valor nenhum.
+- **Pendência de negócio no BMC:** o WhatsApp passa a custar a tarifa do Twilio mais a taxa da Meta por mensagem; o custo está "a levantar" no BMC e é um número que você pode precisar para o pitch. Não coloquei valor nenhum.
 - **E7/E6 (texto das mensagens):** o plano enviado como variável de modelo é cortado em 1000 caracteres e perde as quebras de linha (viram " · "). Texto de mensagem novo deve caber nisso; o plano completo continua no painel.
 
 ### F5 · Indicadores da fazenda (2)

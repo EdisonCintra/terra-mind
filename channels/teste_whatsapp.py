@@ -1,11 +1,15 @@
-"""Teste manual do WhatsAppChannel (F4), contra a Cloud API real.
+"""Teste manual do WhatsAppChannel (F4), contra o Twilio real (Sandbox ou número aprovado).
 
     uv run python -m channels.teste_whatsapp 5564999998888
 
-Manda um plano de exemplo com os botões para o telefone informado (formato internacional, só dígitos). O
-telefone precisa estar cadastrado como destinatário de teste na Meta. Fora da janela de 24 h o canal usa o
-modelo `terramind_aprovacao`, que precisa estar aprovado. O clique chega ao webhook do `agents`, não a este
-script: suba o `agents` com `CHANNEL=whatsapp` para ver a resposta. Ver `docs/whatsapp.md`.
+Manda um plano de exemplo para o telefone informado (formato internacional, só dígitos).
+
+No Sandbox, o telefone tem de ter entrado antes ("join <palavra>" para o número do Sandbox) e, para a
+mensagem livre valer, ter mandado uma mensagem nas últimas 24 h.
+
+O clique ou a palavra SIM, OPCOES ou NAO chega ao webhook do `agents`, não a este script. Para ver a
+decisão de verdade, suba o `agents` com `CHANNEL=whatsapp` e dispare um incidente pelo painel
+("Simular chuva"). Ver `docs/whatsapp.md`.
 """
 
 import asyncio
@@ -25,9 +29,9 @@ async def main(telefone: int) -> None:
     canal.gerente_padrao = telefone  # o teste não passa por incidente: manda direto para este número
     try:
         await canal.pedir_aprovacao(
-            0, 0, "Teste do TerraMind: plano de exemplo (incidente 0, plano 0). Clique em um botão."
+            0, 0, "Teste do TerraMind: plano de exemplo (incidente 0, plano 0). Responda para testar a volta."
         )
-        print("Mensagem enviada. O clique chega ao webhook do agents.", flush=True)
+        print("Mensagem enviada. A resposta chega ao webhook do agents.", flush=True)
     finally:
         await canal.parar()
 
