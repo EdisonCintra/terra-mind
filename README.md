@@ -97,7 +97,8 @@ cp .env.example .env          # preencha OPENAI_API_KEY (e o Telegram, se usar C
 docker compose up -d --build
 ```
 
-Abra `http://localhost:8080` e clique em Simular chuva para disparar o cenário de 80 mm.
+Abra `http://localhost:8080`, entre com a sua conta e clique em Simular chuva para disparar o cenário de 80 mm.
+O painel pede login: o passo a passo, com a criação da conta, está em [docs/como-rodar.md](docs/como-rodar.md).
 
 ### Migrations
 
