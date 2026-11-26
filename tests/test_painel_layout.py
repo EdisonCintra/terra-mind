@@ -30,7 +30,7 @@ def test_os_redireciona_para_visao_geral(cliente):
 
 def test_menu_na_ordem_do_brief():
     assert [i.rota for i in MENU] == [
-        "/visao-geral", "/cadastros", "/cadastros/os", "/usuarios", "/fazenda", "/mapa", "/agenda",
+        "/visao-geral", "/campo", "/cadastros", "/cadastros/os", "/usuarios", "/fazenda", "/mapa", "/agenda",
         "/perda", "/historico", "/bula", "/relatorios",
     ]  # F3 acrescentou "Ordens de serviço" (operador) e "Usuários" (gerente); a ordem do brief segue
 

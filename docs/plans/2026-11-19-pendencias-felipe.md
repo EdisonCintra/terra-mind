@@ -1,4 +1,4 @@
-# Pendências do Felipe (atualizado em 25/11/2026, após o F1, o F2, o F3, o F4 e o F5)
+# Pendências do Felipe (atualizado em 25/11/2026, após o F1 ao F6)
 
 Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" = o que precisa existir antes.
 
@@ -9,7 +9,7 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | F2 · Várias fazendas e migrations | **Concluído** (branch `feat/f2-fazendas-migrations`) |
 | F1 · Cadastro pelo painel | **Concluído** (branch `feat/f1-cadastro`, que também reconcilia F2, F4 e F5 com o `main`) |
 | F3 · Login e perfis | **Concluído** (branch `feat/f3-login`, sobre a `feat/f1-cadastro`); permissões confirmadas pelo time |
-| F6 · Conclusão da OS pelo operador | A fazer (há uma tela mínima do G7 para substituir) |
+| F6 · Conclusão da OS pelo operador | **Concluído** (branch `feat/f6-conclusao`); falta ver a tela num celular |
 | F5 · Indicadores da fazenda | **Concluído** (branch `feat/f5-indicadores`); falta só a revisão visual do E1 e a tela de cadastro do planejamento de safra (F1) |
 | F4 · WhatsApp | **Código concluído, agora pelo Twilio** (a Meta direta foi retirada; guia em [docs/whatsapp.md](../whatsapp.md)); falta a rodada real: conta Twilio, Sandbox com o seu telefone e, para produção, conta paga e remetente próprio |
 
@@ -23,7 +23,7 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | Edison (E4) | `erp.talhoes.geom` (contrato 18) e `lat`/`lon` como centro | F1 | **Liberado** (006_cadastro.sql) |
 | Edison (E3, E6) | Monitor segue lendo `lat` e `lon` como centro do talhão, mesmo com polígono | F1 | **Liberado** (e agora só vigia talhão ativo) |
 | Todos | Usuário e papel (`gerente`/`operador`); painel manda o usuário em `respondido_por`; `agents` exige `AGENTS_TOKEN` (contrato 23) | F3 | **Liberado.** `respondido_por` já é o nome do usuário; `AGENTS_TOKEN` é opcional até o time ligar (defina o mesmo valor no `.env`) |
-| Gustavo (G7) | O operador marcar a OS como executada chama a geração do relatório; hoje só existe a tela mínima dele | F6 | Parcial: tela mínima do G7 funciona, falta a tela do operador no celular |
+| Gustavo (G7) | O operador marcar a OS como executada chama a geração do relatório | F6 | **Feito** (`/campo` e `/os/{id}/concluir`); **avisar o Gustavo** da tela removida |
 | Gustavo (G3) | Formulário de OS do F1 chama `POST /janelas/avaliar` | F1 | **Feito**: `/cadastros/os` usa a mesma conferência da janela |
 | Gustavo (G1) | Período da safra por fazenda: hoje `SAFRA_INICIO` no `.env`. Falta uma coluna em `erp.fazendas` (ex.: `safra_inicio`). Posso acrescentar numa migration `004` se ele quiser | F2 | **A combinar** |
 | Edison (E5) | Cadastro de insumo (F1) chama a busca de produto dele | F1 | **Feito**: o painel faz proxy da busca e do envio de bula; falta confirmar as credenciais `AGROFIT_*` num ambiente real |
@@ -47,13 +47,13 @@ Fonte: [divisão de tarefas v2](2026-11-08-divisao-de-tarefas.md). "Depende de" 
 | F1 (cadastro do planejamento de safra) | Aba "Safra" em `/cadastros` | Felipe | **Pronto** |
 | F5 (insumo cujo estoque não cobre as OS agendadas) | Dose e área das OS (já no banco) | Felipe | **Pronto** |
 | F6 (conclusão pelo operador) | `erp.execucoes_os` (contrato 28) e `POST /relatorios/os/{id}` (G7) | Gustavo | **Pronto** (migration 020 e relatório existem) |
-| F6 (tela para celular) | Componentes e layout de celular do E1 | Edison | Pendente (mesmo bloqueio do topo) |
+| F6 (tela para celular) | Componentes e layout de celular do E1 | Edison | **Pronto** (usado pelo F6) |
 | F2 (restrição por organização do usuário) | Login do F3 para saber as fazendas de cada usuário | Felipe | **Pronto** |
 | F2 (RLS no Postgres, opcional) | F3 (usuário e organização na sessão) | Felipe | Adiado |
 
 ## Dúvidas abertas para o time
 
-1. O que falta do meu lado: **F6** (conclusão da OS pelo operador), mais a rodada real do F4 (Sandbox do Twilio com o meu telefone). Falta o time **definir o valor do `AGENTS_TOKEN`** e ligá-lo no `.env` (o código já aceita).
+1. Todas as minhas tarefas de código (F1 a F6) estão feitas. Faltam: a rodada real do F4 (Sandbox do Twilio com o meu telefone), ver as telas num navegador e num celular, abrir o PR para o `main` e o time **definir o valor do `AGENTS_TOKEN`**.
 2. (Resolvida) Tabela de permissões do F3: confirmada pelo time.
 3. Gustavo quer o `safra_inicio` por fazenda no G1?
-4. Os 2 testes do Monitor (`test_ciclo_manual_usa_fonte_live` e `test_modo_live_roda_ciclo_em_background`) já falhavam no `main` antes do F2: é com o Edison.
+4. `test_fatores_aceita_atraso_e_recusa_condicao_desconhecida` (E7) falha no meu banco local, que já tem as linhas de `atraso` criadas pela migration: ver com o Edison.

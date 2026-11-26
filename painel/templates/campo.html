@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Executar OS · TerraMind{% endblock %}
+{% block conteudo %}
+<div class="pagina-interna campo-tela">
+  <header class="cabecalho-pagina">
+    <h1>Executar OS</h1>
+    <p class="nota">Toque na ordem de serviço que foi aplicada para registrar os dados reais.</p>
+  </header>
+
+  {% if tem_operador %}
+  <nav class="abas" aria-label="Quais ordens">
+    <a href="/campo"{% if so_minhas %} aria-current="page"{% endif %}>Minhas</a>
+    <a href="/campo?todas=1"{% if not so_minhas %} aria-current="page"{% endif %}>Todas da fazenda</a>
+  </nav>
+  {% endif %}
+
+  {% if suspensas %}
+  <section class="lista-campo" aria-label="Ordens suspensas">
+    {% for os in suspensas %}
+    <div class="cartao-os suspensa">
+      <div class="linha-os"><strong>{{ os.talhao }}</strong>{{ c.selo("Suspensa: não aplicar", "atencao") }}</div>
+      <div>OS {{ os.id }} · {{ os.produto or "sem insumo" }}</div>
+      <small>Prevista para {{ os.inicio_previsto|hora }}. Aguarde o gerente aprovar o novo horário.</small>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="lista-campo" aria-label="Ordens a executar">
+    {% for os in abertas %}
+    <a class="cartao-os" href="/os/{{ os.id }}/concluir">
+      <div class="linha-os">
+        <strong>{{ os.talhao }}</strong>
+        {% if os.atrasada %}{{ c.selo("Atrasada", "risco") }}{% elif os.hoje %}{{ c.selo("Hoje", "bom") }}{% elif os.status == "reagendada" %}{{ c.selo("Reagendada", "azul") }}{% endif %}
+      </div>
+      <div>OS {{ os.id }} · {{ os.produto or "sem insumo" }}{% if os.dose_por_ha %} · {{ os.dose_por_ha }} {{ os.unidade or "un" }}/ha{% endif %}</div>
+      <small>{{ os.inicio_previsto|hora }} · {{ os.area_ha }} ha · {{ os.maquina or "sem máquina" }}{% if not so_minhas %} · {{ os.operador or "sem operador" }}{% endif %}</small>
+      <span class="acao-os">Registrar execução</span>
+    </a>
+    {% else %}
+      {% if so_minhas %}{{ c.vazio("Nenhuma OS sua para executar.", "Ver todas da fazenda", "/campo?todas=1") }}
+      {% else %}{{ c.vazio("Nenhuma OS agendada nesta fazenda.") }}{% endif %}
+    {% endfor %}
+  </section>
+
+  <p><a href="/relatorios">Ver relatórios das aplicações concluídas</a></p>
+</div>
+{% endblock %}

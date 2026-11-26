@@ -11,7 +11,7 @@
           <td>{{ os.produto or "—" }}</td>
           <td class="mono">{{ os.inicio_previsto|hora }}</td>
           <td>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</td>
-          <td><button class="grande" hx-get="/os/{{ os.id }}/concluir" hx-target="#formulario-concluir" hx-swap="innerHTML">Concluir</button></td>
+          <td><a class="botao" href="/os/{{ os.id }}/concluir">Concluir</a></td>
         </tr>
         {% else %}
         <tr><td colspan="6" class="vazio">Nenhuma OS agendada.</td></tr>

@@ -544,28 +544,49 @@ def listar_operadores(fazenda_id: int | None = None) -> list[dict]:
 
 
 # --- G7: conclusão da OS e relatórios ---------------------------------------------------------
-def ordens_a_concluir(fazenda_id: int | None = None) -> list[dict]:
-    """OS que podem ser concluídas: agendadas ou reagendadas, da mais próxima para a mais distante."""
+def ordens_a_concluir(fazenda_id: int | None = None, operador_id: int | None = None) -> list[dict]:
+    """OS que podem ser concluídas: agendadas ou reagendadas, da mais próxima para a mais distante.
+    Com `operador_id`, só as dele (a tela "Executar OS" do celular, F6)."""
+    return _ordens_de_campo(("agendada", "reagendada"), fazenda_id, operador_id)
+
+
+def ordens_suspensas(fazenda_id: int | None = None, operador_id: int | None = None) -> list[dict]:
+    """OS suspensas por clima: o operador precisa saber que não é para aplicar (F6)."""
+    return _ordens_de_campo(("suspensa_preventiva",), fazenda_id, operador_id)
+
+
+def _ordens_de_campo(status: tuple[str, ...], fazenda_id: int | None, operador_id: int | None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             """
-            SELECT os.id, os.inicio_previsto, os.duracao_horas, os.dose_por_ha, os.status,
-                   t.nome AS talhao, t.area_ha, i.produto, i.unidade, m.nome AS maquina, o.nome AS operador
+            SELECT os.id, os.fazenda_id, os.inicio_previsto, os.duracao_horas, os.dose_por_ha, os.status,
+                   os.maquina_id, os.operador_id, t.nome AS talhao, t.area_ha, i.produto, i.unidade,
+                   m.nome AS maquina, o.nome AS operador
             FROM erp.ordens_servico os
             JOIN erp.talhoes t ON t.id = os.talhao_id
             LEFT JOIN erp.insumos i ON i.id = os.insumo_id
             LEFT JOIN erp.maquinas m ON m.id = os.maquina_id
             LEFT JOIN erp.operadores o ON o.id = os.operador_id
-            WHERE os.status IN ('agendada', 'reagendada')
+            WHERE os.status = ANY(%(status)s)
               AND (%(faz)s::int IS NULL OR os.fazenda_id = %(faz)s)
+              AND (%(op)s::int IS NULL OR os.operador_id = %(op)s)
             ORDER BY os.inicio_previsto, os.id
             """,
-            {"faz": fazenda_id},
+            {"status": list(status), "faz": fazenda_id, "op": operador_id},
         ).fetchall()
 
 
 def ordem(os_id: int) -> dict | None:
     return next((o for o in ordens_a_concluir() if o["id"] == os_id), None)
+
+
+def maquinas_da_fazenda(fazenda_id: int) -> list[dict]:
+    """Máquinas ativas da fazenda (a que de fato fez a aplicação pode não ser a da OS)."""
+    with conectar() as conn:
+        return conn.execute(
+            "SELECT id, nome, tipo FROM erp.maquinas WHERE ativo AND fazenda_id = %s ORDER BY nome",
+            (fazenda_id,),
+        ).fetchall()
 
 
 def listar_relatorios(fazenda_id: int | None = None) -> list[dict]:

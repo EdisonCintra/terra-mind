@@ -173,7 +173,10 @@ registrar_cadastros(
 
 
 @app.get("/", include_in_schema=False)
-def raiz() -> RedirectResponse:
+def raiz(request: Request) -> RedirectResponse:
+    usuario = getattr(request.state, "usuario", None)
+    if usuario and usuario.get("papel") == "operador":  # F6: o operador começa nas OS a executar
+        return RedirectResponse("/campo")
     return RedirectResponse("/visao-geral")
 
 
@@ -928,19 +931,58 @@ def _contexto_relatorios(fazenda_id: int | None = None) -> dict:
     }
 
 
+# --- Execução da OS pelo operador (F6, contrato 28) ------------------------------------------
+@app.get("/campo", response_class=HTMLResponse)
+def tela_campo(request: Request, todas: int = 0):
+    """Tela do celular: as OS a executar. Quem está ligado a um operador vê as suas; `?todas=1` mostra as da
+    fazenda escolhida. As suspensas por clima aparecem à parte, com o aviso de não aplicar."""
+    usuario = getattr(request.state, "usuario", None)
+    operador = usuario.get("operador_id") if usuario else None
+    so_minhas = operador is not None and not todas
+    # As do próprio operador não dependem do seletor de fazenda (o cadastro dele é de uma fazenda só).
+    fazenda, de_quem = (None, operador) if so_minhas else (_fazenda(request), None)
+    abertas = dados.ordens_a_concluir(fazenda, de_quem)
+    suspensas = dados.ordens_suspensas(fazenda, de_quem)
+    if usuario is not None:
+        permitidas = usuario.get("fazendas") or []
+        abertas = [o for o in abertas if o["fazenda_id"] in permitidas]
+        suspensas = [o for o in suspensas if o["fazenda_id"] in permitidas]
+    agora = _agora()
+    for o in abertas:
+        inicio = o["inicio_previsto"].astimezone(FUSO)
+        o["atrasada"] = inicio + timedelta(hours=float(o["duracao_horas"])) < agora
+        o["hoje"] = inicio.date() == agora.date()
+    contexto = {
+        **contexto_base(request, "/campo"),
+        "abertas": abertas,
+        "suspensas": suspensas,
+        "tem_operador": operador is not None,
+        "so_minhas": so_minhas,
+    }
+    return templates.TemplateResponse(request, "campo.html", contexto)
+
+
 @app.get("/os/{os_id}/concluir", response_class=HTMLResponse)
 def formulario_concluir(request: Request, os_id: int):
     _acesso(request, "os", os_id)
     os_ = dados.ordem(os_id)
     if os_ is None:
         raise HTTPException(404, "OS não encontrada ou já concluída")
+    # Sugestão de horário: o previsto; se ele ainda não terminou, a aplicação acabou de acontecer.
+    agora = _agora()
+    duracao = timedelta(hours=float(os_["duracao_horas"]))
     inicio = os_["inicio_previsto"].astimezone(FUSO)
+    if inicio + duracao > agora:
+        inicio = agora - duracao
     contexto = {
+        **contexto_base(request, "/campo"),
         "os": os_,
         "inicio": f"{inicio:%Y-%m-%dT%H:%M}",
-        "fim": f"{inicio + timedelta(hours=float(os_['duracao_horas'])):%Y-%m-%dT%H:%M}",
+        "fim": f"{inicio + duracao:%Y-%m-%dT%H:%M}",
+        "maquinas": dados.maquinas_da_fazenda(os_["fazenda_id"]),
+        "operadores": dados.listar_operadores(os_["fazenda_id"]),
     }
-    return templates.TemplateResponse(request, "_concluir.html", contexto)
+    return templates.TemplateResponse(request, "campo_concluir.html", contexto)
 
 
 def _gerar_relatorio(os_id: int) -> tuple[str, str]:
@@ -975,6 +1017,8 @@ def concluir_os(
     aeronave: str = Form(""),
     ponta: str = Form(""),
     observacoes: str = Form(""),
+    maquina_id: str = Form(""),
+    operador_id: str = Form(""),
 ):
     """Contrato 28: grava a execução, marca a OS como executada e pede o relatório (G7)."""
     _acesso(request, "os", os_id)
@@ -993,6 +1037,9 @@ def concluir_os(
         return _mensagem(request, "erro", "Informe o início, o término e a área aplicada.")
     if fim > _agora():
         return _mensagem(request, "erro", "O término não pode estar no futuro.")
+    escolhidos = {"maquina_id": maquina_id.strip(), "operador_id": operador_id.strip()}
+    if any(v and not (v.isascii() and v.isdecimal()) for v in escolhidos.values()):
+        return _mensagem(request, "erro", "Escolha a máquina e o operador da lista.")
     textos = {
         "receituario_numero": receituario_numero,
         "responsavel_tecnico": responsavel_tecnico,
@@ -1007,8 +1054,10 @@ def concluir_os(
         "modalidade": modalidade,
         **{k: v for k, v in numeros.items() if v is None or v > 0},
         **{k: v.strip() or None for k, v in textos.items()},
+        **{k: int(v) for k, v in escolhidos.items() if v},  # sem escolha, valem os da OS
     }
-    r = escrita.concluir_os(os_id, execucao)
+    usuario = getattr(request.state, "usuario", None)
+    r = escrita.concluir_os(os_id, execucao, por=usuario["nome"] if usuario else "painel")
     if not r["ok"]:
         return _mensagem(request, "erro", r["erro"])
     nivel, texto = _gerar_relatorio(os_id)

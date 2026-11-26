@@ -5,7 +5,7 @@ Mesmas regras das escritas do MCP: a condição é checada no próprio SQL, e to
 `{"ok": false, "erro": "<mensagem para a tela>"}`.
 
 O cadastro completo (F1) está em `painel/cadastros.py`; criar, editar e cancelar OS passam pelas regras
-daqui. A conclusão pelo operador no celular (F6) é da frente do Felipe e pode substituir `concluir_os`.
+daqui. A tela do operador no celular (F6, `/campo`) usa a mesma `concluir_os`.
 """
 
 from datetime import datetime, timedelta
@@ -200,6 +200,18 @@ def concluir_os(os_id: int, execucao: dict[str, Any], por: str = "painel") -> di
     )  # fmt: skip
     with conectar() as conn:
         antes = conn.execute("SELECT * FROM erp.ordens_servico WHERE id = %s", (os_id,)).fetchone()
+        # Máquina e operador informados têm de ser da fazenda da OS (confere antes de gravar qualquer coisa).
+        for campo, tabela, nome in (
+            ("maquina_id", "erp.maquinas", "Máquina"),
+            ("operador_id", "erp.operadores", "Operador"),
+        ):
+            if antes and execucao.get(campo):
+                achado = conn.execute(
+                    f"SELECT 1 FROM {tabela} WHERE id = %s AND fazenda_id = %s",  # noqa: S608
+                    (execucao[campo], antes["fazenda_id"]),
+                ).fetchone()
+                if achado is None:
+                    return {"ok": False, "erro": f"{nome} de outra fazenda ou inexistente."}
         depois = conn.execute(
             "UPDATE erp.ordens_servico SET status = 'executada'"
             " WHERE id = %s AND status IN ('agendada', 'reagendada') RETURNING *",

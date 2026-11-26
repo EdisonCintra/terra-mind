@@ -1,0 +1,80 @@
+{# Execução da OS no celular (F6, contrato 28). Uma coluna; os campos de voo só aparecem para drone e avião. #}
+{% extends "layout.html" %}
+{% block titulo %}Concluir OS {{ os.id }} · TerraMind{% endblock %}
+{% block conteudo %}
+<div class="pagina-interna campo-tela">
+  <p><a href="/campo">&larr; Voltar às ordens</a></p>
+  <header class="cabecalho-pagina">
+    <h1>Concluir OS {{ os.id }} · {{ os.talhao }}</h1>
+    <p class="nota">{{ os.produto or "sem insumo" }} · {{ os.area_ha }} ha · prevista para {{ os.inicio_previsto|hora }}</p>
+  </header>
+
+  <div id="resultado" aria-live="polite" role="status"></div>
+  <p id="depois" hidden><a class="botao" href="/campo">Voltar às ordens</a></p>
+
+  <form class="formulario form-campo" id="form-execucao" hx-post="/os/{{ os.id }}/concluir" hx-target="#resultado" hx-swap="innerHTML show:top"
+        hx-disabled-elt="find button[type=submit]" hx-indicator="find .htmx-indicator"
+        hx-on::after-request="if (event.detail.successful && event.detail.xhr.getResponseHeader('HX-Trigger')) { this.hidden = true; document.getElementById('depois').hidden = false; }">
+    <fieldset>
+      <legend>Quando</legend>
+      <label>Início real <input name="inicio_real" type="datetime-local" required value="{{ inicio }}"></label>
+      <label>Término real <input name="fim_real" type="datetime-local" required value="{{ fim }}"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>O que foi aplicado</legend>
+      <label>Área aplicada (ha) <input name="area_aplicada_ha" inputmode="decimal" required value="{{ os.area_ha }}"></label>
+      <label>Dose aplicada ({{ os.unidade or "un" }}/ha) <input name="dose_real_por_ha" inputmode="decimal" value="{{ os.dose_por_ha or '' }}"></label>
+      <label>Volume de calda (L/ha) <input name="volume_calda_l_ha" inputmode="decimal"></label>
+      <label>Modalidade
+        <select name="modalidade" id="campo-modalidade">
+          <option value="terrestre">Terrestre</option>
+          <option value="drone">Drone</option>
+          <option value="aerea">Avião agrícola</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset class="so-voo">
+      <legend>Dados do voo</legend>
+      <label>Altura do voo (m) <input name="altura_voo_m" inputmode="decimal"></label>
+      <label>Largura da faixa (m) <input name="largura_faixa_m" inputmode="decimal"></label>
+      <label>Aeronave (identificação ANAC) <input name="aeronave" maxlength="60"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Quem e com o quê</legend>
+      <label>Máquina
+        <select name="maquina_id">
+          <option value="">—</option>
+          {% for m in maquinas %}<option value="{{ m.id }}"{% if m.id == os.maquina_id %} selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Operador
+        <select name="operador_id">
+          <option value="">—</option>
+          {% for o in operadores %}<option value="{{ o.id }}"{% if o.id == os.operador_id %} selected{% endif %}>{{ o.nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Ponta de pulverização <input name="ponta" maxlength="60"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Receituário e responsável técnico</legend>
+      <label>Receituário agronômico nº <input name="receituario_numero" maxlength="60"></label>
+      <label>Responsável técnico <input name="responsavel_tecnico" maxlength="120"></label>
+      <label>Registro profissional (CREA) <input name="registro_profissional" maxlength="40"></label>
+    </fieldset>
+
+    <label>Observações <textarea name="observacoes" rows="3" maxlength="500"></textarea></label>
+
+    <label class="confirmar"><input type="checkbox" required> A aplicação foi feita e os dados acima conferem.</label>
+    <p class="nota">Depois de concluir, a OS fica como Executada e não volta atrás.</p>
+
+    <div class="acoes-formulario">
+      <button type="submit" class="grande">Concluir e gerar relatório</button>
+      <span class="htmx-indicator nota">Gravando e gerando o PDF…</span>
+    </div>
+  </form>
+</div>
+{% endblock %}

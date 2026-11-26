@@ -228,6 +228,29 @@
 
 **Pronto quando:** a OS concluída aparece como Executada, com os dados reais gravados e registrados na auditoria.
 
+**Status: concluído em 25/11/2026** (branch `feat/f6-conclusao`, sobre a `feat/f3-login`). Substitui a tela mínima do G7.
+
+- **`/campo` ("Executar OS" no menu):** lista em cartões, pensada para o celular. O usuário ligado a um operador (campo "Operador de campo" em `/usuarios`) vê **as suas** e pode abrir "Todas da fazenda". Marca as atrasadas e as de hoje. As **suspensas** por clima aparecem à parte, com o aviso de não aplicar e sem link. O operador, ao entrar, já cai nesta tela.
+- **`/os/{id}/concluir`:** página inteira, uma coluna, campos grandes. Vem preenchida com a OS (o horário sugerido nunca fica no futuro) e registra todo o contrato 28, **agora com a máquina e o operador que de fato aplicaram**. Os campos de voo só aparecem para drone e avião. Pede confirmação, porque a conclusão não volta atrás. Ao concluir, pede o relatório (G7).
+- **Registro:** `registrado_por` e a auditoria `concluir_os` levam o nome do usuário logado. Máquina ou operador de outra fazenda são recusados sem gravar nada.
+- **Sem migration.** Precisa de conexão: não há modo offline.
+- **Não verificado:** a tela não foi vista num celular nem num navegador (só testes).
+- **Testes:** 17 em `tests/test_painel_campo.py`, incluindo o critério de pronto; os testes do G7 (`test_painel_decisao.py`) seguem passando sem mudança.
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F6)**
+
+- **Tela do G7:** o parcial `_concluir.html` foi **removido** e o formulário abaixo de `/relatorios` deixou de existir. O botão "Concluir" de `/relatorios` agora é um link para `/os/{id}/concluir`, que virou página inteira.
+- **`POST /os/{id}/concluir`:** mesmo contrato e mesmas respostas, com `maquina_id` e `operador_id` opcionais (vazio = os da OS). `registrado_por` passa a ser o nome do usuário logado.
+- **`painel/escrita.py::concluir_os`:** mesma assinatura; agora confere que a máquina e o operador informados são da fazenda da OS.
+- **`painel/dados.py`:** `ordens_a_concluir(fazenda_id, operador_id)` ganhou o filtro por operador e devolve também `fazenda_id`, `maquina_id`, `operador_id`. Novas `ordens_suspensas` e `maquinas_da_fazenda`.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F6)**
+
+- **Menu:** item novo **"Executar OS"** (`/campo`), em segundo lugar, para os dois papéis; no celular ele entra na barra inferior e empurra um item para o "Mais". `test_menu_na_ordem_do_brief` foi atualizado.
+- **`/`:** o operador logado é levado a `/campo`; os demais seguem para a Visão geral.
+- **`painel.css`:** bloco novo no fim (`.campo-tela`, `.cartao-os`, `.form-campo`). Os campos de voo são escondidos por CSS (`:has`), sem JavaScript.
+- **Monitor e conhecimento:** nada alterado.
+
 ## Edison · clima, bulas e interface (21 pontos)
 
 ### E1 · Design do frontend: fundação (3)
