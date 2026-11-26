@@ -14,10 +14,12 @@ Roda dentro do processo `agents`: o lifespan chama `await canal.iniciar()` e, no
 import asyncio
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from datetime import timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import Conflict
+from telegram.error import BadRequest, Conflict, NetworkError, RetryAfter
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -48,6 +50,12 @@ AJUDA = (
     "Ex.: Qual a carência do Brucia no milho?\n"
     "Toda resposta vem com a bula e a página. Se a bula não trouxer o assunto, eu aviso."
 )
+# Subida: o Telegram pode pedir para esperar (flood control, comum depois de vários reinícios) ou a rede
+# falhar por instantes. Em vez de derrubar o `agents`, o canal espera e tenta de novo, com limite.
+TENTATIVAS_NA_SUBIDA = 6
+ESPERAS_DE_REDE_S = (2, 5, 10, 20, 30)  # entre uma tentativa e outra, quando a falha é de rede
+ESPERA_TOTAL_MAX_S = 300  # passou disso, desiste: o erro sobe como antes
+
 NAO_AUTORIZADO = "Este número ainda não está liberado para perguntas. Peça ao gerente da fazenda."
 SEM_PERGUNTA = "As perguntas à bula ainda não estão ligadas neste bot."
 
@@ -70,6 +78,7 @@ class TelegramChannel(NotificationChannel):
         chats_bula: str | None = None,
     ):
         self.ao_responder = ao_responder
+        self._dormir = asyncio.sleep  # trocado nos testes
         padrao = gerente_chat_id if gerente_chat_id is not None else os.environ.get("GERENTE_CHAT_ID", "")
         token = token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
         if not token:
@@ -176,11 +185,39 @@ class TelegramChannel(NotificationChannel):
             texto = "Não consegui consultar as bulas agora. Tente de novo em instantes."
         await mensagem.reply_text(texto)
 
+    async def _insistir(self, passo: str, acao: Callable[[], Awaitable[object]]) -> None:
+        """Roda `acao`; em flood control espera o que o Telegram pedir, em falha de rede espera um pouco.
+        Token recusado e pedido inválido sobem na hora: tentar de novo não resolve."""
+        esperado = 0.0
+        for tentativa in range(1, TENTATIVAS_NA_SUBIDA + 1):
+            try:
+                await acao()
+                return
+            except BadRequest:  # é subclasse de NetworkError, mas não é falha passageira
+                raise
+            except (RetryAfter, NetworkError) as e:
+                if isinstance(e, RetryAfter):
+                    pedido = e.retry_after
+                    if isinstance(pedido, timedelta):
+                        pedido = pedido.total_seconds()
+                    espera = pedido + 1  # um segundo de folga
+                else:
+                    espera = ESPERAS_DE_REDE_S[min(tentativa, len(ESPERAS_DE_REDE_S)) - 1]
+                if tentativa == TENTATIVAS_NA_SUBIDA or esperado + espera > ESPERA_TOTAL_MAX_S:
+                    log.error("Telegram: não consegui %s depois de %d tentativa(s)", passo, tentativa)
+                    raise
+                log.warning(
+                    "Telegram: não consegui %s (%s). Tentativa %d de %d em %.0f s.",
+                    passo, e, tentativa + 1, TENTATIVAS_NA_SUBIDA, espera,
+                )
+                esperado += espera
+                await self._dormir(espera)
+
     async def iniciar(self) -> None:
         """Liga o long polling sem travar o resto do programa."""
-        await self.app.initialize()
+        await self._insistir("conectar o bot", self.app.initialize)
         await self.app.start()
-        await self.app.updater.start_polling()
+        await self._insistir("ligar o polling", self.app.updater.start_polling)
 
     async def parar(self) -> None:
         if self.app.updater.running:
