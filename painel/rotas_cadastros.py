@@ -5,8 +5,8 @@ POST comuns com redirecionamento (funcionam sem JavaScript); o JavaScript só en
 no mapa, na conferência da janela da OS (G3) e na busca de produto. Erro de validação refaz a página com a
 mensagem em cada campo (HTTP 422).
 
-Quem pode cadastrar é o gerente (contrato 23): com usuário logado e papel diferente, 403. Sem login ainda
-(F3), a rota fica aberta como o resto do painel.
+Permissões (contrato 23, `painel.auth.PERMISSOES`): o gerente cadastra tudo; o operador só mexe nas ordens de
+serviço (aba `os`: criar, editar e cancelar); o resto dá 403. Quem não tem login nem chega aqui (porteiro do F3).
 """
 
 import json
@@ -20,7 +20,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from painel import cadastros, dados, escrita
+from painel import auth, cadastros, dados, escrita
 from painel.cadastros import ENTIDADES
 
 FUSO = ZoneInfo("America/Sao_Paulo")
@@ -75,11 +75,16 @@ async def formulario(request: Request) -> dict[str, str]:
     return {k: v for k, v in (await request.form()).items() if isinstance(v, str)}
 
 
-def exigir_gerente(request: Request) -> None:
-    """Contrato 23: só o gerente cadastra. Sem usuário na requisição (antes do login do F3), passa."""
-    usuario = getattr(request.state, "usuario", None)
-    if usuario and usuario.get("papel") not in (None, "gerente"):
-        raise HTTPException(403, "Só o gerente cadastra.")
+exigir_gerente = auth.exigir("cadastrar")  # contrato 23: só o gerente cadastra
+exigir_os = auth.exigir("os")  # gerente e operador criam e editam OS
+
+
+def exigir_aba(request: Request) -> None:
+    """A aba `os` é de gerente e operador; as demais, só do gerente."""
+    if request.path_params.get("aba") == "os":
+        exigir_os(request)
+    else:
+        exigir_gerente(request)
 
 
 Formulario = Annotated[dict[str, str], Depends(formulario)]
@@ -97,9 +102,13 @@ def registrar(
     router = app
 
     gerente = [Depends(exigir_gerente)]
+    ordens = [Depends(exigir_os)]
+    aba_do_papel = [Depends(exigir_aba)]
 
     def contexto(request: Request, aba: str, **extra: Any) -> dict[str, Any]:
-        return {**contexto_base(request, "/cadastros"), "aba": aba, "abas": ABAS, "avisos": AVISOS, **extra}
+        usuario = getattr(request, "state", None) and getattr(request.state, "usuario", None)
+        abas = ABAS if not usuario or auth.pode(usuario["papel"], "cadastrar") else [a for a in ABAS if a[0] == "os"]
+        return {**contexto_base(request, "/cadastros"), "aba": aba, "abas": abas, "avisos": AVISOS, **extra}
 
     def aviso(ok: str | None, singular: str) -> str | None:
         return AVISOS[ok].format(singular) if ok in AVISOS else None
@@ -171,7 +180,7 @@ def registrar(
         )
 
     @router.get("/cadastros", response_class=HTMLResponse, dependencies=gerente)
-    @router.get("/cadastros/{aba}", response_class=HTMLResponse, dependencies=gerente)
+    @router.get("/cadastros/{aba}", response_class=HTMLResponse, dependencies=aba_do_papel)
     def ver(
         request: Request,
         aba: str = "talhoes",
@@ -207,15 +216,15 @@ def registrar(
             flash=None,
         )
 
-    @router.post("/cadastros/os", dependencies=gerente)
+    @router.post("/cadastros/os", dependencies=ordens)
     def criar_os(request: Request, form: Formulario):
         return gravar_os(request, form, None)
 
-    @router.post("/cadastros/os/{os_id}", dependencies=gerente)
+    @router.post("/cadastros/os/{os_id}", dependencies=ordens)
     def editar_os(request: Request, os_id: int, form: Formulario):
         return gravar_os(request, form, os_id)
 
-    @router.post("/cadastros/os/{os_id}/cancelar", dependencies=gerente)
+    @router.post("/cadastros/os/{os_id}/cancelar", dependencies=ordens)
     def cancelar_os(request: Request, os_id: int):
         fazenda = fazenda_do_request(request)
         ordens = cadastros.ordens_da_fazenda(fazenda)

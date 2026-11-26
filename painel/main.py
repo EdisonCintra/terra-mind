@@ -1,4 +1,4 @@
-"""Painel web do TerraMind: FastAPI + Jinja2 + HTMX servido localmente, sem login nem CDN.
+"""Painel web do TerraMind: FastAPI + Jinja2 + HTMX servido localmente, com login (F3) e sem CDN.
 
     uv run uvicorn painel.main:app --port 8080
 
@@ -8,6 +8,7 @@ janela da OS (G2 e G3, `/agenda`) e relatórios de aplicação (G7, `/relatorios
 `/simular` são endereços antigos que voltam para a Visão geral.
 """
 
+import contextlib
 import logging
 import os
 from datetime import date, datetime, timedelta
@@ -16,15 +17,17 @@ from urllib.parse import urlsplit
 
 import httpx
 import psycopg
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from painel import dados, escrita
+from painel import auth, dados, escrita
 from painel.navegacao import MENU, barra_mobile
+from painel.rotas_auth import proteger
+from painel.rotas_auth import registrar as registrar_auth
 from painel.rotas_cadastros import registrar as registrar_cadastros
 
 log = logging.getLogger("painel")
@@ -35,7 +38,16 @@ RESPOSTAS = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Pr
 CENARIO = "chuva_80mm.json"  # contrato 14
 TALHAO_DEMO = 1  # a OS do cenário está no Talhão 1; sem isso o replay abre um incidente vazio no Talhão 2
 
-app = FastAPI(title="TerraMind · Painel")
+@contextlib.asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI):
+    from painel.criar_usuario import inicializar
+
+    inicializar()  # F3: primeiro gerente pelo .env, só se ainda não há usuário
+    yield
+
+
+app = FastAPI(title="TerraMind · Painel", lifespan=_ciclo_de_vida)
+proteger(app)  # F3: sem sessão válida nada abre, menos /login, /health e /static
 app.mount("/static", StaticFiles(directory=AQUI / "static"), name="static")
 templates = Jinja2Templates(directory=AQUI / "templates")
 
@@ -106,15 +118,33 @@ def health() -> dict:
 def _fazenda(request: Request) -> int | None:
     """Fazenda escolhida no seletor do topo (cookie `fazenda_id`); `None` = todas (contrato 20)."""
     valor = request.cookies.get("fazenda_id", "")
-    return int(valor) if valor.isascii() and valor.isdecimal() else None
+    escolhida = int(valor) if valor.isascii() and valor.isdecimal() else None
+    usuario = getattr(request.state, "usuario", None)
+    if usuario is None:  # sem login (testes e demonstração local): vale o que o cookie diz
+        return escolhida
+    # Com login, só as fazendas do usuário: cookie de outra cai na primeira dele; sem nenhuma, nada aparece.
+    permitidas = usuario.get("fazendas") or []
+    if escolhida in permitidas:
+        return escolhida
+    return permitidas[0] if permitidas else 0
+
+
+def _acesso(request: Request, tipo: str, registro_id: int) -> None:
+    """404 se o registro é de uma fazenda que o usuário não enxerga (não revela que existe)."""
+    usuario = getattr(request.state, "usuario", None)
+    if usuario is None:
+        return
+    if dados.fazenda_de(tipo, registro_id) not in (usuario.get("fazendas") or []):
+        raise HTTPException(404, "Não encontrado.")
 
 
 def contexto_base(request: Request, ativa: str = "/visao-geral") -> dict:
     """Contexto do `layout.html` (menu, fazenda e usuário); toda tela usa e acrescenta o seu."""
     existentes = {r.path for r in request.app.routes}
     usuario = getattr(request.state, "usuario", None)
+    permitidas = (usuario.get("fazendas") or []) if usuario else []
     papel = usuario.get("papel") if usuario else None
-    fazenda = request.cookies.get("fazenda_id", "")
+    fazenda = _fazenda(request)
     itens, mais = barra_mobile([
         {"rota": i.rota, "rotulo": i.rotulo, "existe": i.rota in existentes}
         for i in MENU
@@ -124,13 +154,14 @@ def contexto_base(request: Request, ativa: str = "/visao-geral") -> dict:
         "ativa": ativa,
         "itens_menu": itens,
         "menu_mais": mais,
-        "fazendas": dados.listar_fazendas(),
-        "fazenda_id": int(fazenda) if fazenda.isascii() and fazenda.isdecimal() else None,
+        "fazendas": [f for f in dados.listar_fazendas() if usuario is None or f["id"] in permitidas],
+        "fazenda_id": fazenda,
         "usuario": usuario,
     }
 
 
 # --- Cadastros (F1): /cadastros/<aba> e o proxy da busca de produto (E5) --------------------------
+registrar_auth(app, templates, contexto_base)  # F3: /login, /logout, /conta e /usuarios
 registrar_cadastros(
     app,
     templates,
@@ -213,6 +244,8 @@ def tela_visao_geral(request: Request, incidente: int | None = None):
     """Um seletor de talhão só (bloco Previsão) alimenta cartões de clima e gráfico; começa no talhão
     do incidente escolhido na linha do tempo ou, sem incidente, no primeiro talhão."""
     fazenda = _fazenda(request)
+    if incidente is not None:
+        _acesso(request, "incidente", incidente)
     linha_do_tempo = _contexto_timeline(incidente, fazenda)
     padrao = dados.talhao_padrao(fazenda)
     do_incidente = next(
@@ -275,11 +308,15 @@ def _agora() -> datetime:
 @app.get("/parcial/seletor", response_class=HTMLResponse)
 def parcial_seletor(request: Request, incidente: int | None = None):
     """Links dos incidentes no topo da linha do tempo (o HTMX troca a cada 2 s)."""
+    if incidente is not None:
+        _acesso(request, "incidente", incidente)
     return templates.TemplateResponse(request, "_seletor.html", _contexto_timeline(incidente, _fazenda(request)))
 
 
 @app.get("/parcial/timeline", response_class=HTMLResponse)
 def parcial_timeline(request: Request, incidente: int | None = None):
+    if incidente is not None:
+        _acesso(request, "incidente", incidente)
     return templates.TemplateResponse(request, "_eventos.html", _contexto_timeline(incidente, _fazenda(request)))
 
 
@@ -293,16 +330,24 @@ def parcial_pendentes(request: Request):
     return templates.TemplateResponse(request, "_pendentes.html", {"planos": planos})
 
 
-@app.post("/aprovacao/{incidente_id}/{plano_id}/{resposta}", response_class=HTMLResponse)
+@app.post(
+    "/aprovacao/{incidente_id}/{plano_id}/{resposta}",
+    response_class=HTMLResponse,
+    dependencies=[Depends(auth.exigir("aprovar"))],  # contrato 23: só o gerente aprova
+)
 def responder(request: Request, incidente_id: int, plano_id: int, resposta: str):
     """Repassa a decisão ao `agents` (contrato 6/7). 409 = decisão já registrada, não é erro."""
     if resposta not in RESPOSTAS:
         raise HTTPException(422, f"resposta deve ser uma de {', '.join(RESPOSTAS)}")
     url = f"{_url('AGENTS_URL', 'http://localhost:8000')}/incidentes/{incidente_id}/resposta"
-    corpo = {"plano_id": plano_id, "resposta": resposta, "respondido_por": "painel"}
+    _acesso(request, "incidente", incidente_id)
+    usuario = getattr(request.state, "usuario", None)
+    quem = usuario["nome"] if usuario else "painel"  # contrato 23: o nome vai para a auditoria
+    corpo = {"plano_id": plano_id, "resposta": resposta, "respondido_por": quem}
+    segredo = os.environ.get("AGENTS_TOKEN", "").strip()  # contrato 23: o `agents` confere este segredo
     try:
         with cliente_http() as http:
-            r = http.post(url, json=corpo)
+            r = http.post(url, json=corpo, headers={"X-Agents-Token": segredo} if segredo else None)
     except httpx.HTTPError:
         nivel, texto = "erro", FALHA_AGENTS
     else:
@@ -310,6 +355,8 @@ def responder(request: Request, incidente_id: int, plano_id: int, resposta: str)
             nivel, texto = "aviso", "Decisão já registrada para este plano. Nada foi alterado."
         elif r.status_code == 404:
             nivel, texto = "erro", "Plano não encontrado."
+        elif r.status_code in (401, 403):
+            nivel, texto = "erro", "O serviço de agentes não aceitou o segredo do painel (veja o AGENTS_TOKEN)."
         elif r.is_success:
             nivel, texto = "ok", f"{RESPOSTAS[resposta]}."
         else:
@@ -354,8 +401,9 @@ def perguntar_a_bula(request: Request, pergunta: str = Form(""), produto: str = 
 
 # --- Previsão do talhão (E2): o gráfico da Visão geral lê o que o Monitor guardou ---------------
 @app.get("/api/previsao/{talhao_id}")
-def api_previsao(talhao_id: int) -> JSONResponse:
+def api_previsao(request: Request, talhao_id: int) -> JSONResponse:
     """Repassa a previsão do Monitor (e os cabeçalhos de fonte); Monitor fora do ar ou com erro = 503."""
+    _acesso(request, "talhao", talhao_id)
     url = f"{_url('MONITOR_URL', 'http://localhost:8020')}/previsao/{talhao_id}"
     try:
         with cliente_http() as http:
@@ -486,6 +534,8 @@ def _cartoes(previsao: list | None, diaria: list | None, observado: dict | None)
 @app.get("/parcial/clima", response_class=HTMLResponse)
 def parcial_clima(request: Request, talhao_id: int | None = None):
     """Cartões de clima do talhão; cada chamada ao Monitor falha sozinha (só o seu cartão fica vazio)."""
+    if talhao_id is not None:
+        _acesso(request, "talhao", talhao_id)
     talhao = talhao_id if talhao_id is not None else dados.talhao_padrao(_fazenda(request))
     previsao = diaria = observado = None
     if talhao is not None:
@@ -514,11 +564,17 @@ def _risco_do_monitor(fazenda_id: int | None) -> list | None:
 
 
 @app.get("/api/risco")
-def api_risco(fazenda_id: int | None = None) -> JSONResponse:
-    """Repassa o risco por talhão do Monitor; fora do ar ou com erro = 503."""
+def api_risco(request: Request, fazenda_id: int | None = None) -> JSONResponse:
+    """Repassa o risco por talhão do Monitor; fora do ar ou com erro = 503. Com login, só a fazenda dele."""
+    usuario = getattr(request.state, "usuario", None)
+    if usuario is not None:
+        fazenda_id = _fazenda(request)
     risco = _risco_do_monitor(fazenda_id)
     if risco is None:
         return JSONResponse({"detail": "monitor_indisponivel"}, status_code=503)
+    if usuario is not None and isinstance(risco, list):
+        meus = {t["id"] for t in dados.listar_talhoes(fazenda_id)}
+        risco = [r for r in risco if isinstance(r, dict) and r.get("talhao_id") in meus]
     return JSONResponse(risco)
 
 
@@ -555,6 +611,7 @@ def _linha_risco(d: dict) -> dict:
 @app.get("/parcial/mapa/talhao/{talhao_id}", response_class=HTMLResponse)
 def parcial_mapa_talhao(request: Request, talhao_id: int):
     """Detalhe do clique no mapa: motivos do risco e as OS do talhão nas próximas 48 h."""
+    _acesso(request, "talhao", talhao_id)
     risco = _risco_do_monitor(None)
     do_talhao = next((r for r in risco or [] if isinstance(r, dict) and r.get("talhao_id") == talhao_id), None)
     agora = _agora()
@@ -788,6 +845,8 @@ def avaliar_janela(
     """G3: ao escolher a data, mostra se a janela serve, o motivo e as sugestões com máquina livre.
 
     Ao editar uma OS (F1), `os_id` tira a própria OS da conta e `maquina_atual` fica pré-selecionada."""
+    _acesso(request, "talhao", talhao_id)
+    _acesso(request, "insumo", insumo_id)
     quando = _inicio_local(inicio)
     if quando is None:
         return _mensagem(request, "erro", "Escolha a data e a hora de início.")
@@ -822,6 +881,8 @@ def criar_os(
     maquina_id: int = Form(...),
     operador_id: str = Form(""),
 ):
+    _acesso(request, "talhao", talhao_id)
+    _acesso(request, "insumo", insumo_id)
     quando = _inicio_local(inicio)
     if quando is None or dose_por_ha <= 0 or duracao_horas <= 0:
         return _mensagem(request, "erro", "Confira a data, a dose e a duração.")
@@ -869,6 +930,7 @@ def _contexto_relatorios(fazenda_id: int | None = None) -> dict:
 
 @app.get("/os/{os_id}/concluir", response_class=HTMLResponse)
 def formulario_concluir(request: Request, os_id: int):
+    _acesso(request, "os", os_id)
     os_ = dados.ordem(os_id)
     if os_ is None:
         raise HTTPException(404, "OS não encontrada ou já concluída")
@@ -915,6 +977,7 @@ def concluir_os(
     observacoes: str = Form(""),
 ):
     """Contrato 28: grava a execução, marca a OS como executada e pede o relatório (G7)."""
+    _acesso(request, "os", os_id)
     inicio, fim = _inicio_local(inicio_real), _inicio_local(fim_real)
     try:
         numeros = {
@@ -955,6 +1018,7 @@ def concluir_os(
 @app.post("/relatorios/os/{os_id}/gerar", response_class=HTMLResponse)
 def gerar_relatorio(request: Request, os_id: int):
     """Gera de novo (nova versão): quando a primeira geração falhou ou a bula foi lida depois."""
+    _acesso(request, "os", os_id)
     registro, falha = _agents("POST", f"/relatorios/os/{os_id}", timeout=60)
     if falha:
         return _mensagem(request, "erro", f"Não consegui gerar o relatório: {falha}")
@@ -963,7 +1027,8 @@ def gerar_relatorio(request: Request, os_id: int):
 
 
 @app.get("/relatorios/{relatorio_id}/pdf")
-def baixar_relatorio(relatorio_id: int) -> Response:
+def baixar_relatorio(request: Request, relatorio_id: int) -> Response:
+    _acesso(request, "relatorio", relatorio_id)
     relatorio = dados.pdf_do_relatorio(relatorio_id)
     if relatorio is None:
         raise HTTPException(404, "relatório não encontrado")

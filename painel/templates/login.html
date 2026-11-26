@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · TerraMind</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/painel.css">
+</head>
+<body class="tela-login">
+  <main class="cartao-login">
+    <h1>TerraMind</h1>
+    <p class="nota">Entre com o seu e-mail e a sua senha.</p>
+    {% if erro %}<div class="faixa mensagem-erro" role="alert">{{ erro }}</div>{% endif %}
+    <form method="post" action="/login" class="formulario-login">
+      <input type="hidden" name="proximo" value="{{ proximo }}">
+      <label for="email">E-mail</label>
+      <input id="email" name="email" type="email" value="{{ email }}" autocomplete="username" required autofocus>
+      <label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="current-password" required>
+      <button type="submit" class="grande">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>

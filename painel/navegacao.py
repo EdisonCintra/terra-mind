@@ -14,6 +14,8 @@ class ItemMenu(NamedTuple):
 MENU: list[ItemMenu] = [
     ItemMenu("/visao-geral", "Visão geral", TODOS),
     ItemMenu("/cadastros", "Cadastros", frozenset({"gerente"})),
+    ItemMenu("/cadastros/os", "Ordens de serviço", frozenset({"operador"})),  # o operador cria e edita OS (F3)
+    ItemMenu("/usuarios", "Usuários", frozenset({"gerente"})),
     ItemMenu("/fazenda", "Fazenda", TODOS),
     ItemMenu("/mapa", "Mapa", TODOS),
     ItemMenu("/agenda", "Agenda", TODOS),

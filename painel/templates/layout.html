@@ -42,7 +42,7 @@
           <input type="hidden" name="voltar" value="{{ request.url.path }}">
           <label for="fazenda_id">Fazenda</label>
           <select id="fazenda_id" name="fazenda_id" onchange="this.form.submit()">
-            <option value="0"{% if fazenda_id is none %} selected{% endif %}>Todas as fazendas</option>
+            {% if not usuario %}<option value="0"{% if fazenda_id is none %} selected{% endif %}>Todas as fazendas</option>{% endif %}
             {% for f in fazendas %}<option value="{{ f.id }}"{% if f.id == fazenda_id %} selected{% endif %}>{{ f.nome }}</option>{% endfor %}
           </select>
           <noscript><button type="submit">Trocar</button></noscript>
@@ -51,7 +51,8 @@
       </div>
       <div class="acoes">
         {% block acoes_topo %}{% endblock %}
-        {% if usuario %}<span class="usuario">{{ usuario.nome }}{% if usuario.papel %} · {{ usuario.papel }}{% endif %}</span>{% endif %}
+        {% if usuario %}<a class="usuario" href="/conta">{{ usuario.nome }}{% if usuario.papel %} · {{ usuario.papel }}{% endif %}</a>
+        <form class="usuario-sair" method="post" action="/logout"><button type="submit" class="link">Sair</button></form>{% endif %}
       </div>
     </header>
     <main class="conteudo">

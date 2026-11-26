@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Usuários · TerraMind{% endblock %}
+{% block conteudo %}
+<div class="pagina-interna">
+  <header class="cabecalho-pagina">
+    <h1>Usuários</h1>
+    <p class="nota">Quem entra no painel. O gerente aprova planos e cadastra; o operador vê, cria e edita ordens de serviço e registra a execução. Cada usuário só enxerga as fazendas marcadas.</p>
+  </header>
+  {% if aviso %}{{ c.faixa("ok", aviso) }}{% endif %}
+  {% if erro_geral %}{{ c.faixa("erro", erro_geral) }}{% endif %}
+
+  {% if not form %}
+  <p><a class="botao" href="/usuarios?novo=1">Novo usuário</a></p>
+  {% else %}
+  {% set v = form.valores %}
+  <section class="painel" id="formulario">
+    <div class="titulo-bloco"><h2>{{ "Editar" if form.id else "Novo" }} usuário</h2></div>
+    <form method="post" class="formulario" action="/usuarios{% if form.id %}/{{ form.id }}{% endif %}" autocomplete="off">
+      {{ c.campo("nome", "Nome", "text", v.get("nome", ""), form.erros.get("nome"), None, obrigatorio=True) }}
+      {{ c.campo("email", "E-mail", "email", v.get("email", ""), form.erros.get("email"), None, obrigatorio=True) }}
+      {{ c.campo("papel", "Perfil", "text", v.get("papel", "operador"), form.erros.get("papel"), [["gerente", "Gerente"], ["operador", "Operador"]], obrigatorio=True) }}
+      {{ c.campo("senha", "Senha" ~ (" (deixe vazio para manter)" if form.id else ""), "password", "", form.erros.get("senha"), None, ajuda="Pelo menos 8 caracteres, com letras.", obrigatorio=not form.id) }}
+      <fieldset class="largo grupo-fazendas{% if form.erros.get('fazendas') %} com-erro{% endif %}">
+        <legend>Fazendas que o usuário enxerga *</legend>
+        {% for f in fazendas_org %}
+        <label class="caixa"><input type="checkbox" name="fazendas" value="{{ f.id }}"{% if f.id in v.get("fazendas", []) %} checked{% endif %}> {{ f.nome }}{% if f.demo %} (demonstração){% endif %}</label>
+        {% endfor %}
+        {% if form.erros.get("fazendas") %}<small class="erro-campo">{{ form.erros.fazendas }}</small>{% endif %}
+      </fieldset>
+      {{ c.campo("telegram_chat_id", "Chat do Telegram", "text", v.get("telegram_chat_id", ""), form.erros.get("telegram_chat_id"), None, ajuda="Do gerente: recebe e responde as aprovações.") }}
+      {{ c.campo("whatsapp_telefone", "Telefone do WhatsApp", "text", v.get("whatsapp_telefone", ""), form.erros.get("whatsapp_telefone"), None, ajuda="Só dígitos, com país e DDD: 5564999998888.") }}
+      {{ c.campo("operador_id", "Operador de campo", "text", v.get("operador_id", ""), form.erros.get("operador_id"), operadores_org, permitir_vazio=True, ajuda="Liga o usuário ao cadastro de operador (conclusão da OS no celular).") }}
+      <div class="largo acoes-formulario">
+        <button type="submit" class="grande">Salvar</button>
+        <a href="/usuarios">Cancelar</a>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="painel">
+    <div class="titulo-bloco"><h2>Usuários da organização</h2><span class="nota">{{ usuarios|length }} cadastrado(s)</span></div>
+    {% if usuarios %}
+    <div class="tabela empilha">
+      <table>
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Fazendas</th><th>Situação</th><th>Ações</th></tr></thead>
+        <tbody>
+          {% for u in usuarios %}
+          <tr{% if not u.ativo %} class="inativo"{% endif %}>
+            <td data-rotulo="Nome" class="forte">{{ u.nome }}</td>
+            <td data-rotulo="E-mail">{{ u.email }}</td>
+            <td data-rotulo="Perfil">{{ u.papel }}</td>
+            <td data-rotulo="Fazendas">{{ u.fazendas or "—" }}</td>
+            <td data-rotulo="Situação">{{ c.selo("Ativo", "bom") if u.ativo else c.selo("Desativado", "neutro") }}</td>
+            <td data-rotulo="Ações" class="acoes-linha">
+              <a href="/usuarios?editar={{ u.id }}">Editar</a>
+              {% if u.id != usuario.id %}
+              <form method="post" action="/usuarios/{{ u.id }}/{{ 'desativar' if u.ativo else 'reativar' }}">
+                <button type="submit" class="link">{{ "Desativar" if u.ativo else "Reativar" }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}{{ c.vazio("Nenhum usuário cadastrado.") }}{% endif %}
+  </section>
+</div>
+{% endblock %}

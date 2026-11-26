@@ -341,3 +341,17 @@ button.link { background: none; border: 0; padding: 0; color: var(--ceu); font: 
 .resultados-produto { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
 .resultados-produto button { display: grid; gap: .1rem; width: 100%; text-align: left; }
 .envio-bula { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .5rem; }
+
+/* --- Login e usuários (F3) --- */
+.tela-login { display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1rem; }
+.cartao-login { width: min(24rem, 100%); display: grid; gap: .9rem; padding: 1.75rem; background: var(--superficie); border: 1px solid var(--linha); border-radius: .75rem; }
+.cartao-login h1 { margin: 0; font-size: 1.4rem; }
+.formulario-login { display: grid; gap: .5rem; }
+.formulario-login label { color: var(--suave); font-size: .85rem; }
+.formulario-login input { width: 100%; padding: .6rem .7rem; box-sizing: border-box; }
+.formulario-login button { margin-top: .5rem; }
+.grupo-fazendas { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; border: 1px solid var(--linha); border-radius: .5rem; padding: .6rem .9rem; }
+.grupo-fazendas legend { color: var(--suave); font-size: .8rem; padding-inline: .3rem; }
+.grupo-fazendas .caixa { display: flex; align-items: center; gap: .4rem; font-size: .9rem; color: inherit; }
+.usuario-sair { display: inline; margin: 0; }
+.usuario-sair button, .acoes a.usuario-link { font-size: .85rem; }

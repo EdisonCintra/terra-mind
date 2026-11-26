@@ -35,6 +35,10 @@ class Settings(BaseSettings):
 
     channel: Literal["telegram", "whatsapp", "painel"] = "painel"
 
+    # Contrato 23 (F3): segredo que o painel manda em `X-Agents-Token` ao responder um plano. Vazio = rota
+    # aberta como antes (rede interna); com valor, sem o segredo certo a resposta é recusada (401).
+    agents_token: str | None = None
+
     approval_timeout_min: int = 30
     intervalo_timeout_s: int = 60
     max_replanejamentos: int = 2

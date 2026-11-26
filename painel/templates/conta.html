@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Minha conta · TerraMind{% endblock %}
+{% block conteudo %}
+<div class="pagina-interna">
+  <header class="cabecalho-pagina">
+    <h1>Minha conta</h1>
+    <p class="nota">{{ usuario.nome }} · {{ usuario.email }} · {{ usuario.papel }}</p>
+  </header>
+  {% if ok %}{{ c.faixa("ok", "Senha alterada. As outras sessões foram encerradas.") }}{% endif %}
+  {% if erro %}{{ c.faixa("erro", erro) }}{% endif %}
+  <section class="painel">
+    <div class="titulo-bloco"><h2>Trocar a senha</h2></div>
+    <form method="post" action="/conta/senha" class="formulario">
+      {{ c.campo("atual", "Senha atual", "password", "", None, None, obrigatorio=True) }}
+      {{ c.campo("nova", "Nova senha", "password", "", None, None, ajuda="Pelo menos 8 caracteres, com letras.", obrigatorio=True) }}
+      {{ c.campo("confirmacao", "Repita a nova senha", "password", "", None, None, obrigatorio=True) }}
+      <div class="largo acoes-formulario"><button type="submit" class="grande">Trocar senha</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

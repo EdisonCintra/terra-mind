@@ -3,13 +3,14 @@ agenda e janelas (contrato 24), limites da bula (contrato 26) e relatório de ap
 
 import asyncio
 import contextlib
+import hmac
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
 
-from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -109,6 +110,15 @@ def _servico(request: Request, nome: str):
     return servico
 
 
+def conferir_token(request: Request, x_agents_token: str | None = Header(None)) -> None:
+    """Contrato 23: com `AGENTS_TOKEN` configurado, só o painel (que sabe o segredo) responde um plano.
+    Só esta rota exige: o webhook do WhatsApp usa a assinatura própria; o Monitor chama /iniciar."""
+    settings = getattr(getattr(request.app.state.servicos.orquestrador, "deps", None), "settings", None)
+    esperado = getattr(settings, "agents_token", None)
+    if esperado and not hmac.compare_digest(x_agents_token or "", esperado):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token_invalido")
+
+
 def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -170,7 +180,7 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
         orq.disparar_inicio(incidente_id)
         return {"incidente_id": incidente_id, "status": "aceito"}
 
-    @app.post("/incidentes/{incidente_id}/resposta")
+    @app.post("/incidentes/{incidente_id}/resposta", dependencies=[Depends(conferir_token)])
     async def resposta(incidente_id: int, corpo: CorpoResposta, request: Request) -> dict:
         resultado = await orquestrador(request).responder(
             Resposta(incidente_id, corpo.plano_id, corpo.resposta, corpo.respondido_por)

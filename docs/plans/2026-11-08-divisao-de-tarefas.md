@@ -116,6 +116,35 @@
 
 **Pronto quando:** o operador logado não vê os botões de aprovação e recebe 403 se chamar a rota direto, e a auditoria mostra o nome de quem aprovou.
 
+**Status: concluído em 25/11/2026** (branch `feat/f3-login`, sobre a `feat/f1-cadastro`). Permissões **confirmadas pelo time** (tabela acima, sem mudança).
+
+- **Login por sessão** (`painel/auth.py`, `painel/rotas_auth.py`): `/login`, `/logout`, `/conta` (trocar a senha) e `/usuarios` (o gerente cadastra, edita, desativa e reativa; só enxerga a organização dele). Toda rota pede usuário logado, menos `/login`, `/health` e `/static`. Sem sessão: página vai para `/login` (e volta para onde estava), HTMX e `/api` recebem 401.
+- **Senha:** só o hash, com `scrypt` da biblioteca padrão (sem dependência nova; o plano dizia argon2 ou bcrypt, e nenhum dos dois está no `uv.lock`). A sessão é um token aleatório no cookie (`HttpOnly`, `SameSite=Lax`, `Secure` com `PAINEL_COOKIE_SEGURO=1`); o banco guarda só o hash do token (`erp.sessoes`). Desativar o usuário ou trocar a senha derruba as sessões na hora. Limite de 5 erros por e-mail e 20 por endereço em 15 minutos.
+- **CSRF:** requisição que muda dados (POST) só vale com `Origin` ou `Referer` do próprio painel, somado ao `SameSite=Lax`. Não mexeu nos formulários.
+- **Permissões** (`painel.auth.PERMISSOES`, num lugar só): o **operador** vê tudo, cria, edita e cancela OS (`/cadastros/os`, item "Ordens de serviço" no menu) e registra a execução; recebe **403** em cadastros, usuários e aprovação e não vê os botões de aprovar. O **gerente** faz tudo.
+- **Fazendas por usuário** (fecha o "isolamento por organização" do F2): cada usuário enxerga só as fazendas ligadas a ele. O seletor mostra só essas (sem "Todas as fazendas" com login), cookie de fazenda alheia cai na primeira permitida, e registro de outra fazenda (OS, talhão, incidente, relatório, previsão, mapa) dá **404**.
+- **Aprovação (contrato 23):** o painel manda o **nome do usuário** em `respondido_por` (vai para a auditoria do `agents`) e o segredo `AGENTS_TOKEN` no cabeçalho `X-Agents-Token`. O `agents` confere o segredo **só** em `POST /incidentes/{id}/resposta`; `/whatsapp/webhook` e `/incidentes/{id}/iniciar` ficam de fora. **Sem `AGENTS_TOKEN` no `.env`, nada muda** (rota aberta como antes): o time liga quando quiser.
+- **Canais:** o contato do gerente (chat do Telegram, telefone do WhatsApp) agora é cadastrado na tela de usuários e o painel mantém `erp.gerentes` igual (coluna nova `usuario_id`), que é o que os canais já leem. Operador com contato **não** vira quem aprova. Gerente do seed ou do `.env` (sem usuário) continua valendo.
+- **Primeiro acesso:** `python -m painel.criar_usuario --nome ... --email ...`, ou `PAINEL_ADMIN_EMAIL` e `PAINEL_ADMIN_SENHA` no `.env` (cria o gerente na subida do painel se ainda não há usuário). `PAINEL_AUTENTICACAO=desligada` desliga o login (só testes e demonstração local).
+- **Auditoria:** criar, editar, desativar, reativar usuário e trocar senha gravam em `agente.auditoria` (nó `painel`), sem o hash.
+- **Banco:** `007_usuarios.sql` (`erp.usuarios`, `erp.usuario_fazendas`, `erp.sessoes`, `erp.gerentes.usuario_id`).
+- **Fora desta entrega:** recuperação de senha por e-mail (não há envio de e-mail no projeto; o gerente redefine pela tela de usuários), RLS no Postgres, e a tela do operador no celular (F6).
+- **Testes:** 41 em `tests/test_painel_login.py`, incluindo o critério de pronto (operador sem botões, 403 direto na rota, nome de quem aprovou).
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F3)**
+
+- **`agents/api.py`:** nova dependência `conferir_token` **só** em `POST /incidentes/{id}/resposta` (cabeçalho `X-Agents-Token`, comparação em tempo constante). `agents/config.py` ganhou `agents_token` (variável `AGENTS_TOKEN`, vazia = sem exigência). **Combinar quando ligar:** o segredo tem de estar igual no `.env` do painel e do `agents` (o compose já passa o `.env` aos dois). Quem chamar essa rota fora do painel (script, teste manual) passa a mandar o cabeçalho.
+- **`respondido_por`:** deixa de ser sempre `"painel"` e passa a ser o nome do usuário logado. `agents/nodes/aprovacao.py` já grava o valor recebido; nada a mudar, mas texto ou teste que espere `"painel"` com login ligado vai ver o nome.
+- **Painel (G1, G2, G3, G7):** as rotas que recebem id de OS, talhão, insumo, incidente ou relatório agora respondem 404 para registro de fazenda que o usuário não enxerga (`painel.main._acesso`). Rota nova do painel que receba id deve chamar `_acesso`.
+- **Testes:** `tests/conftest.py` ganhou um `autouse` que põe `PAINEL_AUTENTICACAO=desligada` e limpa `AGENTS_TOKEN`; teste que use `TestClient` do painel continua sem login. Para testar com login, ligue a variável (veja `tests/test_painel_login.py`).
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F3)**
+
+- **E1 (`layout.html`, `navegacao.py`, `contexto_base`):** o gancho `request.state.usuario` agora é preenchido (id, nome, e-mail, papel, organização e fazendas). O topo mostra o nome (link para `/conta`) e o botão **Sair**; com usuário logado o seletor **não** tem "Todas as fazendas" e lista só as fazendas dele. O menu ganhou **"Ordens de serviço"** (só operador, `/cadastros/os`) e **"Usuários"** (só gerente); `test_menu_na_ordem_do_brief` foi atualizado.
+- **Monitor (E3):** nada alterado. Duas pendências dele que o login expõe: `GET /risco?fazenda_id=` ainda ignora o parâmetro (o painel filtra o resultado por fazenda em `/api/risco`), e o próprio Monitor não tem login (porta 8020 só na rede interna).
+- **Rotas novas:** `/login`, `/logout`, `/conta`, `/conta/senha`, `/usuarios...`, todas direto no `app` (não em `APIRouter`, pelo mesmo motivo do F1). Elas usam `contexto_base`.
+- **Fetch/HTMX no JavaScript:** com sessão expirada, chamada HTMX ou `/api/...` recebe **401** (HTMX com `HX-Redirect: /login`). Código novo que faça `fetch` para o painel e trate erro deve tratar o 401. POST de outro site é recusado por falta de `Origin` do painel: `fetch` do navegador já manda; ferramenta de linha de comando (curl) precisa mandar `Origin` ou `Referer`.
+
 ### F4 · WhatsApp como canal (4)
 
 - `channels/whatsapp.py` com `WhatsAppChannel(NotificationChannel)` e a entrada `whatsapp` em `_CANAIS` (`channels/base.py`). Os nós do `agents` não mudam.

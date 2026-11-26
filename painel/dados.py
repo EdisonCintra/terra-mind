@@ -32,6 +32,46 @@ def listar_fazendas() -> list[dict]:
         return []
 
 
+def listar_fazendas_da_organizacao(organizacao_id: int) -> list[dict]:
+    """Fazendas de uma organização (tela de usuários: o gerente só liga usuários às fazendas da sua)."""
+    with conectar() as conn:
+        return conn.execute(
+            "SELECT id, nome, demo FROM erp.fazendas WHERE organizacao_id = %s ORDER BY demo, nome",
+            (organizacao_id,),
+        ).fetchall()
+
+
+def listar_operadores_da_organizacao(organizacao_id: int) -> list[dict]:
+    with conectar() as conn:
+        return conn.execute(
+            "SELECT o.id, o.nome, f.nome AS fazenda FROM erp.operadores o"
+            " JOIN erp.fazendas f ON f.id = o.fazenda_id"
+            " WHERE o.ativo AND f.organizacao_id = %s ORDER BY f.nome, o.nome",
+            (organizacao_id,),
+        ).fetchall()
+
+
+def fazenda_de(tipo: str, registro_id: int) -> int | None:
+    """Fazenda dona de um registro (os, talhao, incidente, relatorio, insumo), ou None se não existe.
+    Usada para negar o acesso a registro de fazenda que o usuário não enxerga."""
+    consultas = {
+        "os": "SELECT fazenda_id FROM erp.ordens_servico WHERE id = %s",
+        "talhao": "SELECT fazenda_id FROM erp.talhoes WHERE id = %s",
+        "insumo": "SELECT fazenda_id FROM erp.insumos WHERE id = %s",
+        "incidente": (
+            "SELECT t.fazenda_id FROM agente.incidentes i"
+            " JOIN erp.talhoes t ON t.id = i.talhao_id WHERE i.id = %s"
+        ),
+        "relatorio": (
+            "SELECT os.fazenda_id FROM agente.relatorios_aplicacao r"
+            " JOIN erp.ordens_servico os ON os.id = r.os_id WHERE r.id = %s"
+        ),
+    }
+    with conectar() as conn:
+        linha = conn.execute(consultas[tipo], (registro_id,)).fetchone()
+    return linha["fazenda_id"] if linha else None
+
+
 def listar_ordens(fazenda_id: int | None = None) -> list[dict]:
     """Todas as leituras do painel aceitam `fazenda_id` (contrato 20); sem ele, todas as fazendas."""
     with conectar() as conn:
