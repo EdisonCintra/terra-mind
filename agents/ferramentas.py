@@ -67,21 +67,25 @@ def criar_listar_os(deps: Dependencias):
 
 
 def criar_disponibilidade_maquinas(deps: Dependencias):
-    async def disponibilidade_maquinas(inicio: str, fim: str, tipo: str | None = None) -> dict:
+    async def disponibilidade_maquinas(
+        inicio: str, fim: str, tipo: str | None = None, talhao_id: int | None = None
+    ) -> dict:
         """Máquinas livres (sem OS agendada ou reagendada) no intervalo, em ISO 8601 com fuso.
 
-        `tipo` filtra, ex.: "pulverizador".
+        `tipo` filtra, ex.: "pulverizador". Informe o `talhao_id` da OS: só vêm máquinas da fazenda do talhão.
         """
-        maquinas = await deps.erp.disponibilidade_maquinas(para_datetime(inicio), para_datetime(fim), tipo)
+        maquinas = await deps.erp.disponibilidade_maquinas(
+            para_datetime(inicio), para_datetime(fim), tipo, talhao_id
+        )
         return {"ok": True, "maquinas": maquinas}
 
     return disponibilidade_maquinas
 
 
 def criar_listar_operadores(deps: Dependencias):
-    async def listar_operadores() -> dict:
-        """Operadores da fazenda."""
-        return {"ok": True, "operadores": await deps.erp.listar_operadores()}
+    async def listar_operadores(talhao_id: int | None = None) -> dict:
+        """Operadores da fazenda do talhão (`talhao_id`)."""
+        return {"ok": True, "operadores": await deps.erp.listar_operadores(talhao_id)}
 
     return listar_operadores
 

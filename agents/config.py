@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     # ("none" desliga o raciocínio). Vazio = o padrão do modelo (para modelos sem raciocínio).
     reasoning_effort: str | None = "low"
 
-    channel: Literal["telegram", "painel"] = "painel"
+    channel: Literal["telegram", "whatsapp", "painel"] = "painel"
+
+    # Contrato 23 (F3): segredo que o painel manda em `X-Agents-Token` ao responder um plano. Vazio = rota
+    # aberta como antes (rede interna); com valor, sem o segredo certo a resposta é recusada (401).
+    agents_token: str | None = None
 
     approval_timeout_min: int = 30
     intervalo_timeout_s: int = 60

@@ -36,7 +36,7 @@ async def verificar_timeouts(
         custos = custos_do_plano(pendente.get("opcoes_json"))
         texto = texto_lembrete(incidente_id, plano_id, pendente["criado_em"], agora, custos)
         try:
-            await canal.enviar_alerta(texto)
+            await canal.enviar_alerta(texto, incidente_id=incidente_id)
         except Exception:  # noqa: BLE001
             logger.exception("falha ao escalonar o plano %s", plano_id)
         await repo.marcar_escalado(plano_id, agora)

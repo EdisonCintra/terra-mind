@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% import "componentes.html" as c %}
+{% block titulo %}Cadastros · TerraMind{% endblock %}
+{% block scripts %}
+  {# Só carrega o que a aba pede. Leaflet e mapa.js são locais (o E4 usa os mesmos); o editor de talhão só o desenha. #}
+  {% if aba == "talhoes" and form %}
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <script src="/static/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/static/mapa.js" defer></script>
+  <script src="/static/editor_talhao.js" defer></script>
+  {% elif aba == "insumos" and form %}
+  <script src="/static/insumo_busca.js" defer></script>
+  {% elif aba == "os" and form %}
+  <script src="/static/agenda.js" defer></script>
+  {% endif %}
+{% endblock %}
+{% block conteudo %}
+<div class="pagina-interna">
+  <header class="cabecalho-pagina">
+    <h1>Cadastros</h1>
+    <p class="nota">Talhões, máquinas, operadores, insumos, ordens de serviço e planejamento de safra da fazenda escolhida. Desativar esconde o cadastro e guarda o histórico.</p>
+  </header>
+  <nav class="abas" aria-label="Cadastros">
+    {% for slug, titulo in abas %}<a href="/cadastros/{{ slug }}"{% if slug == aba %} aria-current="page"{% endif %}>{{ titulo }}</a>{% endfor %}
+  </nav>
+  {% if flash %}{{ c.faixa("ok", flash) }}{% endif %}
+  {% if erro_acao %}{{ c.faixa("erro", erro_acao) }}{% endif %}
+  {% if aba == "os" %}{% include "_cadastro_os.html" %}{% else %}{% include "_cadastro_entidade.html" %}{% endif %}
+</div>
+{% endblock %}

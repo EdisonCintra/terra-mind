@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from telegram import Bot
-from telegram.error import Conflict
+from telegram.error import BadRequest, Conflict, InvalidToken, NetworkError, RetryAfter, TimedOut
 
 from channels.base import DecisaoJaRegistrada, Resposta, criar_canal
 from channels.telegram import TelegramChannel, ler_callback, montar_callback, montar_teclado
@@ -111,11 +111,17 @@ async def test_conflict_de_polling_vira_mensagem_clara(caplog):
     assert "outro processo" in caplog.text and "TELEGRAM_BOT_TOKEN" in caplog.text
 
 
-def test_sem_token_ou_chat_id_o_erro_manda_usar_o_painel(monkeypatch):
+def test_sem_token_o_erro_manda_usar_o_painel(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
-    monkeypatch.setenv("GERENTE_CHAT_ID", "")
     with pytest.raises(RuntimeError, match="CHANNEL=painel"):
         criar_canal("telegram", AsyncMock())
+
+
+def test_gerente_padrao_e_opcional(monkeypatch):
+    """F2: o destino vem de `erp.gerentes`; `GERENTE_CHAT_ID` é só o padrão e pode ficar vazio."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TOKEN-DE-TESTE")
+    monkeypatch.setenv("GERENTE_CHAT_ID", "")
+    assert criar_canal("telegram", AsyncMock()).gerente_padrao is None
 
 
 # --- G4: pergunta livre à bula ------------------------------------------------------------------
@@ -196,3 +202,69 @@ def test_handlers_de_texto_e_ajuda_registrados():
     handlers = canal().app.handlers[0]
     assert any(isinstance(h, MessageHandler) for h in handlers)
     assert any(isinstance(h, CommandHandler) and "ajuda" in h.commands for h in handlers)
+
+
+# --- subida: flood control e rede -------------------------------------------------------------------
+def canal_na_subida(initialize=None, start_polling=None):
+    """Canal com a `Application` trocada por fakes; `esperas` guarda quanto ele dormiu."""
+    c = canal()
+    c.app = SimpleNamespace(
+        initialize=initialize or AsyncMock(),
+        start=AsyncMock(),
+        updater=SimpleNamespace(start_polling=start_polling or AsyncMock()),
+    )
+    c._dormir = AsyncMock()
+    return c
+
+
+def esperas(c) -> list[float]:
+    return [chamada.args[0] for chamada in c._dormir.await_args_list]
+
+
+async def test_flood_control_na_subida_espera_o_pedido_e_tenta_de_novo():
+    c = canal_na_subida(initialize=AsyncMock(side_effect=[RetryAfter(5), None]))
+    await c.iniciar()
+    assert esperas(c) == [6]  # os 5 s pedidos mais 1 de folga
+    assert c.app.initialize.await_count == 2
+    c.app.start.assert_awaited_once()
+    c.app.updater.start_polling.assert_awaited_once()
+
+
+async def test_falha_de_rede_espera_cada_vez_mais():
+    falhas = [NetworkError("fora do ar"), TimedOut(), NetworkError("ainda fora"), None]
+    c = canal_na_subida(initialize=AsyncMock(side_effect=falhas))
+    await c.iniciar()
+    assert esperas(c) == [2, 5, 10]
+
+
+async def test_falha_ao_ligar_o_polling_tambem_e_repetida_sem_reiniciar_o_resto():
+    c = canal_na_subida(start_polling=AsyncMock(side_effect=[RetryAfter(3), None]))
+    await c.iniciar()
+    assert esperas(c) == [4]
+    c.app.initialize.assert_awaited_once()
+    c.app.start.assert_awaited_once()
+    assert c.app.updater.start_polling.await_count == 2
+
+
+async def test_desiste_depois_do_limite_de_tentativas():
+    c = canal_na_subida(initialize=AsyncMock(side_effect=RetryAfter(1)))
+    with pytest.raises(RetryAfter):
+        await c.iniciar()
+    assert c.app.initialize.await_count == 6 and len(esperas(c)) == 5
+    c.app.start.assert_not_awaited()
+
+
+async def test_espera_longa_demais_desiste_na_hora():
+    c = canal_na_subida(initialize=AsyncMock(side_effect=RetryAfter(3600)))
+    with pytest.raises(RetryAfter):
+        await c.iniciar()
+    assert esperas(c) == []
+
+
+@pytest.mark.parametrize("erro", [InvalidToken("token recusado"), BadRequest("pedido inválido")])
+async def test_token_recusado_ou_pedido_invalido_nao_sao_repetidos(erro):
+    c = canal_na_subida(initialize=AsyncMock(side_effect=erro))
+    with pytest.raises(type(erro)):
+        await c.iniciar()
+    assert c.app.initialize.await_count == 1 and esperas(c) == []
+

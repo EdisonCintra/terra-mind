@@ -57,7 +57,7 @@ def monitor_falso(monkeypatch, previsao=None, diaria=None, observado=None):
         return httpx.Response(200, json=valor)
 
     monkeypatch.setattr(main, "cliente_http", lambda: httpx.Client(transport=httpx.MockTransport(responder)))
-    monkeypatch.setattr(dados, "talhao_padrao", lambda: 1)
+    monkeypatch.setattr(dados, "talhao_padrao", lambda *_: 1)
 
 
 def test_rumo():
@@ -122,7 +122,7 @@ def test_reanalise_avisa_que_nao_e_estacao(cliente, monkeypatch):
 def test_seletor_de_talhao(cliente, monkeypatch):
     """Um seletor só, na Visão geral (fora do parcial): manda nos cartões e no gráfico (A2)."""
     monitor_falso(monkeypatch, horas(), dias(), OBS_ESTACAO)
-    monkeypatch.setattr(dados, "listar_talhoes", lambda: [{"id": 1, "nome": "Talhão 1"}, {"id": 2, "nome": "Talhão 2"}])
+    monkeypatch.setattr(dados, "listar_talhoes", lambda *_: [{"id": 1, "nome": "Talhão 1"}, {"id": 2, "nome": "Talhão 2"}])
     tela = cliente.get("/visao-geral").text
     assert tela.count('name="talhao_id"') == 1 and '<option value="1" selected>Talhão 1</option>' in tela
     assert 'hx-get="/parcial/clima"' in tela and 'hx-include="#talhao-previsao"' in tela

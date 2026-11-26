@@ -3,12 +3,14 @@ agenda e janelas (contrato 24), limites da bula (contrato 26) e relatório de ap
 
 import asyncio
 import contextlib
+import hmac
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
 
-from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from agents.agenda import AgendaIndisponivel, NaoEncontrado, PedidoJanela, ServicoAgenda
@@ -107,6 +109,15 @@ def _servico(request: Request, nome: str):
     return servico
 
 
+def conferir_token(request: Request, x_agents_token: str | None = Header(None)) -> None:
+    """Contrato 23: com `AGENTS_TOKEN` configurado, só o painel (que sabe o segredo) responde um plano.
+    Só esta rota exige: o webhook do WhatsApp usa a assinatura do Twilio; o Monitor chama /iniciar."""
+    settings = getattr(getattr(request.app.state.servicos.orquestrador, "deps", None), "settings", None)
+    esperado = getattr(settings, "agents_token", None)
+    if esperado and not hmac.compare_digest(x_agents_token or "", esperado):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token_invalido")
+
+
 def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -126,6 +137,36 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
     async def health() -> dict:
         return {"status": "ok"}
 
+    def canal_whatsapp(request: Request):
+        """O canal em uso, se for o WhatsApp (F4); com outro canal as rotas do webhook não existem."""
+        canal = getattr(request.app.state.servicos.orquestrador.deps, "canal", None)
+        if not hasattr(canal, "assinatura_valida"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "canal_whatsapp_inativo")
+        return canal
+
+    def url_do_webhook(request: Request) -> str:
+        """URL que o Twilio chamou, para a conta da assinatura: atrás de túnel ou proxy o `agents` vê http
+        e o host interno, então vale o que o proxy informa em `X-Forwarded-*` (ou `TWILIO_WEBHOOK_URL`)."""
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+        consulta = f"?{request.url.query}" if request.url.query else ""
+        return f"{proto}://{host.split(',')[0].strip()}{request.url.path}{consulta}"
+
+    @app.post("/whatsapp/webhook", include_in_schema=False)
+    async def whatsapp_receber(request: Request) -> Response:
+        """Mensagens e cliques do WhatsApp (Twilio): só vale com `X-Twilio-Signature`; roda em 2º plano."""
+        canal = canal_whatsapp(request)
+        formulario = await request.form()
+        parametros = [(k, v) for k, v in formulario.multi_items() if isinstance(v, str)]
+        url = canal.url_assinada(url_do_webhook(request))
+        if not canal.assinatura_valida(url, parametros, request.headers.get("X-Twilio-Signature")):
+            logger.warning("webhook do WhatsApp com assinatura inválida (URL conferida: %s)", url)
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "assinatura_invalida")
+        canal.agendar(dict(parametros))
+        return Response(
+            "<Response/>", media_type="text/xml"
+        )  # o Twilio espera TwiML; vazio = nada a responder
+
     @app.post("/incidentes/{incidente_id}/iniciar", status_code=status.HTTP_202_ACCEPTED)
     async def iniciar(incidente_id: int, request: Request) -> dict:
         orq = orquestrador(request)
@@ -134,7 +175,7 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
         orq.disparar_inicio(incidente_id)
         return {"incidente_id": incidente_id, "status": "aceito"}
 
-    @app.post("/incidentes/{incidente_id}/resposta")
+    @app.post("/incidentes/{incidente_id}/resposta", dependencies=[Depends(conferir_token)])
     async def resposta(incidente_id: int, corpo: CorpoResposta, request: Request) -> dict:
         resultado = await orquestrador(request).responder(
             Resposta(incidente_id, corpo.plano_id, corpo.resposta, corpo.respondido_por)
@@ -165,12 +206,12 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
         dias: int = Query(7, ge=1, le=14),
         duracao_horas: float = Query(8, gt=0, le=24),
         talhao_id: int | None = None,
-        fazenda_id: int | None = None,  # contrato 20: aceito desde já; filtra quando o F2 criar a fazenda
+        fazenda_id: int | None = None,  # contrato 20: só os talhões desta fazenda (padrão: a do insumo)
     ) -> dict:
         """G2 (contrato 24): por talhão e por dia, as faixas boas e ruins para o produto, com o motivo."""
         try:
             resultado = await _servico(request, "agenda").semana(
-                insumo_id, inicio, dias, duracao_horas, talhao_id
+                insumo_id, inicio, dias, duracao_horas, talhao_id, fazenda_id
             )
         except NaoEncontrado as e:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e

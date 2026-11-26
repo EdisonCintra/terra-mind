@@ -214,7 +214,7 @@ class FakeErp:
         self._checar()
         return self.talhoes[talhao_id]
 
-    async def disponibilidade_maquinas(self, inicio, fim, tipo=None):
+    async def disponibilidade_maquinas(self, inicio, fim, tipo=None, talhao_id=None):
         self._checar()
         ocupadas = {
             o["maquina_id"]
@@ -229,13 +229,17 @@ class FakeErp:
             if m["status"] == "disponivel" and m["id"] not in ocupadas and (tipo is None or m["tipo"] == tipo)
         ]
 
-    async def listar_operadores(self):
+    async def listar_operadores(self, talhao_id=None):
         self._checar()
         return self.operadores
 
-    async def listar_talhoes(self):
+    async def listar_talhoes(self, fazenda_id=None):
         self._checar()
-        return list(self.talhoes.values())
+        return [
+            t
+            for t in self.talhoes.values()
+            if fazenda_id is None or t.get("fazenda_id", fazenda_id) == fazenda_id
+        ]
 
     async def consultar_insumo(self, insumo_id):
         self._checar()
@@ -315,7 +319,7 @@ class FakeCanal:
     aprovacoes: list[tuple[int, int, str]] = field(default_factory=list)
     operadores: list[tuple[int, str]] = field(default_factory=list)
 
-    async def enviar_alerta(self, texto):
+    async def enviar_alerta(self, texto, incidente_id=None):
         self.alertas.append(texto)
 
     async def pedir_aprovacao(self, incidente_id, plano_id, texto):

@@ -13,6 +13,8 @@
     if (!inicio.value) return;
     const dados = new FormData();
     ["talhao_id", "insumo_id", "inicio", "duracao_horas"].forEach((campo) => dados.set(campo, form.elements[campo].value));
+    /* Edição de OS (F1): a própria OS não conta como conflito e a máquina dela vem selecionada. */
+    ["os_id", "maquina_atual"].forEach((campo) => { if (form.elements[campo]) dados.set(campo, form.elements[campo].value); });
     htmx.ajax("POST", "/agenda/avaliar", { target: "#janela", swap: "innerHTML", values: Object.fromEntries(dados) });
   }
 
@@ -31,6 +33,8 @@
     inicio.value = botao.dataset.inicio;
     conferir();
   });
+
+  if (inicio.value) conferir(); /* formulário já preenchido (edição ou erro de validação) */
 
   document.body.addEventListener("os-criada", () => {
     criar.disabled = true;

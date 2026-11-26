@@ -1,0 +1,85 @@
+{% import "componentes.html" as c %}
+{% if not form %}
+<p><a class="botao" href="/cadastros/os?novo=1">Nova OS</a></p>
+{% else %}
+{% set v = form.valores %}
+<section class="painel" id="nova-os">
+  <div class="titulo-bloco"><h2>{{ ("Editar a OS " ~ form.id) if form.id else "Nova OS de pulverização" }}</h2><span class="nota">a janela é conferida na previsão antes de salvar</span></div>
+  {% if form.erro_geral %}{{ c.faixa("erro", form.erro_geral) }}{% endif %}
+  <form method="post" class="formulario" action="/cadastros/os{% if form.id %}/{{ form.id }}{% endif %}">
+    {% if form.id %}
+    {# Edição: talhão e produto não mudam (para trocá-los, cancele e crie outra). Os campos escondidos alimentam a conferência da janela. #}
+    <input type="hidden" name="os_id" value="{{ form.id }}">
+    <input type="hidden" name="maquina_atual" value="{{ v.get('maquina_id', '') }}">
+    <input type="hidden" name="talhao_id" value="{{ form.os.talhao_id }}" data-janela>
+    <input type="hidden" name="insumo_id" value="{{ form.os.insumo_id }}" data-janela>
+    <div class="campo"><label>Talhão</label><strong>{{ form.os.talhao }}</strong></div>
+    <div class="campo"><label>Produto</label><strong>{{ form.os.produto or "—" }}</strong></div>
+    {% else %}
+    <label>Talhão *
+      <select name="talhao_id" data-janela required>
+        {% for t in talhoes %}<option value="{{ t.id }}"{% if v.get('talhao_id') == t.id|string %} selected{% endif %}>{{ t.nome }} · {{ t.area_ha }} ha</option>{% endfor %}
+      </select>
+    </label>
+    <label>Produto *
+      <select name="insumo_id" data-janela required>
+        {% for i in insumos %}<option value="{{ i.id }}"{% if v.get('insumo_id') == i.id|string %} selected{% endif %}>{{ i.produto }} ({{ i.unidade }})</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>Dose por hectare *
+      <input name="dose_por_ha" type="number" step="0.001" min="0.001" required placeholder="0,300" value="{{ v.get('dose_por_ha', '') }}">
+    </label>
+    <label>Início *
+      <input name="inicio" type="datetime-local" step="3600" required data-janela value="{{ v.get('inicio', '') }}">
+    </label>
+    <label>Duração *
+      <select name="duracao_horas" data-janela>
+        {% for h in [2, 4, 6, 8] %}<option value="{{ h }}"{% if (v.get('duracao_horas') or '8') == h|string %} selected{% endif %}>{{ h }} h</option>{% endfor %}
+      </select>
+    </label>
+    <label>Operador
+      <select name="operador_id">
+        <option value="">Definir depois</option>
+        {% for o in operadores %}<option value="{{ o.id }}"{% if v.get('operador_id') == o.id|string %} selected{% endif %}>{{ o.nome }}</option>{% endfor %}
+      </select>
+    </label>
+    {# A conferência da janela (G3) preenche este bloco, com o seletor de pulverizador livre quando a janela serve. #}
+    <div id="janela" class="largo" aria-live="polite"><p class="vazio">Escolha a data para conferir a janela.</p></div>
+    <div class="largo acoes-formulario">
+      <button type="submit" class="grande" id="criar-os" disabled>Salvar OS</button>
+      <a href="/cadastros/os">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+<section class="painel">
+  <div class="titulo-bloco"><h2>Ordens de serviço</h2><span class="nota">{{ linhas|length }} mais recente(s)</span></div>
+  {% if linhas %}
+  <div class="tabela empilha">
+    <table>
+      <thead><tr><th>Início</th><th>Talhão</th><th>Produto</th><th>Máquina</th><th>Operador</th><th>Situação</th><th>Ações</th></tr></thead>
+      <tbody>
+        {% for o in linhas %}
+        {% set status = STATUS_OS.get(o.status, (o.status, "neutro")) %}
+        <tr{% if o.status == "cancelada" %} class="inativo"{% endif %}>
+          <td data-rotulo="Início" class="mono">{{ o.inicio_previsto|hora }}</td>
+          <td data-rotulo="Talhão" class="forte">{{ o.talhao }}<small>OS {{ o.id }}</small></td>
+          <td data-rotulo="Produto">{{ o.produto or "—" }}</td>
+          <td data-rotulo="Máquina">{{ o.maquina or "—" }}</td>
+          <td data-rotulo="Operador">{{ o.operador or "—" }}</td>
+          <td data-rotulo="Situação"><span class="status {{ status[1] }}">{{ status[0] }}</span></td>
+          <td data-rotulo="Ações" class="acoes-linha">
+            {% if o.status in editaveis %}
+            <a href="/cadastros/os?editar={{ o.id }}">Editar</a>
+            <form method="post" action="/cadastros/os/{{ o.id }}/cancelar"><button type="submit" class="link">Cancelar OS</button></form>
+            {% else %}<span class="nota">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}{{ c.vazio("Nenhuma OS nesta fazenda ainda.", "Criar a primeira OS", "/cadastros/os?novo=1") }}{% endif %}
+</section>

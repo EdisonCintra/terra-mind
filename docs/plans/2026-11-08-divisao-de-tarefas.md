@@ -29,6 +29,34 @@
 
 **Pronto quando:** um gerente cadastra do zero 2 talhões (um ponto e um polígono), 1 máquina, 1 operador e 1 OS sem SQL, e o Monitor vigia o talhão novo no ciclo seguinte.
 
+**Status: concluído em 25/11/2026** (branch `feat/f1-cadastro`). Esta branch também **reconcilia o F2, o F4 e o F5 com o E1–E7 do Edison** (que já está no `main`): o merge teve 5 conflitos, resolvidos partindo do `painel/main.py` dele.
+
+- **Telas** em `/cadastros/<aba>` (item "Cadastros" do menu, só para gerente), no layout do E1: talhões, máquinas, operadores, insumos, ordens de serviço e planejamento de safra. Criar, editar e **desativar** (nada é apagado; desativar é recusado enquanto houver OS agendada ou incidente aberto que dependa do cadastro). Formulários são POST comuns com redirecionamento, funcionam sem JavaScript.
+- **Talhão (contrato 18):** ponto ou polígono desenhado no mapa (`editor_talhao.js`, sobre o `TerraMapa` do E4, com desenho próprio, **sem plugin de terceiros**). `erp.talhoes.geom` (GeoJSON) guarda a forma; `lat` e `lon` viram o centro e o `area_ha` é sugerido pela área do polígono. O servidor valida a forma e recalcula centro e área (`painel/geo.py`); o navegador não é confiável.
+- **OS:** criar, editar (dose, horário, máquina e operador) e cancelar, com as mesmas regras (máquina do tipo certo e livre no horário, estoque, tudo da mesma fazenda e ativo). Ao escolher a data, o formulário confere a janela e mostra o aviso e as sugestões do G3 (`agenda.js`). Editar uma OS não conta ela mesma como conflito.
+- **Insumo:** busca de produto no Agrofit (E5) pelo painel, que preenche nome, tipo e `bula_id`; produto sem bula na base aceita o PDF e o indexa. Classe fora de fungicida, herbicida e inseticida é avisada (contrato 15).
+- **Auditoria:** toda escrita grava `agente.auditoria` com o nó `painel` (`cadastro_<aba>_criar|editar|desativar|reativar`, `criar_os`, `editar_os`, `cancelar_os`), antes e depois.
+- **Banco:** `006_cadastro.sql` (`geom` e `ativo`). O Monitor, o MCP e as listas do painel ignoram o desativado.
+- **Fora desta entrega:** cadastro de gerentes (é o F3, com os usuários); edição de vértices arrastando (editar o desenho é redesenhar); a tela não foi revisada visualmente no navegador (só testes e `node --check` dos scripts; a área em JavaScript confere com a do Python: 120,2732 ha no polígono do seed).
+- **Testes:** 49 em `tests/test_cadastros.py` e 20 em `tests/test_painel_geo.py`, incluindo o critério de pronto (cadastrar tudo pela tela e o Monitor ver os dois talhões novos).
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F1)**
+
+- **`painel/escrita.py`:** `criar_os` mantém a assinatura, mas agora passa por `_validar_os` (as regras estão num lugar só) e exige talhão, produto, máquina e operador **ativos**. Novas `editar_os` e `cancelar_os`. Cancelar OS `suspensa_preventiva` é recusado: ela é do fluxo de incidente.
+- **MCP (`erp_mcp`):** `disponibilidade_maquinas` ganhou o parâmetro opcional `ignorar_os_id`; `listar_talhoes`, `listar_operadores` e `disponibilidade_maquinas` **ignoram cadastro desativado**, e `alocar_maquina` recusa máquina desativada. O `agents` já fica coberto por usar essas ferramentas. SQL novo que leia `erp.talhoes`, `maquinas`, `operadores` ou `insumos` direto deve filtrar `ativo`.
+- **Agenda/janela (G2, G3):** `POST /agenda/avaliar` aceita `os_id` e `maquina_atual` (opcionais, usados ao editar uma OS); `agenda.js` e `_janela.html` ajustados e compatíveis. A tela `/agenda` continua criando OS por `POST /os/nova`.
+- **Dados:** `dados.maquinas_livres(inicio, fim, talhao_id, ignorar_os_id)`; `listar_produtos` (Pergunte à bula) não lista insumo desativado.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F1)**
+
+- **Monitor:** uma mudança só, `monitor/repositorio.py::talhoes` filtra `WHERE ativo`. O talhão novo entra no ciclo seguinte e o desativado deixa de ser vigiado. Ajustei as fixtures de teste dele (`fazenda_id` em talhão e insumo). Os 2 testes do Monitor que falhavam passam com a sua reescrita.
+- **Contrato 18 entregue:** `erp.talhoes.geom` (jsonb: `Point` ou `Polygon`, `[lon, lat]`) existe e `lat`/`lon` são o centro. `dados.talhoes_com_geometria` ainda detecta a coluna por `information_schema`; pode simplificar.
+- **E1 (arquivos dele que toquei, de forma compatível):** o macro `campo` de `componentes.html` ganhou parâmetros opcionais (`passo`, `minimo`, `ajuda`, `obrigatorio`, `permitir_vazio`); o seletor de `layout.html` ganhou "Todas as fazendas" (`POST /fazenda/selecionar` com 0 apaga o cookie); o item `/fazenda` do menu é agora a tela de indicadores (F5), então os testes dele que usavam `/fazenda` como "tela futura" passaram a usar um item de menu sem rota.
+- **`painel/main.py`:** as rotas de cadastro são registradas direto no `app` (`painel/rotas_cadastros.py::registrar`), **não** por `include_router`: nesta versão do FastAPI o router incluído vira um objeto sem `path` em `app.routes`, e o `contexto_base` dele lê `r.path`. Se migrar para routers, ajuste o `contexto_base`.
+- **E4 (mapa):** `editor_talhao.js` reaproveita `TerraMapa.criar(...)` (usa `.leaflet`); o desenho de ponto e polígono é código próprio, sem plugin.
+- **E5:** o cadastro de insumo usa `GET /produtos/busca` e `POST /produtos/{registro}/bula` pelo painel (`/api/produtos/...`, com `tipo_insumo` mapeado da classe). Precisa de `CONHECIMENTO_URL` no `painel` (já no compose) e das credenciais `AGROFIT_*` no `conhecimento`; sem elas a tela avisa.
+- **TODOs do contrato 20 que fechei no código dele:** `resumo_historico`, `talhao_padrao` e `talhoes_com_geometria` filtram por fazenda; Visão geral, Mapa, Histórico, Agenda e Relatórios usam a fazenda escolhida. O `GET /risco?fazenda_id=` do Monitor (`monitor/main.py:206`) ainda ignora o parâmetro: continua com você.
+
 ### F2 · Várias fazendas e migrations incrementais (4)
 
 - Migration com `erp.organizacoes` e `erp.fazendas`, e `fazenda_id` nas tabelas do ERP (contrato 20, modelo da D7). Seed com uma fazenda de exemplo e uma "Fazenda Demo" só para o replay (ver E2).
@@ -38,6 +66,37 @@
 - Runner de migrations: hoje os SQL só rodam quando o banco é criado, e qualquer mudança exige `docker compose down -v`, que apaga tudo o que foi cadastrado. O runner aplica só as migrations novas e registra as aplicadas numa tabela de controle.
 
 **Pronto quando:** duas fazendas de organizações diferentes rodam juntas, cada incidente chega só ao gerente da fazenda certa, e uma migration nova sobe sem apagar os dados.
+
+**Status: concluído em 19/11/2026** (branch `feat/f2-fazendas-migrations`).
+
+- Migration `003_fazendas.sql`: `erp.organizacoes`, `erp.fazendas`, `erp.gerentes` e `fazenda_id` nas cinco tabelas. Banco com dados é adotado sem perda (tudo vira "Fazenda Exemplo"). Gatilho no banco impede OS com talhão, máquina, operador ou insumo de fazendas diferentes. `insumos.produto` passou a ser único por fazenda.
+- Seed: duas organizações (Exemplo e Demo), duas fazendas e um gerente por fazenda. A Fazenda Demo (`demo = true`) tem 1 talhão, 1 máquina, 1 operador e o Abacus HC; ainda sem OS (o E2 decide o que o replay precisa).
+- Runner `python -m db.migrar` e serviço `migrar` no compose (os demais serviços esperam por ele); registro em `public.migracoes_aplicadas`; banco antigo é adotado. O `initdb` deixou de aplicar os SQL.
+- MCP: `disponibilidade_maquinas` e `listar_operadores` recebem `talhao_id` e filtram pela fazenda dele; `listar_talhoes(fazenda_id)` e `listar_os(fazenda_id)`; `alocar_maquina` recusa máquina de outra fazenda. Os agentes passam o `talhao_id`; `GET /agenda?fazenda_id=` filtra.
+- Canal: cada mensagem vai aos gerentes ativos da fazenda do incidente (`channels/destinos.py`). `GERENTE_CHAT_ID` virou o gerente padrão (fallback); sem nenhum destino o canal falha alto (`SemDestino`). Os alertas do `agents` agora levam o `incidente_id`.
+- Painel: todas as leituras filtram por `fazenda_id`; seletor provisório no menu (cookie `fazenda`; o E1 troca pelo design novo).
+- Fora desta entrega: Row Level Security (segunda camada, "se der tempo") e o isolamento por organização por usuário, que depende do login do F3 (hoje as leituras recebem a fazenda; quem restringe as fazendas do usuário é o F3).
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F2)**
+
+- **`agents/clientes/erp.py` (contrato com o MCP):** `disponibilidade_maquinas(inicio, fim, tipo, talhao_id)`, `listar_operadores(talhao_id)` e `listar_talhoes(fazenda_id)` ganharam o parâmetro novo (opcional). `agents/simulacao.py` (`SimErp`) já acompanha. As ferramentas do LLM em `agents/ferramentas.py` ganharam `talhao_id`.
+- **Chamadores que agora passam o `talhao_id`:** `nodes/planejar.py`, `rules/validador.py`, `agenda.py` e `nodes/executor.py`. Sem ele a leitura devolve máquinas e operadores de **todas** as fazendas. Código novo que ler máquina ou operador deve passar o talhão.
+- **`alertar(deps, ctx, texto)`:** a função em `nodes/comum.py` agora recebe o `ctx` (é dele que sai o `incidente_id`, com o qual o canal acha o gerente da fazenda). O `Canal` em `agents/canal.py` virou `enviar_alerta(texto, incidente_id=None)`; `CanalLog`, `FakeCanal` e o canal do `_demo.py` aceitam o argumento novo. `runner.py` e `timeout.py` passam o `incidente_id`. Fake de canal novo precisa da mesma assinatura.
+- **`GET /agenda?fazenda_id=`** (contrato 24) passou a filtrar: o insumo é de uma fazenda e a agenda traz só os talhões dela (`ServicoAgenda.semana(..., fazenda_id)`); `fazenda_id` de outra fazenda devolve 404.
+- **Dados:** o MCP agora devolve `fazenda_id` em OS, talhão, insumo, máquina e operador. `insumos.produto` deixou de ser único: é único **por fazenda**, e a Fazenda Demo também tem "Abacus HC". Consulta por nome do produto (ex.: limites da bula, contrato 26) pode achar mais de uma linha; usar `DISTINCT` ou o `insumo_id`.
+- **Testes e fixtures:** quem insere direto em `erp.talhoes`, `insumos`, `maquinas` ou `operadores` precisa informar `fazenda_id` (a OS herda a do talhão sozinha). Ajustei `agents/tests/conftest.py`. O seed agora tem 3 talhões, 3 máquinas e 3 operadores (a Demo tem 1 de cada); teste que conta linhas sem filtrar por fazenda vê a Demo também.
+- **Painel (G1, G2, G3, G7):** as funções de `painel/dados.py` aceitam `fazenda_id`; `perda_evitada(inicio, fim, replay, fazenda_id)`, `maquinas_livres(inicio, fim, talhao_id)` e a criação de OS em `painel/escrita.py` recusam máquina, operador ou insumo de outra fazenda. Um gatilho no banco também recusa.
+- **Migrations:** a `020_decisao.sql` não mudou e foi adotada pelo runner. Migration nova roda **uma vez**, em ordem; não edite uma já aplicada (o runner avisa). O `initdb` do Postgres deixou de aplicar os SQL.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F2)**
+
+- **Monitor (`monitor/`):** não mudou, e continua vigiando **todos** os talhões, agora também o "Talhão Demo" (id 3, Fazenda Demo). `monitor/tests/test_ciclo.py` ganhou `fazenda_id` na inserção do talhão (única mudança). Os 2 testes `test_ciclo_manual_usa_fonte_live` e `test_modo_live_roda_ciclo_em_background` já falhavam no `main` antes do F2.
+- **E2 (Fazenda Demo e replay):** a Fazenda Demo existe (`erp.fazendas.demo = true`, id 2, organização separada) com 1 talhão, 1 máquina, 1 operador e o Abacus HC, **sem nenhuma OS**. O replay ainda roda no talhão 1 (Fazenda Exemplo, `TALHAO_DEMO` do painel). Cabe a você decidir o que o replay precisa na Demo (OS, etc.) e mover o `TALHAO_DEMO`.
+- **E1 (design):** o painel tem um seletor de fazenda **provisório** no menu (`painel/templates/_menu.html`, classe `.seletor-fazenda` em `painel.css`, cookie `fazenda`, rota `/fazenda/{id}?volta=`, global `fazendas()` nos templates). Troque pelo seletor do design novo mantendo o cookie (as telas com HTMX o mandam sozinhas) ou ajuste `_fazenda(request)` em `painel/main.py`. Sem fazenda escolhida, as telas mostram todas.
+- **E4 (`GET /risco?fazenda_id=`):** `erp.talhoes.fazenda_id` existe e é obrigatório; o MCP `listar_talhoes(fazenda_id)` já filtra.
+- **E5 (cadastro de insumo):** `erp.insumos.fazenda_id` é obrigatório e o produto é único por fazenda. A busca de produto que alimenta o cadastro (F1) precisa informar a fazenda; `bula_id` segue igual (contrato 1). O `base_agricola` não foi tocado.
+- **Migrations (suas, faixa 011–019):** rodam pelo serviço `migrar` do compose (`python -m db.migrar`, registro em `public.migracoes_aplicadas`), sem `down -v`. Em banco novo a ordem é 001, 002, 003, 004, 010..., 020..., **900 (seed por último)**: o seed precisa funcionar com o schema final, e a sua migration roda com as tabelas ainda vazias. `docker compose up` deixou de montar `db/migrations` no Postgres.
+- **Testes:** `tests/conftest.py` limpa também `erp.gerentes`, `erp.fazendas`, `erp.organizacoes` e `agente.whatsapp_janelas`. O `engine_pg` do Monitor aplica todos os SQL, incluindo o seed novo.
 
 ### F3 · Login e perfis (4)
 
@@ -57,6 +116,35 @@
 
 **Pronto quando:** o operador logado não vê os botões de aprovação e recebe 403 se chamar a rota direto, e a auditoria mostra o nome de quem aprovou.
 
+**Status: concluído em 25/11/2026** (branch `feat/f3-login`, sobre a `feat/f1-cadastro`). Permissões **confirmadas pelo time** (tabela acima, sem mudança).
+
+- **Login por sessão** (`painel/auth.py`, `painel/rotas_auth.py`): `/login`, `/logout`, `/conta` (trocar a senha) e `/usuarios` (o gerente cadastra, edita, desativa e reativa; só enxerga a organização dele). Toda rota pede usuário logado, menos `/login`, `/health` e `/static`. Sem sessão: página vai para `/login` (e volta para onde estava), HTMX e `/api` recebem 401.
+- **Senha:** só o hash, com `scrypt` da biblioteca padrão (sem dependência nova; o plano dizia argon2 ou bcrypt, e nenhum dos dois está no `uv.lock`). A sessão é um token aleatório no cookie (`HttpOnly`, `SameSite=Lax`, `Secure` com `PAINEL_COOKIE_SEGURO=1`); o banco guarda só o hash do token (`erp.sessoes`). Desativar o usuário ou trocar a senha derruba as sessões na hora. Limite de 5 erros por e-mail e 20 por endereço em 15 minutos.
+- **CSRF:** requisição que muda dados (POST) só vale com `Origin` ou `Referer` do próprio painel, somado ao `SameSite=Lax`. Não mexeu nos formulários.
+- **Permissões** (`painel.auth.PERMISSOES`, num lugar só): o **operador** vê tudo, cria, edita e cancela OS (`/cadastros/os`, item "Ordens de serviço" no menu) e registra a execução; recebe **403** em cadastros, usuários e aprovação e não vê os botões de aprovar. O **gerente** faz tudo.
+- **Fazendas por usuário** (fecha o "isolamento por organização" do F2): cada usuário enxerga só as fazendas ligadas a ele. O seletor mostra só essas (sem "Todas as fazendas" com login), cookie de fazenda alheia cai na primeira permitida, e registro de outra fazenda (OS, talhão, incidente, relatório, previsão, mapa) dá **404**.
+- **Aprovação (contrato 23):** o painel manda o **nome do usuário** em `respondido_por` (vai para a auditoria do `agents`) e o segredo `AGENTS_TOKEN` no cabeçalho `X-Agents-Token`. O `agents` confere o segredo **só** em `POST /incidentes/{id}/resposta`; `/whatsapp/webhook` e `/incidentes/{id}/iniciar` ficam de fora. **Sem `AGENTS_TOKEN` no `.env`, nada muda** (rota aberta como antes): o time liga quando quiser.
+- **Canais:** o contato do gerente (chat do Telegram, telefone do WhatsApp) agora é cadastrado na tela de usuários e o painel mantém `erp.gerentes` igual (coluna nova `usuario_id`), que é o que os canais já leem. Operador com contato **não** vira quem aprova. Gerente do seed ou do `.env` (sem usuário) continua valendo.
+- **Primeiro acesso:** `python -m painel.criar_usuario --nome ... --email ...`, ou `PAINEL_ADMIN_EMAIL` e `PAINEL_ADMIN_SENHA` no `.env` (cria o gerente na subida do painel se ainda não há usuário). `PAINEL_AUTENTICACAO=desligada` desliga o login (só testes e demonstração local).
+- **Auditoria:** criar, editar, desativar, reativar usuário e trocar senha gravam em `agente.auditoria` (nó `painel`), sem o hash.
+- **Banco:** `007_usuarios.sql` (`erp.usuarios`, `erp.usuario_fazendas`, `erp.sessoes`, `erp.gerentes.usuario_id`).
+- **Fora desta entrega:** recuperação de senha por e-mail (não há envio de e-mail no projeto; o gerente redefine pela tela de usuários), RLS no Postgres, e a tela do operador no celular (F6).
+- **Testes:** 41 em `tests/test_painel_login.py`, incluindo o critério de pronto (operador sem botões, 403 direto na rota, nome de quem aprovou).
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F3)**
+
+- **`agents/api.py`:** nova dependência `conferir_token` **só** em `POST /incidentes/{id}/resposta` (cabeçalho `X-Agents-Token`, comparação em tempo constante). `agents/config.py` ganhou `agents_token` (variável `AGENTS_TOKEN`, vazia = sem exigência). **Combinar quando ligar:** o segredo tem de estar igual no `.env` do painel e do `agents` (o compose já passa o `.env` aos dois). Quem chamar essa rota fora do painel (script, teste manual) passa a mandar o cabeçalho.
+- **`respondido_por`:** deixa de ser sempre `"painel"` e passa a ser o nome do usuário logado. `agents/nodes/aprovacao.py` já grava o valor recebido; nada a mudar, mas texto ou teste que espere `"painel"` com login ligado vai ver o nome.
+- **Painel (G1, G2, G3, G7):** as rotas que recebem id de OS, talhão, insumo, incidente ou relatório agora respondem 404 para registro de fazenda que o usuário não enxerga (`painel.main._acesso`). Rota nova do painel que receba id deve chamar `_acesso`.
+- **Testes:** `tests/conftest.py` ganhou um `autouse` que põe `PAINEL_AUTENTICACAO=desligada` e limpa `AGENTS_TOKEN`; teste que use `TestClient` do painel continua sem login. Para testar com login, ligue a variável (veja `tests/test_painel_login.py`).
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F3)**
+
+- **E1 (`layout.html`, `navegacao.py`, `contexto_base`):** o gancho `request.state.usuario` agora é preenchido (id, nome, e-mail, papel, organização e fazendas). O topo mostra o nome (link para `/conta`) e o botão **Sair**; com usuário logado o seletor **não** tem "Todas as fazendas" e lista só as fazendas dele. O menu ganhou **"Ordens de serviço"** (só operador, `/cadastros/os`) e **"Usuários"** (só gerente); `test_menu_na_ordem_do_brief` foi atualizado.
+- **Monitor (E3):** nada alterado. Duas pendências dele que o login expõe: `GET /risco?fazenda_id=` ainda ignora o parâmetro (o painel filtra o resultado por fazenda em `/api/risco`), e o próprio Monitor não tem login (porta 8020 só na rede interna).
+- **Rotas novas:** `/login`, `/logout`, `/conta`, `/conta/senha`, `/usuarios...`, todas direto no `app` (não em `APIRouter`, pelo mesmo motivo do F1). Elas usam `contexto_base`.
+- **Fetch/HTMX no JavaScript:** com sessão expirada, chamada HTMX ou `/api/...` recebe **401** (HTMX com `HX-Redirect: /login`). Código novo que faça `fetch` para o painel e trate erro deve tratar o 401. POST de outro site é recusado por falta de `Origin` do painel: `fetch` do navegador já manda; ferramenta de linha de comando (curl) precisa mandar `Origin` ou `Referer`.
+
 ### F4 · WhatsApp como canal (4)
 
 - `channels/whatsapp.py` com `WhatsAppChannel(NotificationChannel)` e a entrada `whatsapp` em `_CANAIS` (`channels/base.py`). Os nós do `agents` não mudam.
@@ -68,6 +156,42 @@
 
 **Pronto quando:** o incidente da demo chega no WhatsApp com os 3 botões, o clique retoma a sessão, e o segundo clique responde "decisão já registrada" (os mesmos testes do Telegram).
 
+**Status: código concluído em 19/11/2026** (branch `feat/f4-whatsapp`); **falta a rodada real na Meta** (conta, número, verificação da empresa e modelos aprovados), que não depende de código. Guia em [docs/whatsapp.md](../whatsapp.md).
+
+- `channels/whatsapp.py` (`WhatsAppChannel`) e `whatsapp` em `_CANAIS`; `CHANNEL=whatsapp` no `agents`. Os nós do `agents` não mudam, só o `incidente_id` que já ia nos alertas (F2) e o contato do operador por canal (`campo_operador`).
+- Webhook `GET/POST /whatsapp/webhook` no `agents`: verificação da Meta e assinatura `X-Hub-Signature-256` (sem o App Secret o webhook recusa tudo). Processa em segundo plano e ignora reentrega.
+- Janela de 24 h (`agente.whatsapp_janelas`, migration `004_whatsapp.sql`): dentro dela, texto e 3 botões; fora, os modelos `terramind_aprovacao` (3 respostas rápidas) e `terramind_aviso`. Recusa 131047 da Meta cai para o modelo.
+- Destino pelo gerente da fazenda do incidente (`erp.gerentes.whatsapp_telefone`); só ele aprova. `WHATSAPP_GERENTE_TELEFONE` é o padrão. Telefone do operador em `erp.operadores.whatsapp_telefone`.
+- Pergunte à bula pelo WhatsApp. Botões, rótulos e identificadores compartilhados com o Telegram (`channels/base.py`).
+- Testado com a Cloud API simulada (32 testes). Teste manual contra a Meta: `python -m channels.teste_whatsapp <telefone>`.
+
+**Atualização de 25/11/2026: o canal passou da Meta (Cloud API) para o Twilio.** O texto acima descreve o plano original; o que vale agora está em [docs/whatsapp.md](../whatsapp.md). A parte externa deixou de ser "conta e verificação na Meta" e virou: **conta no Twilio, Sandbox para testar já (grátis, com o telefone de quem testa) e, para produção, conta paga mais remetente próprio registrado** (a verificação da empresa na Meta continua existindo nesse caminho, conduzida pelo Twilio).
+
+- `channels/whatsapp.py` foi reescrito para o Twilio e o canal da Meta foi **retirado** (a `WhatsAppChannel` e o `CHANNEL=whatsapp` são os mesmos nomes; o que muda é por baixo). Envio pela API REST do Twilio (`Messages.json`, Account SID e Auth Token), modelos por `ContentSid` (Content Templates) e resposta por `POST /whatsapp/webhook` em formulário, com `X-Twilio-Signature` (HMAC-SHA1 da URL mais os parâmetros). Não existe mais o `GET` de verificação da Meta.
+- **O botão volta sem o plano:** o identificador do botão é fixo (`SIM`, `OPCOES`, `NAO`). O canal grava o SID de cada mensagem de aprovação (`agente.whatsapp_mensagens`, migration `008_whatsapp_twilio.sql`) e acha o plano pela mensagem respondida ou pelo mais recente do telefone ainda sem resposta. Sem modelo de botões, a aprovação vai como texto e o gerente escreve `SIM`, `OPCOES` ou `NAO` (vale igual ao clique, só se há plano esperando).
+- `python -m channels.twilio_modelos criar|aprovar` cria os dois modelos (aprovação com 3 botões e aviso) e pede a aprovação. Variáveis novas: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `TWILIO_CONTENT_SID_APROVACAO`, `TWILIO_CONTENT_SID_AVISO`, `TWILIO_WEBHOOK_URL`. As `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_TEMPLATE_*` e `WHATSAPP_API_VERSION` saíram.
+- Testes: 52 em `tests/test_channels_whatsapp.py`, com o Twilio simulado. **Ainda não validado contra o Twilio real** (ver "O que ainda não foi validado" em docs/whatsapp.md).
+- **Custo (BMC):** passa a ser a tarifa do Twilio mais a taxa da Meta por mensagem. Segue "a levantar": confira as tabelas vigentes dos dois.
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F4)**
+
+- **`agents/api.py`:** rota nova `POST /whatsapp/webhook` (fora do schema). Só existe com `CHANNEL=whatsapp`; com outro canal responde 404. Desde a troca para o Twilio ela lê **formulário**, confere `X-Twilio-Signature` (a URL entra na conta: atrás de túnel o `agents` usa `X-Forwarded-Proto` e `X-Forwarded-Host`, ou `TWILIO_WEBHOOK_URL`), processa em segundo plano e responde TwiML vazio. O `GET` de verificação da Meta foi removido.
+- **Atenção ao contrato 23 (F3):** quando o `agents` passar a exigir o `AGENTS_TOKEN` em `POST /incidentes/{id}/resposta`, a rota `/whatsapp/webhook` **tem de ficar de fora** dessa exigência: o Twilio não manda o nosso token, e a autenticação dele é a assinatura `X-Twilio-Signature`. Combinar antes de implementar o F3.
+- **`agents/config.py`:** `channel` aceita `whatsapp`.
+- **`agents/nodes/executor.py`:** o contato do operador sai da coluna que o canal indica (`campo_operador`: `telegram_chat_id` no Telegram, `whatsapp_telefone` no WhatsApp). O MCP `listar_operadores` agora devolve também `whatsapp_telefone`. Fakes de canal sem o atributo caem no Telegram (comportamento antigo).
+- **`notificar_operador(chat_id, texto)`:** no WhatsApp o `chat_id` é o telefone (inteiro, só dígitos, ex.: `5564999998888`).
+- **Desligamento:** `canal.parar()` espera as respostas em segundo plano terminarem; nada a fazer no `montar_servicos`.
+- **Infra:** o `agents` precisa de uma **URL HTTPS pública** para o Twilio chamar o webhook (túnel em desenvolvimento, como ngrok). Hoje a porta 8000 só existe na rede local.
+- **Variáveis novas** no `.env`: `TWILIO_*` e `WHATSAPP_GERENTE_TELEFONE`/`WHATSAPP_NUMEROS_BULA` (lista em `.env.example` e em [docs/whatsapp.md](../whatsapp.md)); nenhuma é obrigatória com `CHANNEL=painel` ou `telegram`.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F4)**
+
+- **Nenhum arquivo do Monitor, do conhecimento ou do `base_agricola` foi alterado.**
+- **Migrations `004_whatsapp.sql` e `008_whatsapp_twilio.sql`** (faixa do Felipe): `whatsapp_telefone` em `erp.gerentes` e `erp.operadores`, e as tabelas `agente.whatsapp_janelas` e `agente.whatsapp_mensagens`. Se o cadastro de operador/gerente do F1 ou o teu cadastro de insumos mexer nessas tabelas, o telefone é uma coluna a mais.
+- **E3/E4 (alertas):** o Monitor continua avisando o `agents` por `POST /incidentes/{id}/iniciar`; nada muda. A mensagem ao gerente sai pelo canal configurado (Telegram, WhatsApp ou painel).
+- **Pendência de negócio no BMC:** o WhatsApp passa a custar a tarifa do Twilio mais a taxa da Meta por mensagem; o custo está "a levantar" no BMC e é um número que você pode precisar para o pitch. Não coloquei valor nenhum.
+- **E7/E6 (texto das mensagens):** o plano enviado como variável de modelo é cortado em 1000 caracteres e perde as quebras de linha (viram " · "). Texto de mensagem novo deve caber nisso; o plano completo continua no painel.
+
 ### F5 · Indicadores da fazenda (2)
 
 - Bloco no painel com os insumos e o estoque de cada um, número de talhões e área total, OS por status (agendadas, suspensas, reagendadas, executadas), e o que está plantado e o que vai ser plantado em cada talhão.
@@ -76,6 +200,26 @@
 
 **Pronto quando:** os números do bloco batem com o banco para a fazenda selecionada.
 
+**Status: concluído em 19/11/2026** (branch `feat/f5-indicadores`).
+
+- Tela **Fazenda** em `/indicadores` (item novo no menu): talhões e área total, OS por status (agendadas, suspensas, reagendadas, executadas e canceladas), OS dos próximos 7 dias, máquinas em manutenção (com os nomes), insumos com estoque, previsto nas OS agendadas e saldo (selo "Faltam X" quando o estoque não cobre), e por talhão o que está plantado (cultura, data, estágio) e o próximo plantio planejado.
+- Tudo calculado no banco em `painel/dados.indicadores(fazenda_id, agora)`, pela fazenda escolhida no menu (sem escolha, soma todas e mostra a coluna da fazenda). O "previsto nas OS" é área do talhão × dose das OS agendadas e reagendadas, a mesma conta de `painel/escrita.criar_os`.
+- Migration `005_safra.sql`: `erp.planejamento_safra` (talhão, safra, cultura, plantio previsto, status `planejado`/`plantado`/`cancelado`). O seed ganhou um planejamento por talhão. A tela de cadastro desse planejamento fica no F1.
+- Os testes comparam cada número com o banco (15 testes em `tests/test_painel_indicadores.py`). A tela não foi revisada visualmente no navegador: usa os componentes existentes e o E1 vai redesenhar.
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F5)**
+
+- **`painel/dados.py` e `painel/main.py`** (onde estão as telas do G1, G2, G3 e G7): só acrescentei. Função `indicadores()`, filtro `num` (número em formato brasileiro), rota `/indicadores` e o item "Fazenda" em `_menu.html`. Nada do que ele fez foi alterado.
+- **G1 (perda evitada) e G5:** não usam o estoque nem o planejamento; nenhuma mudança de contrato.
+- **Banco:** tabela nova `erp.planejamento_safra`. `TRUNCATE erp.talhoes ... CASCADE` (o `conftest`) já a limpa junto.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F5)**
+
+- **E1 (design):** a tela `/indicadores` (`painel/templates/indicadores.html`) usa só os componentes atuais (`.kpis`, `.painel`, `.tabela`, `.status`, `.selo`, `.numeros`) e deve ser redesenhada junto com as outras. Ids estáveis para os números: `ind-talhoes`, `ind-proximas`, `ind-manutencao`, `ind-sem-cobertura`, `ind-os-<status>`.
+- **E3/E4 (cartões e mapa):** "Outras variáveis sugeridas" do F5 (máquinas em manutenção, OS dos próximos 7 dias, insumo sem cobertura) já entraram; se os cartões de clima forem para a mesma tela, é só acrescentar um bloco.
+- **Seed (`900_seed.sql`):** inclui o planejamento de safra. **Seed editado não chega a banco que já existe**; para ver o planejamento num banco antigo, `docker compose down -v` ou insira à mão. O runner agora só informa (não avisa) quando o seed muda depois de aplicado.
+- **Faixa 005 ocupada** (`005_safra.sql`, do Felipe); as migrations dele continuam em 011–019.
+
 ### F6 · Conclusão da OS pelo operador (2)
 
 - Hoje nenhuma tela marca a OS como `executada`: o status existe no schema, mas nada o usa.
@@ -83,6 +227,29 @@
 - Ao concluir, o painel chama a geração do relatório (G7).
 
 **Pronto quando:** a OS concluída aparece como Executada, com os dados reais gravados e registrados na auditoria.
+
+**Status: concluído em 25/11/2026** (branch `feat/f6-conclusao`, sobre a `feat/f3-login`). Substitui a tela mínima do G7.
+
+- **`/campo` ("Executar OS" no menu):** lista em cartões, pensada para o celular. O usuário ligado a um operador (campo "Operador de campo" em `/usuarios`) vê **as suas** e pode abrir "Todas da fazenda". Marca as atrasadas e as de hoje. As **suspensas** por clima aparecem à parte, com o aviso de não aplicar e sem link. O operador, ao entrar, já cai nesta tela.
+- **`/os/{id}/concluir`:** página inteira, uma coluna, campos grandes. Vem preenchida com a OS (o horário sugerido nunca fica no futuro) e registra todo o contrato 28, **agora com a máquina e o operador que de fato aplicaram**. Os campos de voo só aparecem para drone e avião. Pede confirmação, porque a conclusão não volta atrás. Ao concluir, pede o relatório (G7).
+- **Registro:** `registrado_por` e a auditoria `concluir_os` levam o nome do usuário logado. Máquina ou operador de outra fazenda são recusados sem gravar nada.
+- **Sem migration.** Precisa de conexão: não há modo offline.
+- **Não verificado:** a tela não foi vista num celular nem num navegador (só testes).
+- **Testes:** 17 em `tests/test_painel_campo.py`, incluindo o critério de pronto; os testes do G7 (`test_painel_decisao.py`) seguem passando sem mudança.
+
+**Aviso ao Gustavo: o que mudou nos arquivos e tarefas dele (F6)**
+
+- **Tela do G7:** o parcial `_concluir.html` foi **removido** e o formulário abaixo de `/relatorios` deixou de existir. O botão "Concluir" de `/relatorios` agora é um link para `/os/{id}/concluir`, que virou página inteira.
+- **`POST /os/{id}/concluir`:** mesmo contrato e mesmas respostas, com `maquina_id` e `operador_id` opcionais (vazio = os da OS). `registrado_por` passa a ser o nome do usuário logado.
+- **`painel/escrita.py::concluir_os`:** mesma assinatura; agora confere que a máquina e o operador informados são da fazenda da OS.
+- **`painel/dados.py`:** `ordens_a_concluir(fazenda_id, operador_id)` ganhou o filtro por operador e devolve também `fazenda_id`, `maquina_id`, `operador_id`. Novas `ordens_suspensas` e `maquinas_da_fazenda`.
+
+**Aviso ao Edison: o que mudou nos arquivos e tarefas dele (F6)**
+
+- **Menu:** item novo **"Executar OS"** (`/campo`), em segundo lugar, para os dois papéis; no celular ele entra na barra inferior e empurra um item para o "Mais". `test_menu_na_ordem_do_brief` foi atualizado.
+- **`/`:** o operador logado é levado a `/campo`; os demais seguem para a Visão geral.
+- **`painel.css`:** bloco novo no fim (`.campo-tela`, `.cartao-os`, `.form-campo`). Os campos de voo são escondidos por CSS (`:has`), sem JavaScript.
+- **Monitor e conhecimento:** nada alterado.
 
 ## Edison · clima, bulas e interface (21 pontos)
 

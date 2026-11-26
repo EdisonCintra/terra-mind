@@ -18,11 +18,19 @@ SEED = Path(__file__).resolve().parents[1] / "db" / "migrations" / "900_seed.sql
 
 
 @pytest.fixture(autouse=True)
+def sem_login_por_padrao(monkeypatch):
+    """Os testes do painel anteriores ao F3 chamam as rotas sem sessão; os de login ligam a autenticação."""
+    monkeypatch.setenv("PAINEL_AUTENTICACAO", "desligada")
+    monkeypatch.delenv("AGENTS_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def banco_limpo():
     with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
         conn.execute(
             "TRUNCATE erp.leituras_solo, erp.ordens_servico, erp.operadores, erp.maquinas,"
-            " erp.insumos, erp.talhoes, agente.auditoria, agente.planos, agente.incidentes,"
+            " erp.insumos, erp.talhoes, erp.gerentes, erp.fazendas, erp.organizacoes,"
+            " agente.auditoria, agente.planos, agente.incidentes, agente.whatsapp_janelas, agente.whatsapp_mensagens,"
             " conhecimento.limites_produto, clima.previsoes, clima.observacoes, clima.estacoes,"
             " clima.conferencias"
             " RESTART IDENTITY CASCADE"

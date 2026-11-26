@@ -101,8 +101,8 @@ def reagendar_os(os_id: int, novo_inicio: datetime, plano_id: int) -> dict[str, 
 def alocar_maquina(os_id: int, maquina_id: int, plano_id: int) -> dict[str, Any]:
     """Troca a máquina de uma OS suspensa ou reagendada.
 
-    Exige plano aprovado e máquina livre: `disponivel` e sem outra OS `agendada` ou
-    `reagendada` sobreposta ao horário da OS (início + `duracao_horas`).
+    Exige plano aprovado e máquina livre: `disponivel`, da mesma fazenda da OS e sem outra OS
+    `agendada` ou `reagendada` sobreposta ao horário da OS (início + `duracao_horas`).
     """
     with conectar() as conn:
         plano = _plano_aprovado(conn, plano_id)
@@ -121,7 +121,8 @@ def alocar_maquina(os_id: int, maquina_id: int, plano_id: int) -> dict[str, Any]
         livre = conn.execute(
             """
             SELECT 1 FROM erp.maquinas m
-            WHERE m.id = %(maq)s AND m.status = 'disponivel'
+            WHERE m.id = %(maq)s AND m.status = 'disponivel' AND m.ativo
+              AND m.fazenda_id = %(faz)s
               AND NOT EXISTS (
                   SELECT 1 FROM erp.ordens_servico o
                   WHERE o.maquina_id = m.id AND o.id <> %(os)s
@@ -132,6 +133,7 @@ def alocar_maquina(os_id: int, maquina_id: int, plano_id: int) -> dict[str, Any]
             """,
             {
                 "maq": maquina_id,
+                "faz": antes["fazenda_id"],
                 "os": os_id,
                 "ini": antes["inicio_previsto"],
                 "dur": antes["duracao_horas"],

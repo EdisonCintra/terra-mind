@@ -32,7 +32,7 @@ def criar_aprovacao(deps: Dependencias):
             await deps.canal.pedir_aprovacao(incidente_id, plano_id, ctx.state["mensagem"])
         except Exception:  # noqa: BLE001 - o plano continua pendente no painel
             logger.exception("falha ao pedir aprovação pelo canal")
-            await alertar(deps, f"Não consegui enviar o plano {plano_id}; aprove pelo painel.")
+            await alertar(deps, ctx, f"Não consegui enviar o plano {plano_id}; aprove pelo painel.")
         await auditar(
             deps,
             ctx,
@@ -58,7 +58,7 @@ async def _recusar(deps: Dependencias, ctx: Context, motivo: str, aviso: str) ->
     suspensas = ctx.state.get("os_suspensas") or []
     alvo = alvo_das_os(suspensas)
     ctx.state["motivo_encerramento"] = motivo
-    await alertar(deps, f"{aviso}\n{alvo}. Nenhuma outra ação foi feita.")
+    await alertar(deps, ctx, f"{aviso}\n{alvo}. Nenhuma outra ação foi feita.")
     return Event(route="NAO")
 
 

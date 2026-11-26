@@ -9,7 +9,7 @@ Monitor (clima) ──incidente──→ agents (workflow) ──consulta──�
                                     │    ▲
                          lê/escreve │    │ SIM / NÃO / Ver opções
                                     ▼    │
-                            ERP via MCP   Telegram ou painel (gerente)
+                            ERP via MCP   Telegram, WhatsApp ou painel (gerente)
 ```
 
 <p align="center">
@@ -22,7 +22,7 @@ Monitor (clima) ──incidente──→ agents (workflow) ──consulta──�
 4. As OS que violam a bula são suspensas (`agendada → suspensa_preventiva`). É a única escrita feita sem aprovação. A perda evitada em R$ é calculada em código, com fatores de perda documentados.
 5. O Agronômico olha o estágio fenológico da cultura e o Operacional olha máquinas, operadores e estoque. Os dois analisam as OS suspensas ao mesmo tempo.
 6. O Supervisor (LLM) propõe um reagendamento e o Validador (código) confere clima, horário, horizonte e máquina. Se o Validador reprovar, o Supervisor revisa até 2 vezes; se continuar reprovado, o caso vai para decisão manual.
-7. O plano chega ao gerente pelo Telegram. O rodapé (perda, data, máquina, fonte e página) é montado a partir do estado, nunca do texto do LLM. Enquanto espera a resposta, a sessão fica pausada no Postgres e sobrevive a um restart.
+7. O plano chega ao gerente pelo Telegram ou pelo WhatsApp (o da fazenda do incidente). O rodapé (perda, data, máquina, fonte e página) é montado a partir do estado, nunca do texto do LLM. Enquanto espera a resposta, a sessão fica pausada no Postgres e sobrevive a um restart.
 8. Com SIM, o sistema reagenda a OS, aloca a máquina, reserva o estoque e avisa o operador. Ver opções gera um novo plano (até 2 vezes). NÃO manda o caso para decisão manual.
 
 Valores em R$ só saem de código, um clique duplo não executa nada duas vezes e o ERP recusa qualquer reagendamento sem plano aprovado no banco. Toda escrita grava auditoria na mesma transação.
@@ -37,7 +37,7 @@ O workflow é um grafo do Google ADK. Quatro nós são agentes LLM e o resto é 
 | Agronômico | Depois da suspensão, junto com o Operacional | `buscar_trechos`, `consultar_talhao` | Texto de até 6 frases, com fonte e página |
 | Operacional | Depois da suspensão, junto com o Agronômico | `janelas_validas`, `listar_os`, `disponibilidade_maquinas`, `listar_operadores` | Texto de até 8 frases, com datas e ids |
 | Supervisor | Depois das análises, e de novo quando o Validador reprova ou o gerente pede outras opções | `janelas_validas`, `calcular_impacto` | `PlanoProposto`: uma opção (novo início e máquina) por OS suspensa e a mensagem ao gerente |
-| Pergunte à bula | Fora do incidente, quando alguém pergunta no painel (`/bula`), no Telegram (qualquer mensagem de texto do gerente ou de um chat em `TELEGRAM_CHATS_BULA`) ou em `POST /bula/perguntar` | `buscar_na_bula` | `RespostaBula`: resposta curta com trecho literal, fonte e página |
+| Pergunte à bula | Fora do incidente, quando alguém pergunta no painel (`/bula`), no Telegram ou no WhatsApp (qualquer mensagem de texto do gerente ou de um chat em `TELEGRAM_CHATS_BULA` / `WHATSAPP_NUMEROS_BULA`) ou em `POST /bula/perguntar` | `buscar_na_bula` | `RespostaBula`: resposta curta com trecho literal, fonte e página |
 
 O Pergunte à bula tem a mesma garantia do Avaliador. O código confere que cada citação é literal de um trecho que a busca devolveu, com a mesma fonte e página. Sem citação conferida, a resposta é "A bula não traz isso." As 20 perguntas de teste estão em [agents/avaliacao/perguntas_bula.yaml](agents/avaliacao/perguntas_bula.yaml) e rodam contra o LLM e a base reais com `uv run python -m agents.avaliar_bula`.
 
@@ -65,7 +65,7 @@ Quatro recursos rodam sem incidente aberto. Nenhum deles põe número ou data vi
 - **Perda evitada (`/perda`, G1).** A Ação Preventiva grava uma linha por OS suspensa em `agente.impactos` (contrato 25), com valor da aplicação, fator, fonte e perda. O Executor muda a situação para `evitada` quando o plano é executado; recusa e decisão manual também ficam registradas. A tela soma só o que foi evitado, por talhão e por produto, e mostra planos aprovados, recusados e sem resposta e o tempo médio até a resposta. Incidente de replay (`origem = 'replay'`, contrato 27) fica de fora, a não ser com "Incluir simulações". Com `PRECO_HA_SAFRA` definido, a tela mostra quantas vezes a perda evitada paga a assinatura.
 - **Agenda (`/agenda`, G2).** `GET /agenda?insumo_id=` devolve, por talhão e por dia, as horas boas e ruins para começar a aplicação, com o motivo. Os limites vêm de `conhecimento.limites_produto` (contrato 26). O botão "Ler os limites da bula" chama `POST /limites/extrair`: um agente lê a bula uma vez, e o código só aceita o limite cujo trecho veio da busca, com a mesma página, e cujo número aparece no trecho. Para o parâmetro que a bula não traz, vale uma referência genérica (vento de 3 a 10 km/h, até 30 °C, umidade a partir de 55%, Delta T de 2 a 10 °C), sempre marcada como genérica.
 - **Janela da OS (G3).** `POST /janelas/avaliar` diz se a janela serve. Se não serve, devolve o motivo com a página da bula e até 3 janelas boas com máquina livre. No formulário "Agendar aplicação", aceitar uma sugestão preenche o campo, e a OS só é criada com a janela conferida.
-- **Relatório de aplicação (`/relatorios`, G7).** Concluir a OS grava os dados reais (`erp.execucoes_os`, contrato 28) e gera um PDF com área, produto, dose, execução, clima durante a aplicação e a conferência de cada limite da bula, com a página. O SHA-256 dos dados vai no rodapé e fica no banco. O que a norma pede para drone, avião e aplicação terrestre, e o que ainda falta, está em [docs/relatorio-de-aplicacao.md](docs/relatorio-de-aplicacao.md).
+- **Relatório de aplicação (`/relatorios`, G7).** Concluir a OS (tela `/campo`, no celular do operador) grava os dados reais (`erp.execucoes_os`, contrato 28) e gera um PDF com área, produto, dose, execução, clima durante a aplicação e a conferência de cada limite da bula, com a página. O SHA-256 dos dados vai no rodapé e fica no banco. O que a norma pede para drone, avião e aplicação terrestre, e o que ainda falta, está em [docs/relatorio-de-aplicacao.md](docs/relatorio-de-aplicacao.md).
 
 A previsão desses recursos vem direto do Open-Meteo (`agents/clientes/clima.py`), com direção e rajada do vento, o Delta T calculado da temperatura e da umidade e a inversão térmica (ar a 80 m pelo menos 0,5 °C mais quente que a 2 m, com vento abaixo de 6 km/h). Na bula, chuva "zero" aceita até 1 mm no período: o modelo põe garoa de 0,1 mm em quase toda hora. Em todo o sistema, inclusive no Monitor, o vento e a rajada são os da altura da barra (2 m), convertidos dos 10 m do Open-Meteo pela FAO-56 (× 0,748), porque é assim que a bula e o anemômetro do operador medem. O incidente continua usando o snapshot do Monitor. Quando o Monitor expuser a previsão por talhão (contrato 19), basta trocar a implementação do cliente.
 
@@ -97,14 +97,37 @@ cp .env.example .env          # preencha OPENAI_API_KEY (e o Telegram, se usar C
 docker compose up -d --build
 ```
 
-Abra `http://localhost:8080` e clique em Simular chuva para disparar o cenário de 80 mm.
+Abra `http://localhost:8080`, entre com a sua conta e clique em Simular chuva para disparar o cenário de 80 mm.
+O painel pede login: o passo a passo, com a criação da conta, está em [docs/como-rodar.md](docs/como-rodar.md).
 
-Banco criado antes da migration `020_decisao.sql`? Aplique-a sem apagar os dados (ela é idempotente):
+### Migrations
+
+O serviço `migrar` roda a cada `docker compose up` e aplica só as migrations novas de `db/migrations/`,
+registrando as aplicadas em `public.migracoes_aplicadas`. Cadastros e incidentes não são apagados:
+`docker compose down -v` só é preciso para recomeçar a demo do zero (as datas do seed contam a partir da
+criação do banco).
 
 ```bash
-docker compose exec -T postgres psql -U terramind -d terramind < db/migrations/020_decisao.sql
+docker compose run --rm migrar                # aplica o que falta (também roda sozinho na subida)
+docker compose run --rm migrar python -m db.migrar --listar   # aplicadas e pendentes
 ```
 
-As datas do seed contam a partir da criação do banco. Para recomeçar a demo do zero, rode `docker compose down -v && docker compose up -d --build`.
+Banco criado antes do runner (sem a tabela de registro) é adotado sozinho: o que já estava lá é só
+registrado e o que faltava (ex.: `003_fazendas.sql`, `020_decisao.sql`) é aplicado. Migration já aplicada
+não se edita: a correção vai numa migration nova. Faixas: Felipe `003`–`009` e seed `9xx`, Edison
+`011`–`019`, Gustavo `020`–`029`.
+
+### Fazendas
+
+Organização > fazenda > talhões, máquinas, operadores, insumos e OS (`fazenda_id` em todos). O seed traz
+a "Fazenda Exemplo" e a "Fazenda Demo" (organizações diferentes; a Demo é onde o replay roda). Cada
+fazenda tem seus gerentes em `erp.gerentes`: o canal manda cada mensagem ao gerente da fazenda do
+incidente. `GERENTE_CHAT_ID` é só o gerente padrão, para a fazenda sem gerente com chat. O painel filtra
+tudo pela fazenda escolhida no menu (cookie `fazenda`).
+
+### Canais
+
+`CHANNEL=painel` (padrão, sem token), `telegram` ou `whatsapp`. O WhatsApp recebe a resposta por webhook
+público (Twilio) e, fora da janela de 24 h, só manda modelo aprovado: ver [docs/whatsapp.md](docs/whatsapp.md).
 
 Mais detalhes: [agents/README.md](agents/README.md) · [docs/contratos.md](docs/contratos.md) · [docs/plans/](docs/plans/)

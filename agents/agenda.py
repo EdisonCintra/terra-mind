@@ -118,13 +118,21 @@ class ServicoAgenda:
         dias: int = 7,
         duracao_horas: float = 8,
         talhao_id: int | None = None,
+        fazenda_id: int | None = None,
     ) -> Agenda:
-        """Por talhão e por dia, as faixas boas e ruins para aplicar o produto, com o motivo."""
+        """Por talhão e por dia, as faixas boas e ruins para aplicar o produto, com o motivo.
+
+        Contrato 20: o insumo é de uma fazenda e a agenda só traz os talhões dela. Com `fazenda_id`
+        de outra fazenda, o insumo "não existe" para quem pergunta.
+        """
         agora = self.deps.relogio()
         inicio = inicio or agora.astimezone(FUSO).date()
         insumo = await self._insumo(insumo_id)
+        dona = insumo.get("fazenda_id")
+        if fazenda_id is not None and dona is not None and dona != fazenda_id:
+            raise NaoEncontrado(f"insumo {insumo_id} não existe")
         try:
-            talhoes = await self.deps.erp.listar_talhoes()
+            talhoes = await self.deps.erp.listar_talhoes(fazenda_id if fazenda_id is not None else dona)
         except ErpIndisponivel as e:
             raise AgendaIndisponivel(str(e)) from e
         if talhao_id is not None:
@@ -234,7 +242,7 @@ class ServicoAgenda:
         for bloco in blocos([t for t in validos if t > pedido.inicio]):
             for t in bloco:
                 livres = await self.deps.erp.disponibilidade_maquinas(
-                    t, t + timedelta(hours=pedido.duracao_horas), os.tipo_maquina
+                    t, t + timedelta(hours=pedido.duracao_horas), os.tipo_maquina, pedido.talhao_id
                 )
                 if livres:
                     maquina = min(livres, key=lambda m: m["id"])

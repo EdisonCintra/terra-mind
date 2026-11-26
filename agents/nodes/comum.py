@@ -16,9 +16,10 @@ async def auditar(deps: Dependencias, ctx: Context, no: str, acao: str, **dados:
         logger.exception("falha ao gravar auditoria %s/%s", no, acao)
 
 
-async def alertar(deps: Dependencias, texto: str) -> None:
+async def alertar(deps: Dependencias, ctx: Context, texto: str) -> None:
+    """Alerta ao gerente. Vai com o `incidente_id`: é por ele que o canal acha o gerente da fazenda."""
     try:
-        await deps.canal.enviar_alerta(texto)
+        await deps.canal.enviar_alerta(texto, incidente_id=ctx.state.get("incidente_id"))
     except Exception:  # noqa: BLE001
         logger.exception("falha ao enviar alerta ao gerente")
 

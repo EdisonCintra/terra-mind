@@ -320,3 +320,58 @@ button.sugestao small { font-weight: 400; }
   .formulario { grid-template-columns: minmax(0, 1fr); }
   .semana .dia { grid-template-columns: 4.5rem 2.5rem minmax(0, 1fr); }
 }
+
+/* --- Cadastros (F1) --------------------------------------------------------------------------- */
+.abas { display: flex; flex-wrap: wrap; gap: .25rem .5rem; border-bottom: 1px solid var(--linha); }
+.abas a { color: var(--suave); text-decoration: none; padding: .5rem .9rem; border-bottom: 2px solid transparent; font-size: .9rem; }
+.abas a:hover { color: var(--tinta); }
+.abas a[aria-current="page"] { color: var(--tinta); border-bottom-color: var(--bom); }
+tr.inativo td { color: var(--suave); }
+.acoes-linha { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; }
+.acoes-linha form { display: inline; margin: 0; }
+button.link { background: none; border: 0; padding: 0; color: var(--ceu); font: inherit; cursor: pointer; text-decoration: underline; }
+.campo .ajuda, .formulario .ajuda { color: var(--suave); font-size: .78rem; }
+.editor-talhao { display: grid; gap: .6rem; }
+.barra-editor { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.barra-editor button[aria-pressed="true"] { color: var(--bom); border-color: rgba(69, 207, 142, .6); background: rgba(69, 207, 142, .1); }
+.barra-editor button:disabled { opacity: .45; cursor: not-allowed; }
+.busca-produto { display: grid; gap: .4rem; }
+.linha-busca { display: flex; gap: .5rem; }
+.linha-busca input { flex: 1; min-width: 0; }
+.resultados-produto { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.resultados-produto button { display: grid; gap: .1rem; width: 100%; text-align: left; }
+.envio-bula { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .5rem; }
+
+/* --- Login e usuários (F3) --- */
+.tela-login { display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1rem; }
+.cartao-login { width: min(24rem, 100%); display: grid; gap: .9rem; padding: 1.75rem; background: var(--superficie); border: 1px solid var(--linha); border-radius: .75rem; }
+.cartao-login h1 { margin: 0; font-size: 1.4rem; }
+.formulario-login { display: grid; gap: .5rem; }
+.formulario-login label { color: var(--suave); font-size: .85rem; }
+.formulario-login input { width: 100%; padding: .6rem .7rem; box-sizing: border-box; }
+.formulario-login button { margin-top: .5rem; }
+.grupo-fazendas { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; border: 1px solid var(--linha); border-radius: .5rem; padding: .6rem .9rem; }
+.grupo-fazendas legend { color: var(--suave); font-size: .8rem; padding-inline: .3rem; }
+.grupo-fazendas .caixa { display: flex; align-items: center; gap: .4rem; font-size: .9rem; color: inherit; }
+.usuario-sair { display: inline; margin: 0; }
+.usuario-sair button, .acoes a.usuario-link { font-size: .85rem; }
+
+/* --- Executar OS no celular (F6) --- */
+.campo-tela { max-width: 40rem; }
+.lista-campo { display: grid; gap: .75rem; margin-bottom: 1rem; }
+.cartao-os { display: grid; gap: .3rem; padding: 1rem; background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: 12px; color: var(--tinta); text-decoration: none; }
+a.cartao-os:hover, a.cartao-os:focus-visible { border-color: var(--ceu); }
+.cartao-os.suspensa { opacity: .85; border-style: dashed; }
+.cartao-os small { color: var(--suave); }
+.linha-os { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.acao-os { color: var(--ceu); font-weight: 600; padding-top: .25rem; }
+.formulario.form-campo { grid-template-columns: minmax(0, 1fr); }
+.formulario.form-campo[hidden] { display: none; }
+.form-campo fieldset { display: grid; gap: .75rem; margin: 0; padding: .75rem .9rem 1rem; border: 1px solid var(--linha); border-radius: 10px; min-width: 0; }
+.form-campo legend { color: var(--suave); font-size: .85rem; padding-inline: .3rem; }
+.form-campo input:not([type=checkbox]), .form-campo select { min-height: 3rem; font-size: 1rem; width: 100%; box-sizing: border-box; }
+.form-campo textarea { font-size: 1rem; width: 100%; box-sizing: border-box; }
+.form-campo:has(#campo-modalidade option[value="terrestre"]:checked) .so-voo { display: none; }
+.form-campo .confirmar { display: flex; align-items: center; gap: .7rem; font-size: .95rem; color: var(--tinta); }
+.form-campo .confirmar input { width: 1.4rem; height: 1.4rem; flex: none; }
+.form-campo button.grande { width: 100%; min-height: 3.25rem; font-size: 1.05rem; }

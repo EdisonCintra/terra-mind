@@ -5,7 +5,7 @@
   {% if maquinas %}
   <label>Máquina
     <select name="maquina_id" required>
-      {% for m in maquinas %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+      {% for m in maquinas %}<option value="{{ m.id }}"{% if m.id|string == maquina_atual %} selected{% endif %}>{{ m.nome }}</option>{% endfor %}
     </select>
   </label>
   {% else %}

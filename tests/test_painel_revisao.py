@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from painel import dados, main
-from painel.navegacao import barra_mobile
+from painel.navegacao import TODOS, ItemMenu, barra_mobile
 from tests.conftest import DATABASE_URL
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -262,9 +262,15 @@ def test_barra_mobile_com_mais_de_4_ativos_usa_mais():
     assert [i["rota"] for i in mais] == rotas  # o "Mais" abre a lista inteira de telas
 
 
-def test_menu_marca_itens_fora_da_barra(cliente):
+@pytest.fixture
+def menu_com_tela_futura(monkeypatch):
+    """Todas as telas do menu já existem; este item fica sem rota, para testar o estado "em construção"."""
+    monkeypatch.setattr(main, "MENU", [*main.MENU, ItemMenu("/em-breve", "Em breve", TODOS)])
+
+
+def test_menu_marca_itens_fora_da_barra(cliente, menu_com_tela_futura):
     html = cliente.get("/visao-geral").text
-    assert re.search(r'<li class="fora-da-barra"><a href="/fazenda"', html)  # sem tela: nunca na barra
+    assert re.search(r'<li class="fora-da-barra"><a href="/em-breve"', html)  # sem tela: nunca na barra
     assert re.search(r'<li><a href="/agenda"', html) and re.search(r'<li><a href="/perda"', html)
     # com agenda, perda e relatórios (G1, G2, G7) são 7 telas: as 4 primeiras na barra, o resto no "Mais"
     assert re.search(r'<li class="fora-da-barra"><a href="/bula"', html)
@@ -279,10 +285,10 @@ def test_menu_com_mais_tem_um_so_aria_current(cliente, monkeypatch):
 
 
 # --- R1: 404 em HTML para telas; JSON para API e parciais -----------------------------------------
-def test_tela_futura_mostra_em_construcao_no_layout(cliente):
-    r = cliente.get("/fazenda")
+def test_tela_futura_mostra_em_construcao_no_layout(cliente, menu_com_tela_futura):
+    r = cliente.get("/em-breve")
     assert r.status_code == 404 and r.headers["content-type"].startswith("text/html")
-    assert '<nav class="menu"' in r.text and "em construção" in r.text and "<h1>Fazenda</h1>" in r.text
+    assert '<nav class="menu"' in r.text and "em construção" in r.text and "<h1>Em breve</h1>" in r.text
 
 
 def test_endereco_desconhecido_mostra_pagina_nao_encontrada(cliente):
@@ -296,12 +302,12 @@ def test_api_e_parciais_seguem_em_json(cliente, rota):
     assert r.status_code == 404 and r.json() == {"detail": "Not Found"}
 
 
-def test_404_com_banco_fora_nao_vira_500(cliente, monkeypatch):
+def test_404_com_banco_fora_nao_vira_500(cliente, monkeypatch, menu_com_tela_futura):
     def cai():
         raise psycopg.OperationalError("banco fora")
 
     monkeypatch.setattr(dados, "listar_fazendas", cai)
-    r = cliente.get("/fazenda")
+    r = cliente.get("/em-breve")
     assert r.status_code == 404 and r.json() == {"detail": "Not Found"}
 
 
