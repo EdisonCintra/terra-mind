@@ -39,6 +39,17 @@ class ErpCliente(Protocol):
     async def retomar_os(self, os_id: int, plano_id: int) -> dict: ...
     async def alocar_maquina(self, os_id: int, maquina_id: int, plano_id: int) -> dict: ...
     async def reservar_estoque(self, insumo_id: int, quantidade: float, plano_id: int) -> dict: ...
+    async def abrir_os(
+        self,
+        talhao_id: int,
+        insumo_id: int,
+        dose_por_ha: float,
+        inicio: datetime,
+        duracao_horas: float,
+        maquina_id: int,
+        operador_id: int | None,
+        pedido_por: str,
+    ) -> dict: ...
 
 
 def _causa(e: BaseException) -> str:
@@ -160,4 +171,19 @@ class ErpMcp:
     async def reservar_estoque(self, insumo_id, quantidade, plano_id):
         return await self._escrever(
             "reservar_estoque", insumo_id=insumo_id, quantidade=quantidade, plano_id=plano_id
+        )
+
+    async def abrir_os(
+        self, talhao_id, insumo_id, dose_por_ha, inicio, duracao_horas, maquina_id, operador_id, pedido_por
+    ):
+        return await self._escrever(
+            "abrir_os",
+            talhao_id=talhao_id,
+            insumo_id=insumo_id,
+            dose_por_ha=dose_por_ha,
+            inicio=inicio,
+            duracao_horas=duracao_horas,
+            maquina_id=maquina_id,
+            operador_id=operador_id,
+            pedido_por=pedido_por,
         )

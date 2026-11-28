@@ -253,6 +253,26 @@ class PlanoProposto(BaseModel):
     mensagem: str = Field(description="Mensagem curta ao gerente, em português")
 
 
+class PropostaOS(BaseModel):
+    """O que o Agente Operacional propõe para uma OS nova pedida no chat. O código confere tudo antes de
+    mostrar ao gerente (`agents.abertura_os`), e o ERP confere de novo ao gravar."""
+
+    pronta: bool = Field(description="true só se todos os campos da OS estão preenchidos com dados lidos")
+    talhao_id: int | None = None
+    insumo_id: int | None = None
+    dose_por_ha: float | None = Field(None, description="Na unidade do insumo (L/ha ou kg/ha)")
+    inicio: AwareDatetime | None = Field(None, description="ISO 8601 com fuso, ex.: 2026-11-04T07:00-03:00")
+    duracao_horas: float | None = None
+    maquina_id: int | None = None
+    operador_id: int | None = None
+    justificativa: str = Field(
+        "", description="Por que este horário, esta máquina e este operador; de onde veio a dose"
+    )
+    falta: list[str] = Field(
+        default_factory=list, description="O que perguntar ao gerente quando pronta=false"
+    )
+
+
 class Veredito(BaseModel):
     aprovado: bool
     motivos: list[str] = []

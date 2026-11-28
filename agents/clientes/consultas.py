@@ -102,7 +102,7 @@ class ConsultasPostgres:
     async def talhoes(self, escopo):
         return await self._todas(
             f"""
-            SELECT t.id, t.nome, f.nome AS fazenda, t.area_ha, t.cultura, t.estagio_fenologico,
+            SELECT t.id, t.nome, t.fazenda_id, f.nome AS fazenda, t.area_ha, t.cultura, t.estagio_fenologico,
                    t.data_plantio, t.tipo_solo
             FROM erp.talhoes t LEFT JOIN erp.fazendas f ON f.id = t.fazenda_id
             WHERE t.ativo AND {_filtro("t")}

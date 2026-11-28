@@ -3,7 +3,8 @@
 Três regras de ouro (plano do Felipe, seção 7.4):
 1. A transição de status é checada no próprio `UPDATE` (o banco resolve a corrida).
 2. Toda escrita grava uma linha em `agente.auditoria`, na mesma transação.
-3. O que compromete recursos só passa com plano aprovado (`agente.planos`).
+3. O que compromete recursos só passa com plano aprovado (`agente.planos`). A exceção é `abrir_os`: a OS
+   nova é pedida pelo próprio gerente no chat, e a aprovação é a confirmação dele (conferida no `agents`).
 
 Sempre devolvem `{"ok": true, ...}` ou `{"ok": false, "erro": "<mensagem>"}`.
 """
@@ -13,6 +14,7 @@ from typing import Any
 
 import psycopg
 
+from erp_mcp import ordens
 from erp_mcp.db import conectar, para_json, registrar_auditoria
 
 _NAO_APROVADO = {"ok": False, "erro": "plano não aprovado"}
@@ -248,3 +250,39 @@ def reservar_estoque(insumo_id: int, quantidade: float, plano_id: int) -> dict[s
             conn, plano, "reservar_estoque", antes, depois, insumo_id=insumo_id, quantidade=quantidade
         )
         return {"ok": True, "insumo": para_json(depois)}
+
+
+def abrir_os(
+    talhao_id: int,
+    insumo_id: int,
+    dose_por_ha: float,
+    inicio: datetime,
+    duracao_horas: float,
+    maquina_id: int,
+    operador_id: int | None,
+    pedido_por: str,
+) -> dict[str, Any]:
+    """Abre uma OS de pulverização `agendada`, pedida pelo gerente no chat e confirmada por ele.
+
+    As mesmas regras da criação pelo painel (`erp_mcp.ordens.validar_os`): talhão, produto, máquina e
+    operador ativos e da mesma fazenda; pulverizador disponível e livre no horário; estoque para a área do
+    talhão. Além disso, `inicio` precisa estar no futuro. A auditoria fica com o nó `assistente` e
+    `pedido_por` (ex.: "Maria (telegram:111)").
+    """
+    if dose_por_ha <= 0 or duracao_horas <= 0:
+        return {"ok": False, "erro": "dose e duração precisam ser maiores que zero"}
+    if inicio.tzinfo is None:
+        return {"ok": False, "erro": "informe o início com fuso (ISO 8601)"}
+    if inicio <= datetime.now(UTC):
+        return {"ok": False, "erro": "o início da OS já passou"}
+    return ordens.criar_os(
+        talhao_id,
+        insumo_id,
+        dose_por_ha,
+        inicio,
+        duracao_horas,
+        maquina_id,
+        operador_id,
+        por=f"{pedido_por} pelo chat",
+        no="assistente",
+    )

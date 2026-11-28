@@ -24,6 +24,7 @@ FERRAMENTAS = [
     escrita.retomar_os,
     escrita.alocar_maquina,
     escrita.reservar_estoque,
+    escrita.abrir_os,
 ]
 
 for funcao in FERRAMENTAS:

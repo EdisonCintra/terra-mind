@@ -308,12 +308,36 @@ def criar_incidente() -> int:
         ).fetchone()[0]
 
 
+# ---------- abrir_os (chat) ----------
+
+
+def test_abrir_os_cria_agendada_com_auditoria_do_assistente():
+    inicio = (agora() + timedelta(days=3)).replace(hour=7, minute=0, second=0, microsecond=0)
+    r = escrita.abrir_os(1, 1, 0.3, inicio, 4, 2, 2, "Maria (telegram:111)")
+    assert r["ok"] is True and r["os"]["status"] == "agendada" and r["os"]["maquina_id"] == 2
+    [aud] = consultar("SELECT no, justificativa FROM agente.auditoria WHERE acao = 'criar_os'")
+    assert aud["no"] == "assistente" and "Maria (telegram:111)" in aud["justificativa"]
+
+
+def test_abrir_os_recusa_inicio_no_passado_e_maquina_ocupada():
+    assert escrita.abrir_os(1, 1, 0.3, agora() - timedelta(hours=1), 4, 2, None, "x")["ok"] is False
+    os1 = consultar("SELECT inicio_previsto FROM erp.ordens_servico WHERE id = 1")[0]["inicio_previsto"]
+    ocupada = escrita.abrir_os(1, 1, 0.3, os1 + timedelta(hours=1), 4, 1, None, "x")
+    assert ocupada["ok"] is False and "OS 1" in ocupada["erro"]
+    assert consultar("SELECT count(*) AS n FROM agente.auditoria WHERE acao = 'criar_os'")[0]["n"] == 0
+
+
+def test_abrir_os_recusa_maquina_de_outra_fazenda():
+    inicio = agora() + timedelta(days=3)
+    assert escrita.abrir_os(1, 1, 0.3, inicio, 4, 3, None, "x")["ok"] is False
+
+
 # ---------- servidor MCP pelo protocolo ----------
 
 
 def test_servidor_nao_expoe_janelas_validas():
     nomes = {f.__name__ for f in FERRAMENTAS}
-    assert "janelas_validas" not in nomes and "retomar_os" in nomes and len(nomes) == 14
+    assert "janelas_validas" not in nomes and "retomar_os" in nomes and len(nomes) == 15
 
 
 async def test_servidor_responde_pelo_streamable_http():

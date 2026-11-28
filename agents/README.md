@@ -133,9 +133,24 @@ Texto livre nos canais vai para o [`assistente.py`](assistente.py), um agente qu
 | `perguntar_a_bula` | o Pergunte à bula, com a citação conferida em código |
 
 - **Escopo por fazenda (contrato 20).** O canal manda o contato (`telegram:<chat>`, `whatsapp:<telefone>`, `terminal`). Gerente em `erp.gerentes` vê só as fazendas dele; o terminal vê todas; os chats extras (`TELEGRAM_CHATS_BULA`, `WHATSAPP_NUMEROS_BULA`) só consultam a bula.
-- **Só consulta.** Responder plano continua pelos botões (ou `sim`/`opcoes`/`nao`); editar OS, pelo painel.
+- **Uma escrita: abrir OS** (abaixo). Fora ela, só consulta: responder plano continua pelos botões (ou `sim`/`opcoes`/`nao`); editar, remarcar ou cancelar OS, pelo painel.
 - **Conversa.** Cada contato tem uma conversa de 30 min sem mensagem, para perguntas de seguimento ("e a OS 2?").
 - `MODEL_ASSISTENTE` escolhe o modelo.
+
+### Abrir OS pelo chat ([`abertura_os.py`](abertura_os.py))
+
+O gerente pede ("abre uma pulverização de Abacus HC no Talhão 1 amanhã às 7h, 0,3 L/ha") e o assistente chama `abrir_ordem_servico`, que roda o **Agente Operacional** no modo "nova OS" (`criar_para_nova_os` em [`agentes/operacional/agent.py`](agentes/operacional/agent.py), mesmo `MODEL_OPERACIONAL`). Ele olha:
+
+| Recurso | Ferramenta | O que decide |
+| --- | --- | --- |
+| Insumos | `estoque_insumos`, `perguntar_a_bula` | produto da fazenda do talhão, estoque para área × dose, dose da bula se o gerente não disse |
+| Máquinas | `maquinas_livres` | pulverizador livre no horário (o pedido, ou o primeiro livre) |
+| Pessoas | `operadores_do_talhao`, `listar_ordens` | o operador pedido, ou o com menos OS no período |
+| Horário | `janelas_de_aplicacao` | sem horário pedido, o primeiro início bom pela bula e pela previsão |
+
+A `PropostaOS` volta para o código, que confere (talhão, produto, máquina e operador do escopo e da mesma fazenda; estoque; início no futuro entre 06:00 e 18:00; máquina livre). Recusada, o Operacional tenta mais uma vez com o motivo. Faltando dado (dose em faixa, talhão ambíguo), volta `falta` e o assistente pergunta.
+
+A proposta fica pendente na conversa; o assistente mostra o resumo e pede **CONFIRMO** (não "sim", que no WhatsApp já responde plano). `confirmar_ordem_servico` só grava se: há proposta pendente, ela veio de uma mensagem **anterior** e a mensagem atual tem uma confirmação explícita sem negação. Aí confere de novo e grava pela ferramenta MCP `abrir_os`, que repete as regras do painel no SQL ([`erp_mcp/ordens.py`](../erp_mcp/ordens.py), compartilhado com o painel) e audita com o nó `assistente` e quem pediu.
 
 ### Guardrails (NeMo Guardrails)
 

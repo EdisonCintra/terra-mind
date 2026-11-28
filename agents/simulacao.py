@@ -299,6 +299,32 @@ class FakeErp:
         self.estoque[insumo_id] -= quantidade
         return {"ok": True}
 
+    async def abrir_os(
+        self, talhao_id, insumo_id, dose_por_ha, inicio, duracao_horas, maquina_id, operador_id, pedido_por
+    ):
+        self.escritas.append(("abrir_os", talhao_id, insumo_id, inicio, maquina_id, pedido_por))
+        if "abrir_os" in self.falhar_em:
+            return {"ok": False, "erro": "Pulverizador A já está na OS 1 nesse horário."}
+        livres = await self.disponibilidade_maquinas(inicio, inicio + timedelta(hours=duracao_horas))
+        if maquina_id not in {m["id"] for m in livres}:
+            return {"ok": False, "erro": f"máquina {maquina_id} não está livre nesse horário"}
+        if self.estoque.get(insumo_id, 0) < self.talhoes[talhao_id]["area_ha"] * dose_por_ha:
+            return {"ok": False, "erro": "estoque insuficiente"}
+        os_id = max(self.os, default=0) + 1
+        self.os[os_id] = {
+            "id": os_id,
+            "talhao_id": talhao_id,
+            "tipo_operacao": "pulverizacao",
+            "insumo_id": insumo_id,
+            "dose_por_ha": dose_por_ha,
+            "inicio_previsto": inicio,
+            "duracao_horas": duracao_horas,
+            "maquina_id": maquina_id,
+            "operador_id": operador_id,
+            "status": "agendada",
+        }
+        return {"ok": True, "os": self.os[os_id]}
+
 
 # ---------------------------------------------------------------- conhecimento, canal, repositório
 
