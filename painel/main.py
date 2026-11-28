@@ -34,7 +34,7 @@ log = logging.getLogger("painel")
 AQUI = Path(__file__).parent
 FUSO = dados.FUSO
 FALHA_AGENTS = "Não consegui falar com o serviço de agentes. Tente de novo em instantes."
-RESPOSTAS = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
+RESPOSTAS = {"SIM": "Proposta aceita", "NAO": "Data original mantida", "OPCOES": "Próxima opção solicitada"}
 CENARIO = "chuva_80mm.json"  # contrato 14
 TALHAO_DEMO = 1  # a OS do cenário está no Talhão 1; sem isso o replay abre um incidente vazio no Talhão 2
 

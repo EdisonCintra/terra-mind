@@ -274,6 +274,15 @@ class FakeErp:
         self.os[os_id].update(status="reagendada", inicio_previsto=novo_inicio)
         return {"ok": True}
 
+    async def retomar_os(self, os_id, plano_id):
+        self.escritas.append(("retomar_os", os_id, plano_id))
+        if "retomar_os" in self.falhar_em:
+            return {"ok": False, "erro": f"a data original da OS {os_id} já passou"}
+        if self.os[os_id]["status"] != "suspensa_preventiva":
+            return {"ok": False, "erro": f"OS {os_id} não está suspensa"}
+        self.os[os_id]["status"] = "agendada"
+        return {"ok": True, "os": self.os[os_id]}
+
     async def alocar_maquina(self, os_id, maquina_id, plano_id):
         self.escritas.append(("alocar_maquina", os_id, maquina_id, plano_id))
         if not self.planos_aprovados(plano_id):

@@ -350,7 +350,8 @@ def resumo(antes: Any, depois: Any) -> list[str]:
 SITUACOES_IMPACTO = {
     "evitada": "Perda evitada",
     "suspensa": "Aguardando decisão",
-    "recusada": "Proposta recusada",
+    "recusada": "Opções esgotadas",
+    "mantida": "Data original mantida",
     "decisao_manual": "Decisão manual",
 }
 

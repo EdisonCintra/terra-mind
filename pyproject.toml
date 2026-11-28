@@ -23,6 +23,10 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.1.6",
     "asyncpg>=0.29",
     "tzdata>=2024.1",
+    "langfuse>=4.15.6",
+    "openinference-instrumentation-google-adk>=1.1.9",
+    "prompt-toolkit>=3.0.53",
+    "nemoguardrails>=0.25.0",
 ]
 
 [tool.uv]

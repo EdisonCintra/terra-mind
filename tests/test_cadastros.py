@@ -466,9 +466,19 @@ def test_edicao_nao_deixa_roubar_a_maquina_de_outra_os(cliente):
     assert r.status_code == 422 and "já está na OS 3" in r.text
 
 
+def _incidente_em_andamento_na_os(os_id: int) -> None:
+    sql(
+        "INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status)"
+        " SELECT talhao_id, '[]'::jsonb, '[]'::jsonb, 'aguardando_aprovacao'"
+        " FROM erp.ordens_servico WHERE id = %s",
+        os_id,
+    )
+
+
 def test_so_edita_ou_cancela_os_agendada_ou_reagendada(cliente):
     sql("UPDATE erp.ordens_servico SET status = 'executada' WHERE id = 1")
     sql("UPDATE erp.ordens_servico SET status = 'suspensa_preventiva' WHERE id = 2")
+    _incidente_em_andamento_na_os(2)  # o plano ainda vai decidir a OS 2
     form = {
         "dose_por_ha": "0,3",
         "inicio": f"{AGORA + timedelta(days=20):%Y-%m-%dT%H:%M}",
@@ -483,6 +493,33 @@ def test_so_edita_ou_cancela_os_agendada_ou_reagendada(cliente):
         (1, "executada"),
         (2, "suspensa_preventiva"),
     ]
+
+
+def test_os_suspensa_sem_incidente_em_andamento_pode_ser_remarcada(cliente):
+    """Opções esgotadas ou decisão manual: sem isto a OS ficaria presa em `suspensa_preventiva`."""
+    sql("UPDATE erp.ordens_servico SET status = 'suspensa_preventiva' WHERE id = 2")
+    assert "Remarcar" in cliente.get("/cadastros/os").text
+    nova = AGORA + timedelta(days=21)
+    form = {
+        "dose_por_ha": "0,3",
+        "inicio": f"{nova:%Y-%m-%dT%H:%M}",
+        "duracao_horas": "4",
+        "maquina_id": "1",
+        "operador_id": "",
+    }
+    r = cliente.post("/cadastros/os/2", data=form, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    assert sql("SELECT status FROM erp.ordens_servico WHERE id = 2") == [("agendada",)]
+    assert sql("SELECT acao FROM agente.auditoria WHERE acao = 'remarcar_os_suspensa'") == [
+        ("remarcar_os_suspensa",)
+    ]
+
+
+def test_os_suspensa_sem_incidente_em_andamento_pode_ser_cancelada(cliente):
+    sql("UPDATE erp.ordens_servico SET status = 'suspensa_preventiva' WHERE id = 2")
+    r = cliente.post("/cadastros/os/2/cancelar", follow_redirects=False)
+    assert r.headers["location"] == "/cadastros/os?ok=cancelada"
+    assert sql("SELECT status FROM erp.ordens_servico WHERE id = 2") == [("cancelada",)]
 
 
 def test_cancela_os_libera_a_maquina_e_audita(cliente):

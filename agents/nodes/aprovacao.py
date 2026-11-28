@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from agents.deps import Dependencias
 from agents.modelos import RespostaGerente
-from agents.nodes.comum import alertar, alvo_das_os, auditar
+from agents.nodes.comum import alertar, alvo_das_os, auditar, ids, situar_impactos
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def criar_aprovacao(deps: Dependencias):
 
 
 async def _recusar(deps: Dependencias, ctx: Context, motivo: str, aviso: str) -> Event:
-    """Proposta recusada (ou opções esgotadas): encerra o incidente, sem decisão manual.
+    """Opções de remarcação esgotadas: encerra o incidente, sem decisão manual.
 
     As OS já suspensas continuam `suspensa_preventiva`; o gerente é avisado e o Monitor volta a poder
     abrir incidente no talhão.
@@ -91,7 +91,58 @@ def criar_rota_resposta(deps: Dependencias):
                 f"as opções de remarcação se esgotaram ({feitos} re-planejamentos)",
                 "As opções de remarcação se esgotaram sem aprovação.",
             )
-        quem = r.respondido_por
-        return await _recusar(deps, ctx, f"proposta recusada por {quem}", f"Proposta recusada por {quem}.")
+        ctx.state["mantida_por"] = r.respondido_por
+        return Event(route="MANTER")
 
     return rota_resposta
+
+
+def criar_manter_data(deps: Dependencias):
+    """ "Manter data original" (resposta NAO): o gerente recusa a nova data e assume o risco do clima.
+
+    Cada OS suspensa volta a `agendada` no horário de antes (`retomar_os` no ERP, com auditoria). A que não
+    puder voltar (data original já passou, máquina ocupada no horário) segue suspensa e vai para a decisão
+    manual, para o gerente remarcar ou cancelar pelo painel.
+    """
+
+    async def manter_data(ctx: Context, node_input):
+        plano_id = ctx.state["plano_id"]
+        quem = ctx.state.get("mantida_por") or "gerente"
+        mantidas: list[int] = []
+        falhas: list[str] = []
+        for os_id in ctx.state.get("os_suspensas") or []:
+            try:
+                resultado = await deps.erp.retomar_os(os_id, plano_id)
+            except Exception as e:  # noqa: BLE001 - ERP fora do ar: a OS segue suspensa
+                resultado = {"ok": False, "erro": f"{type(e).__name__}: {e}"}
+            if resultado.get("ok"):
+                mantidas.append(os_id)
+            else:
+                falhas.append(f"OS {os_id}: {resultado.get('erro')}")
+        await auditar(
+            deps,
+            ctx,
+            "manter_data",
+            "manter_data_original",
+            depois={"plano_id": plano_id, "mantidas": mantidas, "falhas": falhas},
+            justificativa=f"{quem} manteve a data original, assumindo o risco do clima",
+        )
+        ctx.state["os_suspensas"] = [o for o in ctx.state.get("os_suspensas") or [] if o not in mantidas]
+        if falhas:
+            ctx.state["motivo_manual"] = {
+                "codigo": "manter_data_falhou",
+                "detalhe": "; ".join(falhas),
+                "mantidas": mantidas,
+            }
+            return Event(route="falhou")
+        await situar_impactos(deps, ctx, "mantida", de={"suspensa"}, plano_id=plano_id)
+        ctx.state["motivo_encerramento"] = f"data original mantida por {quem}, com o risco do clima"
+        await alertar(
+            deps,
+            ctx,
+            f"Data original mantida por {quem}: OS {ids(mantidas)} voltou(aram) a AGENDADA(S) no horário de "
+            "antes. O risco do clima apontado pela bula continua valendo.",
+        )
+        return Event(route="ok")
+
+    return manter_data

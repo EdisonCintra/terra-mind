@@ -47,6 +47,7 @@ def texto_decisao_manual(estado) -> str:
         "plano_reprovado": "não encontrei uma janela que passe no Validador",
         "janela_invalida": "a janela aprovada deixou de valer",
         "resposta_invalida": "a resposta recebida não foi reconhecida",
+        "manter_data_falhou": f"não consegui manter a data original ({motivo.get('detalhe')})",
     }
     razao = razoes.get(codigo, codigo or "motivo desconhecido")
     return f"Incidente {incidente}: {alvo}; {razao}. Decida no painel."

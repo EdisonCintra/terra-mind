@@ -73,6 +73,7 @@ def julgar(caso: Caso, r: ResultadoBula) -> list[str]:
 
 
 async def avaliar(numeros: set[int] | None = None) -> int:
+    from agents import observabilidade
     from agents.bula import PergunteBula
     from agents.clientes.conhecimento import ConhecimentoHttp
     from agents.config import Settings
@@ -80,6 +81,7 @@ async def avaliar(numeros: set[int] | None = None) -> int:
     from agents.simulacao import FakeCanal, FakeErp, FakeRepo
 
     settings = Settings()
+    observabilidade.configurar(settings)  # cada pergunta vira um trace `perguntar-bula` no Langfuse
     conhecimento = ConhecimentoHttp(settings.conhecimento_url, timeout_s=60)
     deps = Dependencias(
         settings=settings, erp=FakeErp(), conhecimento=conhecimento, repo=FakeRepo(), canal=FakeCanal()
@@ -98,6 +100,7 @@ async def avaliar(numeros: set[int] | None = None) -> int:
         for p in problemas:
             print(f"      -> {p}")
     await conhecimento.fechar()
+    observabilidade.encerrar()
     print(f"\n{len(casos) - falhas} de {len(casos)} passaram")
     return 1 if falhas else 0
 

@@ -312,7 +312,8 @@ def test_achatar_junta_linhas_e_corta_no_limite():
         ("Aceitar Proposta", "SIM"),
         ("não", "NAO"),
         ("NAO", "NAO"),
-        ("Recusar Proposta", "NAO"),
+        ("Manter data original", "NAO"),
+        ("manter", "NAO"),
         ("Opções", "OPCOES"),
         ("Ver próxima opção", "OPCOES"),
         ("sim, mas e a bula?", None),
@@ -373,7 +374,7 @@ async def test_gerente_escreve_sim_ou_nao_e_vale_como_clique(twilio):
     await aprovacao_enviada(twilio, c, inc, p)
     await c.processar(texto("não", "SMa"))
     ao_responder.assert_awaited_once_with(Resposta(inc, p, "NAO", "Maria Gerente"))
-    assert twilio.textos(GERENTE_EXEMPLO)[-1] == "Proposta recusada por Maria Gerente."
+    assert twilio.textos(GERENTE_EXEMPLO)[-1] == "Data original mantida por Maria Gerente."
 
 
 async def test_sim_sem_plano_esperando_nao_decide_nada(twilio):
@@ -467,8 +468,8 @@ async def test_pergunta_do_gerente_roda_em_segundo_plano_e_responde(twilio):
     pergunta = "Posso aplicar Abacus HC com vento de 12 km/h?"
     await c.processar(texto(pergunta))
     await c.aguardar()
-    assert twilio.textos(GERENTE_EXEMPLO) == ["Consultando as bulas…", resposta]
-    c.ao_perguntar.assert_awaited_once_with(pergunta, "Maria Gerente")
+    assert twilio.textos(GERENTE_EXEMPLO) == ["Consultando…", resposta]
+    c.ao_perguntar.assert_awaited_once_with(pergunta, "Maria Gerente", contato=f"whatsapp:{GERENTE_EXEMPLO}")
 
 
 async def test_numero_desconhecido_nao_gasta_llm(twilio):
@@ -653,7 +654,7 @@ def test_modelos_do_twilio_tem_botoes_fixos_e_corpo_com_a_variavel():
     assert [(a["id"], a["title"]) for a in quick["actions"]] == [
         ("SIM", "Aceitar Proposta"),
         ("OPCOES", "Ver próxima opção"),
-        ("NAO", "Recusar Proposta"),
+        ("NAO", "Manter data original"),
     ]
     assert all(len(a["title"]) <= 20 for a in quick["actions"])
     assert tm.modelo_aviso()["types"]["twilio/text"]["body"] == "{{1}}"

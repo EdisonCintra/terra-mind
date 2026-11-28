@@ -179,6 +179,64 @@ def test_reagendar_repetido_falha():
     assert repetido["ok"] is False and "não está suspensa" in repetido["erro"]
 
 
+def _suspensa_com_plano_recusado(os_id: int = 1) -> int:
+    """OS suspensa pelo incidente de um plano que o gerente respondeu sem aprovar (Manter data original)."""
+    plano = criar_plano(aprovado=False)
+    inc = consultar("SELECT incidente_id FROM agente.planos WHERE id = %s", plano)[0]["incidente_id"]
+    escrita.suspender_os(os_id, inc, "x")
+    with psycopg.connect(DATABASE_URL) as conn:
+        conn.execute("UPDATE agente.planos SET respondido_em = now() WHERE id = %s", (plano,))
+    return plano
+
+
+def _mover_os_para(os_id: int, inicio: datetime) -> None:
+    with psycopg.connect(DATABASE_URL) as conn:
+        conn.execute("UPDATE erp.ordens_servico SET inicio_previsto = %s WHERE id = %s", (inicio, os_id))
+
+
+def test_retomar_os_mantem_a_data_original_e_audita():
+    original = agora() + timedelta(days=2)
+    _mover_os_para(1, original)
+    plano = _suspensa_com_plano_recusado()
+    r = escrita.retomar_os(1, plano)
+    assert r["ok"] is True and r["os"]["status"] == "agendada"
+    [os1] = consultar("SELECT status, inicio_previsto FROM erp.ordens_servico WHERE id = 1")
+    assert os1["status"] == "agendada" and os1["inicio_previsto"] == original
+    [aud] = consultar("SELECT * FROM agente.auditoria WHERE acao = 'retomar_os'")
+    assert aud["no"] == "manter_data" and "risco" in aud["justificativa"]
+    assert escrita.retomar_os(1, plano)["ok"] is False  # repetido: já não está suspensa
+
+
+def test_retomar_os_exige_plano_respondido_sem_aprovacao_do_mesmo_incidente():
+    _mover_os_para(1, agora() + timedelta(days=2))
+    plano = criar_plano(aprovado=False)  # ainda sem resposta
+    inc = consultar("SELECT incidente_id FROM agente.planos WHERE id = %s", plano)[0]["incidente_id"]
+    escrita.suspender_os(1, inc, "x")
+    assert "não foi recusado" in escrita.retomar_os(1, plano)["erro"]
+    with psycopg.connect(DATABASE_URL) as conn:  # SIM: aprovado não é "manter data"
+        conn.execute(
+            "UPDATE agente.planos SET respondido_em = now(), aprovado_por = 'gerente' WHERE id = %s", (plano,)
+        )
+    assert "não foi recusado" in escrita.retomar_os(1, plano)["erro"]
+    with psycopg.connect(DATABASE_URL) as conn:  # OS suspensa por fora deste incidente
+        conn.execute("UPDATE agente.planos SET aprovado_por = NULL WHERE id = %s", (plano,))
+        conn.execute("UPDATE erp.ordens_servico SET status = 'suspensa_preventiva' WHERE id = 2")
+    assert "não foi suspensa pelo incidente" in escrita.retomar_os(2, plano)["erro"]
+    assert (
+        consultar("SELECT status FROM erp.ordens_servico WHERE id = 1")[0]["status"] == "suspensa_preventiva"
+    )
+
+
+def test_retomar_os_com_data_original_vencida_falha():
+    _mover_os_para(1, agora() - timedelta(hours=1))
+    plano = _suspensa_com_plano_recusado()
+    r = escrita.retomar_os(1, plano)
+    assert r["ok"] is False and "já passou" in r["erro"]
+    assert (
+        consultar("SELECT status FROM erp.ordens_servico WHERE id = 1")[0]["status"] == "suspensa_preventiva"
+    )
+
+
 def test_reagendar_nao_mexe_em_os_agendada():
     plano = criar_plano(aprovado=True)
     r = escrita.reagendar_os(1, agora() + timedelta(days=3), plano)
@@ -255,7 +313,7 @@ def criar_incidente() -> int:
 
 def test_servidor_nao_expoe_janelas_validas():
     nomes = {f.__name__ for f in FERRAMENTAS}
-    assert "janelas_validas" not in nomes and len(nomes) == 13
+    assert "janelas_validas" not in nomes and "retomar_os" in nomes and len(nomes) == 14
 
 
 async def test_servidor_responde_pelo_streamable_http():

@@ -23,6 +23,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
 
+from agents import observabilidade as obs
 from agents.agentes._comum import chave_falha, criar_agente
 from agents.agentes.pergunte_bula.agent import CHAVE_VISTOS, criar_buscar_na_bula
 from agents.deps import Dependencias
@@ -147,6 +148,28 @@ class ExtratorLimites:
 
     async def extrair(self, produto: str) -> ResultadoExtracao:
         """Lê a bula, confere e grava. Nunca levanta: a tela da agenda mostra `erro`."""
+        with obs.rastrear(
+            obs.TRACE_EXTRAIR_LIMITES,
+            entrada={"produto": produto},
+            usuario=USER_ID,
+            tags=["limites"],
+            metadados={"produto": produto},
+        ) as rastro:
+            resultado = await self._extrair(produto)
+            rastro.saida(resultado.model_dump(mode="json"))
+            if resultado.erro:
+                rastro.sinalizar("ERROR", resultado.erro)
+                return resultado
+            rastro.pontuar(obs.SCORE_LIMITES_ACEITOS, len(resultado.limites), "NUMERIC")
+            rastro.pontuar(
+                obs.SCORE_LIMITES_DESCARTADOS,
+                len(resultado.descartados),
+                "NUMERIC",
+                "; ".join(resultado.descartados) or None,
+            )
+            return resultado
+
+    async def _extrair(self, produto: str) -> ResultadoExtracao:
         try:
             estado = await self._rodar(produto)
         except Exception as e:  # noqa: BLE001 - falha do LLM não derruba a tela

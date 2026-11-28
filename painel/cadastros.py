@@ -579,7 +579,11 @@ def ordens_da_fazenda(fazenda_id: int | None, limite: int = 100) -> list[dict[st
             SELECT os.id, os.talhao_id, os.insumo_id, os.maquina_id, os.operador_id, os.status,
                    os.inicio_previsto, os.duracao_horas, os.dose_por_ha, t.nome AS talhao, i.produto,
                    i.unidade,
-                   m.nome AS maquina, o.nome AS operador
+                   m.nome AS maquina, o.nome AS operador,
+                   (os.status = 'suspensa_preventiva' AND NOT EXISTS (
+                       SELECT 1 FROM agente.incidentes inc
+                       WHERE inc.talhao_id = os.talhao_id AND inc.status IN ('aberto', 'aguardando_aprovacao')
+                   )) AS suspensa_liberada
             FROM erp.ordens_servico os
             JOIN erp.talhoes t ON t.id = os.talhao_id
             LEFT JOIN erp.insumos i ON i.id = os.insumo_id

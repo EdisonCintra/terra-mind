@@ -19,7 +19,8 @@ Mesma interface do Telegram (`NotificationChannel`): os nós do `agents` não mu
 Destino (contrato 20): como no Telegram, o gerente da fazenda do incidente (`erp.gerentes.whatsapp_telefone`);
 `WHATSAPP_GERENTE_TELEFONE` é só o gerente padrão. Só o telefone de um gerente da fazenda do incidente aprova.
 
-Mensagem de texto de um gerente (ou de um número em `WHATSAPP_NUMEROS_BULA`) é uma pergunta à bula (G4).
+Mensagem de texto de um gerente (ou de um número em `WHATSAPP_NUMEROS_BULA`) é uma pergunta ao assistente,
+com o contato `whatsapp:<telefone>`: dados das fazendas desse gerente e a bula. Número extra só consulta a bula.
 Passo a passo do Twilio, do Sandbox à produção: `docs/whatsapp.md`.
 """
 
@@ -65,12 +66,15 @@ MARGEM_JANELA_MIN = 5  # trata a janela como fechada um pouco antes, para a mens
 ERROS_FORA_DA_JANELA = {63016}  # "freeform message outside the allowed window"
 
 AJUDA = (
-    "Pergunte à bula: escreva sua dúvida citando o produto.\n"
-    "Ex.: Posso aplicar Abacus HC com vento de 12 km/h?\n"
-    "Toda resposta vem com a bula e a página. Se a bula não trouxer o assunto, eu aviso."
+    "Pergunte o que quiser sobre a fazenda: OS, incidentes, previsão, estoque, máquinas, perda evitada,\n"
+    "melhor janela para aplicar e as bulas.\n"
+    "Ex.: Quais OS estão suspensas?\n"
+    "Ex.: Vai chover no Talhão 1 amanhã?\n"
+    "Ex.: Qual a carência do Brucia no milho?\n"
+    "O que vier da bula traz a página. Para responder um plano, use os botões."
 )
 NAO_AUTORIZADO = "Este número ainda não está liberado para perguntas. Peça ao gerente da fazenda."
-SEM_PERGUNTA = "As perguntas à bula ainda não estão ligadas neste canal."
+SEM_PERGUNTA = "As perguntas ainda não estão ligadas neste canal."
 SO_GERENTE_APROVA = "Só o gerente da fazenda deste incidente pode aprovar ou recusar o plano."
 PLANO_NAO_ACHADO = "Não achei o plano desta resposta. Responda pelo painel."
 COMO_RESPONDER = (
@@ -84,8 +88,9 @@ DECISOES_POR_TEXTO = {
     "aceitar": "SIM",
     "aceitar proposta": "SIM",
     "nao": "NAO",
-    "recusar": "NAO",
-    "recusar proposta": "NAO",
+    "manter": "NAO",
+    "manter data": "NAO",
+    "manter data original": "NAO",
     "opcoes": "OPCOES",
     "opcao": "OPCOES",
     "ver proxima opcao": "OPCOES",
@@ -471,7 +476,7 @@ class WhatsAppChannel(NotificationChannel):
         return telefone in await asyncio.to_thread(destinos.todos_os_chats_de_gerentes, CONTATO_WHATSAPP)
 
     async def _ao_escrever(self, telefone: int, quem: str, pergunta: str) -> None:
-        """Texto de um gerente = pergunta à bula. Roda em segundo plano (a resposta do LLM demora)."""
+        """Texto de um gerente = pergunta ao assistente. Roda em segundo plano (a resposta do LLM demora)."""
         if not pergunta:
             return
         if not await self._pode_perguntar(telefone):
@@ -489,12 +494,12 @@ class WhatsAppChannel(NotificationChannel):
         tarefa.add_done_callback(self._tarefas.discard)
 
     async def _responder_pergunta(self, telefone: int, pergunta: str, quem: str) -> None:
-        await self._responder(telefone, "Consultando as bulas…")
+        await self._responder(telefone, "Consultando…")
         try:
-            texto = await self.ao_perguntar(pergunta, quem)
+            texto = await self.ao_perguntar(pergunta, quem, contato=f"whatsapp:{telefone}")
         except Exception:
-            log.exception("falha ao responder a pergunta à bula")
-            texto = "Não consegui consultar as bulas agora. Tente de novo em instantes."
+            log.exception("falha ao responder a pergunta do chat")
+            texto = "Não consegui consultar agora. Tente de novo em instantes."
         await self._responder(telefone, texto)
 
     async def parar(self) -> None:

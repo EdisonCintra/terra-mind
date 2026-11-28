@@ -254,7 +254,7 @@ def test_operador_nao_ve_botoes_de_aprovacao(mundo):
     inc, plano = incidente()
     html_op = como("operador@exemplo.com").get("/parcial/pendentes").text
     html_g = como("gerente@exemplo.com").get("/parcial/pendentes").text
-    assert "Só o gerente aprova" in html_op and "/aprovacao/" not in html_op
+    assert "Só o gerente responde" in html_op and "/aprovacao/" not in html_op
     assert f"/aprovacao/{inc}/{plano}/SIM" in html_g
 
 

@@ -14,6 +14,7 @@ from datetime import timedelta
 
 from google.adk import Context, Event
 
+from agents import observabilidade as obs
 from agents.agentes._comum import ENTRADA_LLM, chave_falha
 from agents.deps import Dependencias
 from agents.modelos import Impacto, PlanoProposto, como_json
@@ -90,6 +91,12 @@ def criar_validador(deps: Dependencias):
             motivos = veredito.motivos
             if veredito.aprovado:
                 aprovado = plano
+        obs.pontuar(
+            obs.SCORE_PLANO_VALIDADO,
+            aprovado is not None,
+            "BOOLEAN",
+            f"volta {volta}" + (f": {'; '.join(motivos)}" if motivos else ""),
+        )
 
         if aprovado is None and volta < deps.settings.max_voltas_validador:
             ctx.state["motivo_reprovacao"] = "; ".join(motivos)

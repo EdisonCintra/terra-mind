@@ -1,7 +1,8 @@
 """Canal Telegram com botões inline e long polling (T8.3, contratos 6 e 7).
 
-Mensagem de texto do gerente (ou de um chat em TELEGRAM_CHATS_BULA) é uma pergunta à bula (G4):
-vai para o `ao_perguntar` do `agents` e a resposta volta com a bula e a página.
+Mensagem de texto do gerente (ou de um chat em TELEGRAM_CHATS_BULA) é uma pergunta ao assistente: vai
+para o `ao_perguntar` do `agents` com o contato (`telegram:<chat_id>`), que responde com os dados das
+fazendas desse gerente e com a bula (com a página). Chat extra, que não é gerente, só consulta a bula.
 
 Destino (F2, contrato 20): cada mensagem vai ao(s) gerente(s) da fazenda do incidente, lidos de
 `erp.gerentes` (`channels.destinos`). `GERENTE_CHAT_ID` é só o gerente padrão, para a fazenda que ainda
@@ -45,10 +46,12 @@ from channels.base import (
 log = logging.getLogger(__name__)
 
 AJUDA = (
-    "Pergunte à bula: escreva sua dúvida citando o produto.\n"
-    "Ex.: Posso aplicar Abacus HC com vento de 12 km/h?\n"
+    "Pergunte o que quiser sobre a fazenda: OS, incidentes, previsão, estoque, máquinas, perda evitada,\n"
+    "melhor janela para aplicar e as bulas.\n"
+    "Ex.: Quais OS estão suspensas?\n"
+    "Ex.: Vai chover no Talhão 1 amanhã?\n"
     "Ex.: Qual a carência do Brucia no milho?\n"
-    "Toda resposta vem com a bula e a página. Se a bula não trouxer o assunto, eu aviso."
+    "O que vier da bula traz a página. Para responder um plano, use os botões."
 )
 # Subida: o Telegram pode pedir para esperar (flood control, comum depois de vários reinícios) ou a rede
 # falhar por instantes. Em vez de derrubar o `agents`, o canal espera e tenta de novo, com limite.
@@ -57,7 +60,8 @@ ESPERAS_DE_REDE_S = (2, 5, 10, 20, 30)  # entre uma tentativa e outra, quando a 
 ESPERA_TOTAL_MAX_S = 300  # passou disso, desiste: o erro sobe como antes
 
 NAO_AUTORIZADO = "Este número ainda não está liberado para perguntas. Peça ao gerente da fazenda."
-SEM_PERGUNTA = "As perguntas à bula ainda não estão ligadas neste bot."
+SEM_PERGUNTA = "As perguntas ainda não estão ligadas neste bot."
+
 
 def montar_teclado(incidente_id: int, plano_id: int) -> InlineKeyboardMarkup:
     # Um botão por linha: mais fácil de tocar no celular.
@@ -158,7 +162,7 @@ class TelegramChannel(NotificationChannel):
             await update.effective_message.reply_text(AJUDA)
 
     async def _ao_escrever(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Mensagem de texto = pergunta à bula. Roda em segundo plano para não travar os botões."""
+        """Mensagem de texto = pergunta ao assistente. Roda em segundo plano para não travar os botões."""
         mensagem, chat = update.effective_message, update.effective_chat
         if mensagem is None or chat is None or not (mensagem.text or "").strip():
             return
@@ -174,15 +178,18 @@ class TelegramChannel(NotificationChannel):
             await mensagem.reply_text(AJUDA)
             return
         quem = update.effective_user.full_name if update.effective_user else str(chat.id)
-        context.application.create_task(self._responder_pergunta(mensagem, pergunta, quem))
+        context.application.create_task(self._responder_pergunta(mensagem, pergunta, quem, chat.id))
 
-    async def _responder_pergunta(self, mensagem, pergunta: str, quem: str) -> None:
-        await mensagem.reply_text("Consultando as bulas…")
+    async def _responder_pergunta(
+        self, mensagem, pergunta: str, quem: str, chat_id: int | None = None
+    ) -> None:
+        await mensagem.reply_text("Consultando…")
+        contato = f"telegram:{chat_id}" if chat_id is not None else None
         try:
-            texto = await self.ao_perguntar(pergunta, quem)
+            texto = await self.ao_perguntar(pergunta, quem, contato=contato)
         except Exception:
-            log.exception("falha ao responder a pergunta à bula")
-            texto = "Não consegui consultar as bulas agora. Tente de novo em instantes."
+            log.exception("falha ao responder a pergunta do chat")
+            texto = "Não consegui consultar agora. Tente de novo em instantes."
         await mensagem.reply_text(texto)
 
     async def _insistir(self, passo: str, acao: Callable[[], Awaitable[object]]) -> None:
@@ -208,7 +215,11 @@ class TelegramChannel(NotificationChannel):
                     raise
                 log.warning(
                     "Telegram: não consegui %s (%s). Tentativa %d de %d em %.0f s.",
-                    passo, e, tentativa + 1, TENTATIVAS_NA_SUBIDA, espera,
+                    passo,
+                    e,
+                    tentativa + 1,
+                    TENTATIVAS_NA_SUBIDA,
+                    espera,
                 )
                 esperado += espera
                 await self._dormir(espera)

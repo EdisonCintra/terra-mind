@@ -2,8 +2,8 @@
 
 O `agents` do Gustavo só conhece este módulo: ele chama `criar_canal(CHANNEL, ao_responder)`,
 depois `await canal.iniciar()` no `lifespan` e `await canal.parar()` no desligamento. A variável
-`CHANNEL` (`telegram`, `whatsapp` ou `painel`) escolhe a implementação, então trocar de canal no palco não
-muda uma linha do fluxo.
+`CHANNEL` (`telegram`, `whatsapp`, `painel` ou `terminal`) escolhe a implementação, então trocar de
+canal no palco não muda uma linha do fluxo.
 """
 
 from abc import ABC, abstractmethod
@@ -34,8 +34,9 @@ class Resposta:
 # r:{incidente_id}:{plano_id}:{resposta}. Cabe nos limites dos dois (Telegram 64 bytes, WhatsApp 256).
 PREFIXO = "r"
 # Rótulos com até 20 caracteres, o limite do botão do WhatsApp.
-ROTULOS = {"SIM": "Aceitar Proposta", "OPCOES": "Ver próxima opção", "NAO": "Recusar Proposta"}
-ECO = {"SIM": "Proposta aceita", "NAO": "Proposta recusada", "OPCOES": "Próxima opção solicitada"}
+# NAO = "Manter data original": a OS suspensa volta ao horário de antes e o gerente assume o risco do clima.
+ROTULOS = {"SIM": "Aceitar Proposta", "OPCOES": "Ver próxima opção", "NAO": "Manter data original"}
+ECO = {"SIM": "Proposta aceita", "NAO": "Data original mantida", "OPCOES": "Próxima opção solicitada"}
 DECISAO_JA_REGISTRADA = "Decisão já registrada para este plano. Nada foi alterado."
 
 
@@ -65,9 +66,11 @@ class DecisaoJaRegistrada(Exception):
 # Se o plano já foi respondido, lança `DecisaoJaRegistrada`.
 AoResponder = Callable[[Resposta], Awaitable[None]]
 
-# G4 nos canais: recebe (pergunta, quem perguntou) e devolve o texto pronto da resposta, com a
-# página da bula. O `agents` liga com `definir_ao_perguntar`; canal sem pergunta livre ignora.
-AoPerguntar = Callable[[str, str], Awaitable[str]]
+# Pergunta livre nos canais: recebe (pergunta, quem perguntou, contato=...) e devolve o texto pronto. O
+# `contato` identifica quem pergunta ("telegram:<chat_id>", "whatsapp:<telefone>", "terminal"): o `agents`
+# acha por ele as fazendas de que a pessoa é gerente e só responde com dados delas. O `agents` liga com
+# `definir_ao_perguntar`; canal sem pergunta livre ignora.
+AoPerguntar = Callable[..., Awaitable[str]]
 
 
 class NotificationChannel(ABC):
@@ -79,7 +82,7 @@ class NotificationChannel(ABC):
     campo_operador: str = "telegram_chat_id"
 
     def definir_ao_perguntar(self, ao_perguntar: AoPerguntar) -> None:
-        """Liga a pergunta livre (Pergunte à bula). Sem isso o canal só notifica e aprova."""
+        """Liga a pergunta livre (assistente do chat). Sem isso o canal só notifica e aprova."""
         self.ao_perguntar = ao_perguntar
 
     @abstractmethod
@@ -91,7 +94,7 @@ class NotificationChannel(ABC):
 
     @abstractmethod
     async def pedir_aprovacao(self, incidente_id: int, plano_id: int, texto: str) -> None:
-        """Mensagem com os botões Aceitar Proposta / Recusar Proposta / Ver próxima opção."""
+        """Mensagem com os botões Aceitar Proposta / Ver próxima opção / Manter data original."""
 
     @abstractmethod
     async def notificar_operador(self, chat_id: int, texto: str) -> None:
@@ -111,11 +114,12 @@ _CANAIS: dict[str, tuple[str, str]] = {
     "telegram": ("channels.telegram", "TelegramChannel"),
     "whatsapp": ("channels.whatsapp", "WhatsAppChannel"),
     "painel": ("channels.painel", "PainelChannel"),
+    "terminal": ("channels.terminal", "TerminalChannel"),
 }
 
 
 def criar_canal(nome: str, ao_responder: AoResponder) -> NotificationChannel:
-    """Cria o canal `nome` (`telegram`, `whatsapp` ou `painel`).
+    """Cria o canal `nome` (`telegram`, `whatsapp`, `painel` ou `terminal`).
 
     O `ao_responder` é entregue ao canal; no Telegram o clique do gerente chama essa função.
     """

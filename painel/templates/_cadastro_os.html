@@ -71,9 +71,10 @@
           <td data-rotulo="Operador">{{ o.operador or "—" }}</td>
           <td data-rotulo="Situação"><span class="status {{ status[1] }}">{{ status[0] }}</span></td>
           <td data-rotulo="Ações" class="acoes-linha">
-            {% if o.status in editaveis %}
-            <a href="/cadastros/os?editar={{ o.id }}">Editar</a>
+            {% if o.status in editaveis or o.suspensa_liberada %}
+            <a href="/cadastros/os?editar={{ o.id }}">{{ "Remarcar" if o.suspensa_liberada else "Editar" }}</a>
             <form method="post" action="/cadastros/os/{{ o.id }}/cancelar"><button type="submit" class="link">Cancelar OS</button></form>
+            {% elif o.status == "suspensa_preventiva" %}<span class="nota">Responda o plano</span>
             {% else %}<span class="nota">—</span>{% endif %}
           </td>
         </tr>

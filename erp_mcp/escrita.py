@@ -8,7 +8,7 @@ Três regras de ouro (plano do Felipe, seção 7.4):
 Sempre devolvem `{"ok": true, ...}` ou `{"ok": false, "erro": "<mensagem>"}`.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import psycopg
@@ -95,6 +95,72 @@ def reagendar_os(os_id: int, novo_inicio: datetime, plano_id: int) -> dict[str, 
             atual = antes["status"] if antes else "inexistente"
             return {"ok": False, "erro": f"OS {os_id} não está suspensa (status atual: {atual})"}
         _auditar_execucao(conn, plano, "reagendar_os", antes, depois)
+        return {"ok": True, "os": para_json(depois)}
+
+
+def retomar_os(os_id: int, plano_id: int) -> dict[str, Any]:
+    """Mantém a data original de uma OS suspensa (`suspensa_preventiva` → `agendada`, mesmo horário).
+
+    É o "Manter data original" do gerente: ele recusou a nova data e assume o risco do clima. Exige que o
+    plano tenha sido respondido sem aprovação e que a OS tenha sido suspensa pelo incidente desse plano.
+    Falha se a data original já passou ou se a máquina foi ocupada no horário enquanto a OS estava suspensa.
+    """
+    with conectar() as conn:
+        plano = conn.execute(
+            "SELECT id, incidente_id FROM agente.planos"
+            " WHERE id = %s AND respondido_em IS NOT NULL AND aprovado_por IS NULL",
+            (plano_id,),
+        ).fetchone()
+        if plano is None:
+            return {"ok": False, "erro": f"plano {plano_id} não foi recusado pelo gerente"}
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (plano_id,))
+        suspensa_pelo_incidente = conn.execute(
+            "SELECT 1 FROM agente.auditoria WHERE incidente_id = %s AND acao = 'suspender_os'"
+            " AND (depois->>'id')::int = %s",
+            (plano["incidente_id"], os_id),
+        ).fetchone()
+        if suspensa_pelo_incidente is None:
+            return {
+                "ok": False,
+                "erro": f"OS {os_id} não foi suspensa pelo incidente {plano['incidente_id']}",
+            }
+        antes = conn.execute("SELECT * FROM erp.ordens_servico WHERE id = %s FOR UPDATE", (os_id,)).fetchone()
+        if antes is None or antes["status"] != "suspensa_preventiva":
+            atual = antes["status"] if antes else "inexistente"
+            return {"ok": False, "erro": f"OS {os_id} não está suspensa (status atual: {atual})"}
+        if antes["inicio_previsto"] <= datetime.now(UTC):
+            return {"ok": False, "erro": f"a data original da OS {os_id} já passou"}
+        ocupada = conn.execute(
+            """
+            SELECT o.id FROM erp.ordens_servico o
+            WHERE o.maquina_id = %(maq)s AND o.id <> %(os)s AND o.status IN ('agendada', 'reagendada')
+              AND o.inicio_previsto < %(ini)s::timestamptz + %(dur)s * interval '1 hour'
+              AND %(ini)s::timestamptz < o.inicio_previsto + o.duracao_horas * interval '1 hour'
+            """,
+            {
+                "maq": antes["maquina_id"],
+                "os": os_id,
+                "ini": antes["inicio_previsto"],
+                "dur": antes["duracao_horas"],
+            },
+        ).fetchone()
+        if ocupada is not None:
+            return {
+                "ok": False,
+                "erro": f"a máquina da OS {os_id} foi ocupada pela OS {ocupada['id']} no horário",
+            }
+        depois = conn.execute(
+            "UPDATE erp.ordens_servico SET status = 'agendada' WHERE id = %s RETURNING *", (os_id,)
+        ).fetchone()
+        registrar_auditoria(
+            conn,
+            plano["incidente_id"],
+            "manter_data",
+            "retomar_os",
+            antes,
+            {**para_json(depois), "plano_id": plano_id},
+            f"gerente manteve a data original no plano {plano_id}, assumindo o risco do clima",
+        )
         return {"ok": True, "os": para_json(depois)}
 
 

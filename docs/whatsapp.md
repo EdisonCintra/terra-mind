@@ -14,7 +14,7 @@
 | Botões | 3 botões inline | 3 botões de resposta rápida do modelo, ou o gerente escreve `SIM`, `OPCOES` ou `NAO` |
 
 - **Dentro da janela de 24 h:** se `TWILIO_CONTENT_SID_APROVACAO` está definido, o plano vai no modelo de botões
-  (Aceitar Proposta, Ver próxima opção, Recusar Proposta); senão vai como texto terminando com "Responda SIM, OPCOES
+  (Aceitar Proposta, Ver próxima opção, Manter data original); senão vai como texto terminando com "Responda SIM, OPCOES
   ou NAO". Plano com mais de 1024 caracteres vai antes como texto.
 - **Fora da janela:** só o modelo aprovado (`TWILIO_CONTENT_SID_APROVACAO` ou `..._AVISO`). Sem ele, o envio
   falha com um erro que explica isso. O canal guarda a última mensagem recebida de cada telefone em
@@ -118,7 +118,8 @@ trial recusar criar o modelo, o script mostra o erro e o texto continua valendo)
 Criados por `python -m channels.twilio_modelos criar`:
 
 - **`terramind_aprovacao`** (`twilio/quick-reply`): corpo `{{1}}` e três botões com identificadores fixos:
-  `SIM` ("Aceitar Proposta"), `OPCOES` ("Ver próxima opção") e `NAO` ("Recusar Proposta").
+  `SIM` ("Aceitar Proposta"), `OPCOES` ("Ver próxima opção") e `NAO` ("Manter data original": a OS volta ao horário de antes, com o risco do clima).
+  Quem já criou o modelo antes desta mudança precisa criá-lo de novo, para o botão trocar de nome.
 - **`terramind_aviso`** (`twilio/text`): corpo `{{1}}`.
 
 `{{1}}` recebe o texto do plano ou do alerta. Para o modelo **aprovado** (fora da janela), o canal troca as quebras de

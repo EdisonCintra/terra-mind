@@ -14,7 +14,7 @@ Plano: [docs/plans/2026-10-29-agentes-gustavo.md](../docs/plans/2026-10-29-agent
 | Análises | OS suspensas | Agronômico e Operacional (**LLMs**) em paralelo; falha de um vira texto e o fluxo segue | `analise_agronomica`, `analise_operacional` |
 | Plano | Análises, janelas válidas | Supervisor (**LLM**) propõe; Validador (código) confere clima, horário, horizonte e máquina; até 2 voltas | `agente.planos` + mensagem com rodapé montado em código |
 | Aprovação | Plano | `RequestInput(interrupt_id="aprovacao:{plano_id}")` pausa a sessão | Telegram ou painel |
-| Resposta | Aceitar Proposta (`SIM`) / Recusar Proposta (`NAO`) / Ver próxima opção (`OPCOES`) | Aceitar → Executor; Ver próxima opção → novo plano (até 2; esgotadas, encerra); Recusar → encerra o incidente, com as OS suspensas e aviso ao gerente | — |
+| Resposta | Aceitar Proposta (`SIM`) / Ver próxima opção (`OPCOES`) / Manter data original (`NAO`) | Aceitar → Executor; Ver próxima opção → novo plano (até 2; esgotadas, encerra com as OS suspensas, que o gerente remarca ou cancela no painel); Manter data original → `retomar_os` volta cada OS a `agendada` no horário de antes (o gerente assume o risco; auditado) e encerra | — |
 | Execução | SIM | Revalida a janela; `reagendar_os`, `alocar_maquina`, `reservar_estoque`; avisa o operador | ERP atualizado, incidente `encerrado` |
 
 ```
@@ -34,7 +34,9 @@ rota_resposta ─┬─ SIM → executor ─┬─ ok → encerrar
                │                  ├─ revalidar → preparar_plano
                │                  └─ falhou → decisao_manual
                ├─ OPCOES (≤2) → preparar_plano
-               └─ NAO (recusou, ou opções esgotadas) → encerrar (OS seguem suspensas)
+               ├─ NAO (manter data original) → manter_data ─┬─ ok → encerrar (OS de volta a agendada)
+               │                                            └─ falhou → decisao_manual
+               └─ (opções esgotadas) → encerrar (OS seguem suspensas; remarcar ou cancelar no painel)
 ```
 
 Garantias, cada uma com teste:
@@ -109,6 +111,79 @@ uv run adk run agents/agentes/supervisor      # um agente sozinho
 | `APPROVAL_TIMEOUT_MIN` | `30` | Escalonamento de plano sem resposta (uma vez) |
 | `MAX_REPLANEJAMENTOS`, `MAX_VOLTAS_VALIDADOR` | `2`, `2` | Limites do fluxo |
 | `TIMEOUT_LLM_S`, `TENTATIVAS_LLM` | `90`, `2` | Timeout e novas tentativas de cada chamada à OpenAI (no cliente LiteLLM) |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | — | Liga a observabilidade; sem as duas, nada é exportado |
+| `LANGFUSE_BASE_URL` | `https://cloud.langfuse.com` | Região do Langfuse |
+| `LANGFUSE_TRACING_ENVIRONMENT` | `development` | Separa os traces de dev, staging e produção |
+| `LANGFUSE_RELEASE`, `LANGFUSE_SAMPLE_RATE`, `LANGFUSE_TRACING_ENABLED` | —, `1.0`, `true` | Versão do deploy, amostragem e chave geral |
+
+## Assistente do chat (Telegram, WhatsApp e terminal)
+
+Texto livre nos canais vai para o [`assistente.py`](assistente.py), um agente que responde dúvidas com o que o painel mostra. As ferramentas são só de leitura ([`clientes/consultas.py`](clientes/consultas.py)):
+
+| Ferramenta | O que traz |
+| --- | --- |
+| `listar_talhoes` | talhões, cultura, estágio, área |
+| `listar_ordens`, `detalhar_ordem` | OS por status, período e talhão; perdas e execução |
+| `listar_incidentes`, `detalhar_incidente` | incidentes, planos (mensagem e resposta), perdas e linha do tempo |
+| `planos_pendentes` | planos esperando o gerente |
+| `perda_evitada` | R$ por situação desde o início da safra |
+| `estoque_insumos`, `listar_maquinas` | estoque e o comprometido; máquinas e a próxima OS |
+| `previsao_talhao` | previsão do Monitor em blocos de 6 h |
+| `janelas_de_aplicacao` | faixas boas para aplicar (a conta da Agenda, G2) |
+| `perguntar_a_bula` | o Pergunte à bula, com a citação conferida em código |
+
+- **Escopo por fazenda (contrato 20).** O canal manda o contato (`telegram:<chat>`, `whatsapp:<telefone>`, `terminal`). Gerente em `erp.gerentes` vê só as fazendas dele; o terminal vê todas; os chats extras (`TELEGRAM_CHATS_BULA`, `WHATSAPP_NUMEROS_BULA`) só consultam a bula.
+- **Só consulta.** Responder plano continua pelos botões (ou `sim`/`opcoes`/`nao`); editar OS, pelo painel.
+- **Conversa.** Cada contato tem uma conversa de 30 min sem mensagem, para perguntas de seguimento ("e a OS 2?").
+- `MODEL_ASSISTENTE` escolhe o modelo.
+
+### Guardrails (NeMo Guardrails)
+
+[`guardrails.py`](guardrails.py) protege o chat contra prompt injection, jailbreak e uso fora do assunto, com duas barreiras `self check` do NeMo (política em português, no próprio módulo):
+
+| Barreira | Quando | Bloqueia |
+| --- | --- | --- |
+| Tamanho (código) | antes de tudo | mensagem com mais de 1000 caracteres, sem gastar LLM |
+| `self check input` | antes do agente | mudar ou revelar as instruções, trocar de papel (DAN, "modo desenvolvedor"), delimitadores falsos de sistema, texto codificado, dados de outra fazenda ou de outras pessoas, segredos, conteúdo perigoso e assunto fora da fazenda |
+| `self check output` | antes de mandar a resposta | vazamento de instruções ou segredos, obediência a instrução escondida nos dados (injeção indireta), troca de papel, links e comandos |
+
+- Mensagem barrada na entrada não chega ao agente nem às ferramentas. Resposta barrada na saída descarta a conversa (o histórico pode estar contaminado).
+- **Falha fechada:** se o guardrail não rodar (LLM fora do ar, NeMo não subiu), a mensagem é recusada.
+- O prompt do assistente também trata o que vem das ferramentas como dado, nunca como instrução.
+- No Langfuse: etapas `guardrail-entrada` e `guardrail-saida` (tipo `guardrail`) e o score `guardrail` (`permitida`, `bloqueada_entrada`, `bloqueada_saida`, `muito_longa`, `erro`).
+- A telemetria do NeMo para a NVIDIA fica desligada (`NEMO_GUARDRAILS_NO_USAGE_STATS=1`).
+- `uv run python -m agents.avaliar_guardrails` roda os casos de [`avaliacao/guardrails.yaml`](avaliacao/guardrails.yaml) contra o LLM real (legítimos, injeção direta, dados de terceiros, fora do assunto e saídas maliciosas).
+
+## Observabilidade (Langfuse)
+
+[`observabilidade.py`](observabilidade.py) liga o Langfuse no startup da API (e no `avaliar_bula`) e faz o flush no desligamento. O ADK é instrumentado pelo OpenInference (`GoogleADKInstrumentor`) sobre OpenTelemetry: cada nó do grafo vira um span `CHAIN`, cada agente um `AGENT`, cada chamada ao LLM uma `GENERATION` (modelo, tokens, custo e raciocínio) e cada ferramenta um `TOOL`, aninhados como rodaram. Nenhuma função do módulo levanta exceção: se o Langfuse cair, o fluxo segue igual.
+
+**Traces** (um por caso de uso; os nomes são contrato com dashboards e avaliadores, não mude sem migrar):
+
+| Trace | Quando | Sessão / usuário | Saída |
+| --- | --- | --- | --- |
+| `avaliar-incidente` | `POST /incidentes/{id}/iniciar`, do START até a pausa ou o fim | `incidente-<id>` / `terramind` | status, motivo, OS em risco e suspensas, plano, mensagem ao gerente |
+| `retomar-incidente` | Resposta do gerente (painel ou Telegram) | `incidente-<id>` / quem respondeu | idem |
+| `perguntar-bula` | `POST /bula/perguntar` (painel). Dentro do chat, vira etapa do `responder-chat` | — / `painel` | resposta conferida |
+| `extrair-limites` | `POST /limites/extrair` (contrato 26) | — / `terramind` | limites aceitos e descartados |
+| `responder-chat` | Pergunta livre no Telegram, WhatsApp ou terminal (assistente) | `chat-<id>` (uma por conversa) / quem perguntou | a resposta enviada |
+
+A sessão do Langfuse é a mesma do ADK: a avaliação e cada retomada de um incidente aparecem em sequência na visão de sessão. Todos os spans levam as tags `agents` + o caso de uso e os metadados (`incidente_id`, `plano_id`, `produto`), então os filtros acham também as generations.
+
+**Scores** (o que o código confere depois do LLM; base dos dashboards de qualidade):
+
+| Score | Tipo | Onde |
+| --- | --- | --- |
+| `desfecho-incidente` | categórico | status do incidente ao fim de cada execução |
+| `decisao-gerente` | categórico (`SIM`/`NAO`/`OPCOES`) | feedback humano, no trace da retomada |
+| `avaliacao-risco` | categórico (`violacao`/`sem_violacao`/`falhou`) | rota depois do Avaliador |
+| `violacoes-descartadas` | numérico | violações que os próprios números contradizem |
+| `plano-validado` | booleano | cada volta do Validador, com os motivos da reprovação |
+| `falha-agente` | categórico (nome do agente) | erro do LLM, saída fora do schema ou loop de ferramentas |
+| `bula-encontrou`, `citacoes-descartadas` | booleano, numérico | citação inventada pelo LLM e barrada em código |
+| `limites-aceitos`, `limites-descartados` | numérico | conferência dos limites lidos da bula |
+
+Falhas que as proteções dos agentes engolem (para não derrubar o workflow) ficam também como `ERROR`/`WARNING` no span onde aconteceram, com o motivo em `statusMessage`.
 
 ## No `docker-compose.yml`
 

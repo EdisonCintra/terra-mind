@@ -37,6 +37,11 @@ CHANNEL=painel
 
 - `CHANNEL=painel` aprova os planos pela própria tela, sem Telegram nem WhatsApp. **Não use o mesmo bot do
   Telegram em duas máquinas ao mesmo tempo.**
+- `CHANNEL=terminal` troca o celular do gerente por um chat no terminal, como uma conversa de WhatsApp. Com o
+  `agents` no ar (local ou no Docker), abra noutra janela `uv run python -m channels.chat` (ou `--url` para outro
+  endereço; o `AGENTS_TOKEN` do `.env` vai junto). O chat fica aberto: alertas e planos chegam a qualquer momento, e
+  você escreve quando quiser: `sim`, `nao` ou `opcoes` (o plano mais recente), `sim 12` (o plano 12), `pendentes`,
+  `ajuda`, ou qualquer pergunta à bula. `/sair` ou Ctrl+D fecha; se o `agents` reiniciar, o chat reconecta sozinho.
 - **Se você já tinha um `.env`:** variável vazia não pode ter comentário na mesma linha (`NOME=    # texto`), porque o
   Docker lê o comentário como valor. Apague o comentário ou mova-o para a linha de cima. As variáveis `WHATSAPP_*` da
   Meta não são mais usadas.

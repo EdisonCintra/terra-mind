@@ -21,6 +21,7 @@ FERRAMENTAS = [
     leitura.detalhar_execucao,
     escrita.suspender_os,
     escrita.reagendar_os,
+    escrita.retomar_os,
     escrita.alocar_maquina,
     escrita.reservar_estoque,
 ]

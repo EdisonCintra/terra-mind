@@ -240,10 +240,18 @@ async def test_suspensao_grava_o_impacto_e_o_sim_marca_a_perda_como_evitada():
     assert (depois["situacao"], depois["plano_id"], depois["perda_rs"]) == ("evitada", 1, 3330.0)
 
 
-async def test_recusa_marca_o_impacto_como_recusado():
+async def test_manter_data_marca_o_impacto_como_mantido():
     cenario = montar_cenario()
     orq = await _incidente(cenario)
     await orq.responder(Resposta(7, 1, "NAO", "gerente"), esperar=True)
+    assert cenario.repo.impactos[(7, 1)]["situacao"] == "mantida"
+
+
+async def test_opcoes_esgotadas_marcam_o_impacto_como_recusado():
+    cenario = montar_cenario()
+    orq = await _incidente(cenario)
+    for plano_id in (1, 2, 3):
+        await orq.responder(Resposta(7, plano_id, "OPCOES", "gerente"), esperar=True)
     assert cenario.repo.impactos[(7, 1)]["situacao"] == "recusada"
 
 

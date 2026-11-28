@@ -13,15 +13,19 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, sta
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from agents import observabilidade
 from agents.agenda import AgendaIndisponivel, NaoEncontrado, PedidoJanela, ServicoAgenda
+from agents.assistente import Assistente
 from agents.bula import PergunteBula
 from agents.canal import CanalLog, criar_canal
 from agents.clientes.clima import OpenMeteoClima
 from agents.clientes.conhecimento import ConhecimentoHttp
+from agents.clientes.consultas import ConsultasPostgres
 from agents.clientes.erp import ErpMcp
 from agents.clientes.repositorio import RepositorioPostgres
 from agents.config import Settings
 from agents.deps import Dependencias
+from agents.guardrails import criar_guardrails
 from agents.limites import ExtratorLimites
 from agents.modelos import RespostaGerente
 from agents.relatorio import RelatorioIndisponivel, ServicoRelatorio
@@ -44,6 +48,7 @@ class Servicos:
 
 async def montar_servicos(settings: Settings) -> Servicos:
     """Monta os clientes reais, o orquestrador, o canal (com o callback) e o laço de timeout."""
+    observabilidade.configurar(settings)  # antes de qualquer Runner, para o ADK já nascer instrumentado
     conhecimento = ConhecimentoHttp(settings.conhecimento_url)
     clima = OpenMeteoClima(settings.open_meteo_url)
     deps = Dependencias(
@@ -56,8 +61,13 @@ async def montar_servicos(settings: Settings) -> Servicos:
     )
     orquestrador = Orquestrador(deps, criar_session_service(settings.database_url))
     bula = PergunteBula(deps)
+    agenda = ServicoAgenda(deps)
+    # Chat dos canais: qualquer dúvida, com os dados do painel (escopo por fazenda) e a bula conferida.
+    assistente = Assistente(
+        deps, ConsultasPostgres(deps.repo.engine), bula, agenda, guardrails=criar_guardrails(settings)
+    )
     deps.canal = criar_canal(settings.channel, orquestrador.responder)
-    deps.canal.definir_ao_perguntar(bula.responder_no_canal)  # G4: pergunta livre no Telegram
+    deps.canal.definir_ao_perguntar(assistente.responder_no_canal)
     await deps.canal.iniciar()
     timeouts = asyncio.create_task(
         laco_timeouts(
@@ -77,12 +87,13 @@ async def montar_servicos(settings: Settings) -> Servicos:
         await conhecimento.fechar()
         await clima.fechar()
         await deps.repo.engine.dispose()
+        observabilidade.encerrar()  # exporta os spans que ainda estão no buffer
 
     return Servicos(
         orquestrador=orquestrador,
         desligar=desligar,
         bula=bula,
-        agenda=ServicoAgenda(deps),
+        agenda=agenda,
         limites=ExtratorLimites(deps),
         relatorio=ServicoRelatorio(deps),
     )
@@ -100,6 +111,11 @@ class CorpoPergunta(BaseModel):
 
 class CorpoLimites(BaseModel):
     produto: str = Field(min_length=2, max_length=120)
+
+
+class CorpoMensagemTerminal(BaseModel):
+    texto: str = Field(min_length=1, max_length=1000)
+    origem: str | None = Field(None, max_length=64)
 
 
 def _servico(request: Request, nome: str):
@@ -166,6 +182,30 @@ def criar_api(fabrica: Callable[[], Awaitable[Servicos]] | None = None) -> FastA
         return Response(
             "<Response/>", media_type="text/xml"
         )  # o Twilio espera TwiML; vazio = nada a responder
+
+    def canal_terminal(request: Request):
+        """O canal em uso, se for o terminal; com outro canal as rotas do chat não existem."""
+        canal = getattr(request.app.state.servicos.orquestrador.deps, "canal", None)
+        if not (hasattr(canal, "receber") and hasattr(canal, "mensagens")):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "canal_terminal_inativo")
+        return canal
+
+    @app.get("/terminal/mensagens", include_in_schema=False, dependencies=[Depends(conferir_token)])
+    async def terminal_mensagens(
+        request: Request,
+        depois: int = Query(0, ge=0),
+        espera: float = Query(0, ge=0, le=60),
+    ) -> dict:
+        """Conversa do canal terminal depois da mensagem `depois`; sem novidade, espera até `espera` s."""
+        mensagens = await canal_terminal(request).mensagens(depois, espera)
+        canal = canal_terminal(request)
+        return {"instancia": canal.instancia, "mensagens": [m.como_json() for m in mensagens]}
+
+    @app.post("/terminal/mensagens", include_in_schema=False, dependencies=[Depends(conferir_token)])
+    async def terminal_enviar(corpo: CorpoMensagemTerminal, request: Request) -> dict:
+        """Mensagem do gerente no chat do terminal: decisão (sim/nao/opcoes), comando ou pergunta à bula."""
+        mensagem = await canal_terminal(request).receber(corpo.texto, corpo.origem)
+        return mensagem.como_json()
 
     @app.post("/incidentes/{incidente_id}/iniciar", status_code=status.HTTP_202_ACCEPTED)
     async def iniciar(incidente_id: int, request: Request) -> dict:

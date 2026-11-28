@@ -17,7 +17,7 @@ from agents.agentes.operacional.agent import criar as criar_operacional
 from agents.agentes.supervisor.agent import criar as criar_supervisor
 from agents.deps import Dependencias
 from agents.nodes.acao_preventiva import criar_acao_preventiva
-from agents.nodes.aprovacao import criar_aprovacao, criar_rota_resposta
+from agents.nodes.aprovacao import criar_aprovacao, criar_manter_data, criar_rota_resposta
 from agents.nodes.avaliador import criar_rota_avaliacao
 from agents.nodes.contexto import criar_contexto
 from agents.nodes.desfechos import criar_decisao_manual, criar_encerrar
@@ -41,6 +41,7 @@ def criar_workflow(deps: Dependencias, id_da_entrada: bool = False) -> Workflow:
     aprovacao = criar_aprovacao(deps)
     rota_resposta = criar_rota_resposta(deps)
     executor = criar_executor(deps)
+    manter_data = criar_manter_data(deps)
     decisao_manual = criar_decisao_manual(deps)
     encerrar = criar_encerrar(deps)
 
@@ -63,8 +64,15 @@ def criar_workflow(deps: Dependencias, id_da_entrada: bool = False) -> Workflow:
             (aprovacao, rota_resposta),
             (
                 rota_resposta,
-                {"SIM": executor, "OPCOES": preparar_plano, "NAO": encerrar, DEFAULT_ROUTE: decisao_manual},
+                {
+                    "SIM": executor,
+                    "OPCOES": preparar_plano,
+                    "MANTER": manter_data,
+                    "NAO": encerrar,  # opções esgotadas: encerra com as OS suspensas
+                    DEFAULT_ROUTE: decisao_manual,
+                },
             ),
+            (manter_data, {"ok": encerrar, DEFAULT_ROUTE: decisao_manual}),
             (executor, {"ok": encerrar, "revalidar": preparar_plano, DEFAULT_ROUTE: decisao_manual}),
         ],
     )

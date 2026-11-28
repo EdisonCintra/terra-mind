@@ -86,14 +86,29 @@ async def test_resposta_repetida_nao_reexecuta():
     assert len(c.erp.escritas) == escritas
 
 
-async def test_recusar_proposta_encerra_mantem_suspensa_e_avisa():
+async def test_manter_data_original_volta_a_os_para_agendada_no_horario_de_antes():
     c = montar_cenario()
+    inicio_original = c.erp.os[1]["inicio_previsto"]
+    orq = await iniciar(c)
+    await responder(orq, 1, "NAO")
+    assert c.erp.status(1) == "agendada"
+    assert c.erp.os[1]["inicio_previsto"] == inicio_original
+    assert ("retomar_os", 1, 1) in c.erp.escritas
+    assert c.repo.incidentes[7].status == "encerrado"
+    assert "Data original mantida" in c.canal.alertas[-1] and "risco" in c.canal.alertas[-1]
+    assert "manter_data:manter_data_original" in c.repo.acoes()
+    assert not any("decisão manual" in a.lower() for a in c.canal.alertas)
+
+
+async def test_manter_data_que_nao_da_mais_deixa_suspensa_e_pede_decisao_manual():
+    c = montar_cenario()
+    c.erp.falhar_em.add("retomar_os")  # ex.: a data original já passou enquanto o gerente pensava
     orq = await iniciar(c)
     await responder(orq, 1, "NAO")
     assert c.erp.status(1) == "suspensa_preventiva"
-    assert c.repo.incidentes[7].status == "encerrado"
-    assert "recusada" in c.canal.alertas[-1] and "SUSPENSA" in c.canal.alertas[-1]
-    assert not any("decisão manual" in a for a in c.canal.alertas)
+    assert c.repo.incidentes[7].status == "aguardando_decisao_manual"
+    assert "não consegui manter a data original" in c.canal.alertas[-1]
+    assert "já passou" in c.canal.alertas[-1]
 
 
 async def test_ver_proxima_opcao_replaneja_duas_vezes_e_depois_encerra():

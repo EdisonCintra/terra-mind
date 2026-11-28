@@ -121,6 +121,21 @@ def criar_os(
 
 STATUS_EDITAVEIS = ("agendada", "reagendada")
 
+# Incidente que ainda vai decidir a OS suspensa: enquanto houver um no talhão, só o plano mexe nela.
+INCIDENTE_EM_ANDAMENTO = "status IN ('aberto', 'aguardando_aprovacao')"
+
+
+def suspensa_liberada(conn, os: dict[str, Any]) -> bool:
+    """OS suspensa sem incidente em andamento no talhão (opções esgotadas, decisão manual, falha ao manter
+    a data): o gerente pode remarcar ou cancelar pelo painel; senão ela ficaria presa em suspensão."""
+    if os["status"] != "suspensa_preventiva":
+        return False
+    em_andamento = conn.execute(
+        f"SELECT 1 FROM agente.incidentes WHERE talhao_id = %s AND {INCIDENTE_EM_ANDAMENTO}",
+        (os["talhao_id"],),
+    ).fetchone()
+    return em_andamento is None
+
 
 def editar_os(
     os_id: int,
@@ -132,12 +147,21 @@ def editar_os(
     por: str = "painel",
 ) -> dict[str, Any]:
     """Edita dose, horário, máquina e operador de uma OS `agendada` ou `reagendada`. O talhão e o produto
-    não mudam: para trocá-los, cancele a OS e crie outra. As mesmas regras da criação."""
+    não mudam: para trocá-los, cancele a OS e crie outra. As mesmas regras da criação.
+
+    OS suspensa sem incidente em andamento (`suspensa_liberada`) também pode ser editada: é a remarcação
+    manual, e ela volta a `agendada` no horário novo."""
     with conectar() as conn:
         antes = conn.execute("SELECT * FROM erp.ordens_servico WHERE id = %s FOR UPDATE", (os_id,)).fetchone()
         if antes is None:
             return {"ok": False, "erro": f"OS {os_id} não existe."}
-        if antes["status"] not in STATUS_EDITAVEIS:
+        remarcar = suspensa_liberada(conn, antes)
+        if antes["status"] == "suspensa_preventiva" and not remarcar:
+            return {
+                "ok": False,
+                "erro": f"A OS {os_id} está suspensa por um incidente em andamento: responda o plano.",
+            }
+        if antes["status"] not in STATUS_EDITAVEIS and not remarcar:
             return {"ok": False, "erro": f"A OS {os_id} está {antes['status']} e não pode ser editada."}
         talhao = conn.execute(
             "SELECT id, fazenda_id, nome, area_ha, ativo FROM erp.talhoes WHERE id = %s",
@@ -157,25 +181,35 @@ def editar_os(
         depois = conn.execute(
             """
             UPDATE erp.ordens_servico
-            SET dose_por_ha = %s, inicio_previsto = %s, duracao_horas = %s, maquina_id = %s, operador_id = %s
+            SET dose_por_ha = %s, inicio_previsto = %s, duracao_horas = %s, maquina_id = %s, operador_id = %s,
+                status = CASE WHEN status = 'suspensa_preventiva' THEN 'agendada' ELSE status END
             WHERE id = %s RETURNING *
             """,
             (dose_por_ha, inicio, duracao_horas, maquina_id, operador_id, os_id),
         ).fetchone()
-        registrar_auditoria(conn, None, "painel", "editar_os", antes, depois, f"OS editada por {por}")
+        if remarcar:
+            acao, texto = "remarcar_os_suspensa", f"OS suspensa remarcada por {por}"
+        else:
+            acao, texto = "editar_os", f"OS editada por {por}"
+        registrar_auditoria(conn, None, "painel", acao, antes, depois, texto)
         return {"ok": True, "os": para_json(depois)}
 
 
 def cancelar_os(os_id: int, por: str = "painel") -> dict[str, Any]:
-    """Cancela uma OS `agendada` ou `reagendada` (a máquina fica livre). A OS suspensa por um incidente
-    espera a decisão do plano: cancelar no meio dele deixaria o fluxo sem OS para remarcar."""
+    """Cancela uma OS `agendada` ou `reagendada` (a máquina fica livre). A OS suspensa por um incidente em
+    andamento espera a decisão do plano: cancelar no meio dele deixaria o fluxo sem OS para remarcar. Sem
+    incidente em andamento (`suspensa_liberada`), a OS suspensa também pode ser cancelada."""
     with conectar() as conn:
         antes = conn.execute("SELECT * FROM erp.ordens_servico WHERE id = %s FOR UPDATE", (os_id,)).fetchone()
         if antes is None:
             return {"ok": False, "erro": f"OS {os_id} não existe."}
-        if antes["status"] == "suspensa_preventiva":
-            return {"ok": False, "erro": f"A OS {os_id} está suspensa por um incidente: decida o plano."}
-        if antes["status"] not in STATUS_EDITAVEIS:
+        liberada = suspensa_liberada(conn, antes)
+        if antes["status"] == "suspensa_preventiva" and not liberada:
+            return {
+                "ok": False,
+                "erro": f"A OS {os_id} está suspensa por um incidente em andamento: responda o plano.",
+            }
+        if antes["status"] not in STATUS_EDITAVEIS and not liberada:
             return {"ok": False, "erro": f"A OS {os_id} está {antes['status']} e não pode ser cancelada."}
         depois = conn.execute(
             "UPDATE erp.ordens_servico SET status = 'cancelada' WHERE id = %s RETURNING *", (os_id,)

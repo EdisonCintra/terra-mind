@@ -12,6 +12,7 @@ from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from pydantic import BaseModel, ValidationError
 
+from agents import observabilidade as obs
 from agents.config import NomeAgente
 from agents.deps import Dependencias
 from agents.modelos import Incidente, para_datetime
@@ -105,6 +106,9 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
     def _marcar(callback_context, motivo: str) -> LlmResponse:
         if schema is not None:
             callback_context.state[chave] = motivo
+        logger.warning("agente %s: saída vazia (%s)", nome_agente, motivo)
+        obs.sinalizar("ERROR", f"{nome_agente}: {motivo}", agente=nome_agente)
+        obs.pontuar(obs.SCORE_FALHA_AGENTE, nome_agente, "CATEGORICAL", motivo)
         return _resposta(saida_vazia)
 
     async def limitar_rodadas(callback_context, llm_request):
@@ -131,6 +135,7 @@ def protecoes(nome_agente: str, saida_vazia: str, schema: type[BaseModel] | None
 
     async def ferramenta_errou(tool, args, tool_context, error):
         logger.warning("ferramenta %s falhou: %s", tool.name, error)
+        obs.sinalizar("WARNING", f"ferramenta {tool.name} falhou: {type(error).__name__}: {error}")
         return {"ok": False, "erro": f"{type(error).__name__}: {error}"}
 
     async def modelo_errou(callback_context, llm_request, error):

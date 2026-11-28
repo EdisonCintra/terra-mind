@@ -8,6 +8,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, DatabaseSessionService
 from google.genai import types
 
+from agents import observabilidade as obs
 from agents.clientes.repositorio import ResultadoResposta, url_asyncpg
 from agents.deps import Dependencias
 from agents.nodes.aprovacao import interrupt_id
@@ -68,7 +69,15 @@ class Orquestrador:
                 app_name=APP_NAME, user_id=USER_ID, session_id=sid, state={"incidente_id": incidente_id}
             )
             texto = types.Content(role="user", parts=[types.Part(text=f"Incidente {incidente_id}")])
-            await self._rodar(incidente_id, texto)
+            with obs.rastrear(
+                obs.TRACE_AVALIAR_INCIDENTE,
+                entrada={"incidente_id": incidente_id},
+                sessao=sid,
+                usuario=USER_ID,
+                tags=["incidente"],
+                metadados={"incidente_id": incidente_id},
+            ) as rastro:
+                await self._rodar(incidente_id, texto, rastro)
         return True
 
     async def responder(self, r: Resposta, esperar: bool = False) -> ResultadoResposta:
@@ -108,7 +117,21 @@ class Orquestrador:
             if not await self._aguardando(r):
                 logger.info("incidente %s: plano %s não está mais pendente", r.incidente_id, r.plano_id)
                 return
-            await self._rodar(r.incidente_id, mensagem_de_resposta(r))
+            with obs.rastrear(
+                obs.TRACE_RETOMAR_INCIDENTE,
+                entrada={"plano_id": r.plano_id, "resposta": r.resposta, "respondido_por": r.respondido_por},
+                sessao=session_id(r.incidente_id),
+                usuario=r.respondido_por,
+                tags=["incidente", "aprovacao"],
+                metadados={"incidente_id": r.incidente_id, "plano_id": r.plano_id, "resposta": r.resposta},
+            ) as rastro:
+                rastro.pontuar(
+                    obs.SCORE_DECISAO_GERENTE,
+                    r.resposta,
+                    "CATEGORICAL",
+                    f"plano {r.plano_id}, respondido por {r.respondido_por}",
+                )
+                await self._rodar(r.incidente_id, mensagem_de_resposta(r), rastro)
 
     async def _aguardando(self, r: Resposta) -> bool:
         """A sessão está pausada no pedido de aprovação deste plano (chamada sem resposta)?"""
@@ -129,16 +152,50 @@ class Orquestrador:
         self._tarefas.add(tarefa)
         tarefa.add_done_callback(self._tarefas.discard)
 
-    async def _rodar(self, incidente_id: int, mensagem: types.Content) -> None:
+    async def _rodar(self, incidente_id: int, mensagem: types.Content, rastro: obs.Rastro) -> None:
+        erros: list[str] = []
         try:
             async for evento in self.runner.run_async(
                 user_id=USER_ID, session_id=session_id(incidente_id), new_message=mensagem
             ):
                 if evento.error_code:
+                    erros.append(f"{evento.author}: {evento.error_code}")
                     logger.error("incidente %s: %s %s", incidente_id, evento.error_code, evento.error_message)
-        except Exception:  # noqa: BLE001 - erro interno não pode deixar o incidente sem dono
+        except Exception as e:  # noqa: BLE001 - erro interno não pode deixar o incidente sem dono
             logger.exception("incidente %s: o workflow falhou", incidente_id)
+            rastro.sinalizar("ERROR", f"workflow falhou: {type(e).__name__}: {e}")
             await self._falha_interna(incidente_id)
+        if erros:
+            rastro.sinalizar("WARNING", "; ".join(erros))
+        if rastro.ativo:
+            await self._registrar_desfecho(incidente_id, rastro, erros)
+
+    async def _registrar_desfecho(self, incidente_id: int, rastro: obs.Rastro, erros: list[str]) -> None:
+        """Saída do trace: onde o incidente parou e por quê. Só roda com o Langfuse ativo."""
+        try:
+            incidente = await self.deps.repo.carregar_incidente(incidente_id)
+            sessao = await self.session_service.get_session(
+                app_name=APP_NAME, user_id=USER_ID, session_id=session_id(incidente_id)
+            )
+        except Exception:  # noqa: BLE001 - observabilidade nunca derruba o fluxo
+            logger.debug("incidente %s: não consegui ler o desfecho", incidente_id, exc_info=True)
+            return
+        estado = sessao.state if sessao else {}
+        status_final = incidente.status if incidente else "desconhecido"
+        motivo = (estado.get("motivo_manual") or {}).get("codigo") or estado.get("motivo_encerramento")
+        aguardando = status_final == "aguardando_aprovacao"
+        rastro.saida(
+            {
+                "status": status_final,
+                "motivo": motivo,
+                "os_em_risco": [o.get("os_id") for o in estado.get("os_em_risco") or []],
+                "os_suspensas": estado.get("os_suspensas") or [],
+                "plano_id": estado.get("plano_id"),
+                "mensagem_ao_gerente": estado.get("mensagem") if aguardando else None,
+                "erros": erros,
+            }
+        )
+        rastro.pontuar(obs.SCORE_DESFECHO_INCIDENTE, status_final, "CATEGORICAL", motivo)
 
     async def _falha_interna(self, incidente_id: int) -> None:
         try:

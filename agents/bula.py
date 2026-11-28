@@ -8,6 +8,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from pydantic import ValidationError
 
+from agents import observabilidade as obs
 from agents.agentes._comum import chave_falha
 from agents.agentes.pergunte_bula.agent import CHAVE_RESPOSTA, CHAVE_VISTOS, criar
 from agents.deps import Dependencias
@@ -59,13 +60,30 @@ class PergunteBula:
         self.sessoes = InMemorySessionService()
         self.runner = Runner(app_name=APP_NAME, agent=criar(deps), session_service=self.sessoes)
 
-    async def responder_no_canal(self, pergunta: str, quem: str) -> str:
-        """`ao_perguntar` dos canais (Telegram): pergunta livre, sem produto escolhido."""
+    async def responder_no_canal(self, pergunta: str, quem: str, contato: str | None = None) -> str:
+        """Pergunta livre só à bula, sem produto escolhido (o chat dos canais usa o `Assistente`)."""
         return texto_para_canal(await self.perguntar(pergunta, None, quem=quem))
 
     async def perguntar(
         self, pergunta: str, produto: str | None = None, quem: str = "painel"
     ) -> ResultadoBula:
+        with obs.rastrear(
+            obs.TRACE_PERGUNTAR_BULA,
+            entrada={"pergunta": pergunta, "produto": produto},
+            usuario=quem,
+            tags=["bula"],
+            metadados={"produto": produto},
+        ) as rastro:
+            resultado = await self._perguntar(pergunta, produto, quem)
+            rastro.saida(resultado.model_dump(mode="json"))
+            if resultado.erro:
+                rastro.sinalizar("ERROR", resultado.erro)
+                return resultado
+            rastro.pontuar(obs.SCORE_BULA_ENCONTROU, resultado.encontrou, "BOOLEAN")
+            rastro.pontuar(obs.SCORE_CITACOES_DESCARTADAS, resultado.descartadas, "NUMERIC")
+            return resultado
+
+    async def _perguntar(self, pergunta: str, produto: str | None, quem: str) -> ResultadoBula:
         for tentativa in range(1, TENTATIVAS + 1):
             try:
                 estado, erro = await self._rodar(pergunta, produto)
@@ -82,6 +100,7 @@ class PergunteBula:
             if resposta is None:
                 if tentativa < TENTATIVAS:
                     logger.warning("pergunte à bula sem resposta (%s); tentando de novo", erro)
+                    obs.sinalizar("WARNING", f"tentativa {tentativa} sem resposta ({erro}); tentando de novo")
                     continue
                 return ResultadoBula(encontrou=False, resposta=FALHA, erro=erro or "modelo_sem_resposta")
             resultado = conferir(resposta, estado.get(CHAVE_VISTOS) or [])

@@ -25,7 +25,10 @@ def canal(ao_responder=None):
 def clique(data):
     msg = SimpleNamespace(reply_text=AsyncMock())
     query = SimpleNamespace(
-        data=data, message=msg, answer=AsyncMock(), edit_message_reply_markup=AsyncMock(),
+        data=data,
+        message=msg,
+        answer=AsyncMock(),
+        edit_message_reply_markup=AsyncMock(),
         from_user=SimpleNamespace(full_name="Gerente Teste"),
     )
     return SimpleNamespace(callback_query=query), query
@@ -48,7 +51,7 @@ def test_teclado_tem_tres_botoes():
     assert all(len(linha) == 1 for linha in linhas)  # um botão por linha
     botoes = [linha[0] for linha in linhas]
     assert [b.callback_data for b in botoes] == ["r:7:3:SIM", "r:7:3:OPCOES", "r:7:3:NAO"]
-    assert [b.text for b in botoes] == ["Aceitar Proposta", "Ver próxima opção", "Recusar Proposta"]
+    assert [b.text for b in botoes] == ["Aceitar Proposta", "Ver próxima opção", "Manter data original"]
 
 
 async def test_pedir_aprovacao_manda_botoes_ao_gerente(envio):
@@ -147,9 +150,11 @@ async def test_pergunta_do_gerente_roda_em_segundo_plano_e_responde_com_a_pagina
     assert len(tarefas) == 1  # o handler volta na hora: os botões de aprovação não ficam travados
     ao_perguntar.assert_not_awaited()
     await tarefas[0]
-    ao_perguntar.assert_awaited_once_with("Posso aplicar Abacus HC com vento de 12 km/h?", "Gerente Teste")
+    ao_perguntar.assert_awaited_once_with(
+        "Posso aplicar Abacus HC com vento de 12 km/h?", "Gerente Teste", contato="telegram:42"
+    )
     textos = [chamada.args[0] for chamada in msg.reply_text.await_args_list]
-    assert textos[0] == "Consultando as bulas…" and "p. 7" in textos[1]
+    assert textos[0] == "Consultando…" and "p. 7" in textos[1]
 
 
 async def test_chat_desconhecido_nao_gasta_llm():
@@ -178,7 +183,7 @@ async def test_sem_pergunta_ligada_ou_texto_curto_explica():
     c.definir_ao_perguntar(AsyncMock())
     update, contexto, msg, tarefas = mensagem("oi")
     await c._ao_escrever(update, contexto)
-    assert tarefas == [] and "Pergunte à bula" in msg.reply_text.await_args.args[0]
+    assert tarefas == [] and "Pergunte o que quiser" in msg.reply_text.await_args.args[0]
 
 
 async def test_falha_na_pergunta_avisa_sem_estourar():
@@ -193,7 +198,7 @@ async def test_falha_na_pergunta_avisa_sem_estourar():
 async def test_ajuda_mostra_exemplos():
     update, _, msg, _ = mensagem("/ajuda")
     await canal()._ao_pedir_ajuda(update, None)
-    assert "Posso aplicar Abacus HC" in msg.reply_text.await_args.args[0]
+    assert "Quais OS estão suspensas?" in msg.reply_text.await_args.args[0]
 
 
 def test_handlers_de_texto_e_ajuda_registrados():
@@ -267,4 +272,3 @@ async def test_token_recusado_ou_pedido_invalido_nao_sao_repetidos(erro):
     with pytest.raises(type(erro)):
         await c.iniciar()
     assert c.app.initialize.await_count == 1 and esperas(c) == []
-

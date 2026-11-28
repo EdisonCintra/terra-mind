@@ -6,6 +6,7 @@ não é suspensa (decisão A5).
 
 from google.adk import Context, Event
 
+from agents import observabilidade as obs
 from agents.agentes._comum import chave_falha
 from agents.deps import Dependencias
 from agents.modelos import AvaliacaoRisco, como_json
@@ -20,6 +21,7 @@ def criar_rota_avaliacao(deps: Dependencias):
             ctx.state[chave_falha("avaliador_risco")] = None
             ctx.state["motivo_manual"] = {"codigo": "avaliacao_indisponivel", "detalhe": falha}
             await auditar(deps, ctx, "avaliador", "avaliacao_falhou", justificativa=falha)
+            obs.pontuar(obs.SCORE_AVALIACAO_RISCO, "falhou", "CATEGORICAL", falha)
             return Event(route="falhou")
         avaliacao = AvaliacaoRisco.model_validate(node_input)
         # O LLM só decide sobre as OS que recebeu; ids desconhecidos são descartados.
@@ -40,9 +42,17 @@ def criar_rota_avaliacao(deps: Dependencias):
                 depois={"itens": [como_json(v) for v in descartadas]},
                 justificativa="o valor previsto não ultrapassa o limite citado",
             )
+        obs.pontuar(
+            obs.SCORE_VIOLACOES_DESCARTADAS,
+            len(descartadas),
+            "NUMERIC",
+            ", ".join(f"OS {v.os_id} {v.parametro}" for v in descartadas) or None,
+        )
         if not any(v.viola for v in avaliacao.violacoes):
             ctx.state["motivo_encerramento"] = "Avaliador não encontrou violação citável"
+            obs.pontuar(obs.SCORE_AVALIACAO_RISCO, "sem_violacao", "CATEGORICAL")
             return Event(route="sem_violacao")
+        obs.pontuar(obs.SCORE_AVALIACAO_RISCO, "violacao", "CATEGORICAL")
         return Event(route="violacao")
 
     return rota_avaliacao

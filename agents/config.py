@@ -1,11 +1,12 @@
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _SERVICO = Path(__file__).resolve().parent  # agents/ (o pacote é a pasta do serviço, D3)
 
-NomeAgente = Literal["avaliador", "agronomico", "operacional", "supervisor", "bula"]
+NomeAgente = Literal["avaliador", "agronomico", "operacional", "supervisor", "bula", "assistente"]
 
 
 class Settings(BaseSettings):
@@ -29,11 +30,26 @@ class Settings(BaseSettings):
     model_operacional: str = "openai/gpt-6-luna"
     model_supervisor: str = "openai/gpt-6-luna"
     model_bula: str = "openai/gpt-6-luna"  # G4: Pergunte à bula
+    model_assistente: str = "openai/gpt-6-luna"  # chat dos canais: dados do painel + bula
+    # Guardrails do chat (NeMo Guardrails, `agents.guardrails`): prompt injection, jailbreak e assunto.
+    guardrails_enabled: bool = True
+    guardrails_saida: bool = True  # também confere a resposta (vazamento, injeção indireta)
+    model_guardrails: str = "openai/gpt-6-luna"
     # Esforço de raciocínio dos quatro agentes. O gpt-6-luna não aceita "minimal": o menor é "low"
     # ("none" desliga o raciocínio). Vazio = o padrão do modelo (para modelos sem raciocínio).
     reasoning_effort: str | None = "low"
 
-    channel: Literal["telegram", "whatsapp", "painel"] = "painel"
+    # Observabilidade (Langfuse, `agents.observabilidade`). Mesmos nomes de variável do SDK do Langfuse.
+    # Sem as duas chaves o rastreamento fica desligado e nada é exportado.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+    langfuse_tracing_enabled: bool = True
+    langfuse_tracing_environment: str = "development"  # development | staging | production
+    langfuse_release: str | None = None  # versão do deploy (ex.: o SHA do commit)
+    langfuse_sample_rate: float = Field(1.0, ge=0, le=1)
+
+    channel: Literal["telegram", "whatsapp", "painel", "terminal"] = "painel"
 
     # Contrato 23 (F3): segredo que o painel manda em `X-Agents-Token` ao responder um plano. Vazio = rota
     # aberta como antes (rede interna); com valor, sem o segredo certo a resposta é recusada (401).

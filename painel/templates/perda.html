@@ -61,7 +61,7 @@
           <td data-rotulo="Motivo">{{ l.condicao }}</td>
           <td class="mono" data-rotulo="Perda"><div>{{ l.perda }}{% if l.estimativa and l.perda_rs is not none %}<small>estimativa</small>{% endif %}</div></td>
           <td class="fonte" data-rotulo="Fonte do fator">{{ l.fonte }}</td>
-          <td data-rotulo="Situação"><span class="status {{ {'evitada': 'agendada', 'suspensa': 'suspensa', 'recusada': 'cancelada'}.get(l.situacao, 'executada') }}">{{ l.situacao_rotulo }}</span></td>
+          <td data-rotulo="Situação"><span class="status {{ {'evitada': 'agendada', 'suspensa': 'suspensa', 'recusada': 'cancelada', 'mantida': 'cancelada'}.get(l.situacao, 'executada') }}">{{ l.situacao_rotulo }}</span></td>
         </tr>
         {% else %}
         <tr><td colspan="7" class="vazio">Nenhuma OS foi suspensa no período.{% if not replay %} As simulações ficam de fora: marque "Incluir simulações" para vê-las.{% endif %}</td></tr>
