@@ -30,9 +30,9 @@ def test_os_redireciona_para_visao_geral(cliente):
 
 def test_menu_na_ordem_do_brief():
     assert [i.rota for i in MENU] == [
-        "/visao-geral", "/campo", "/cadastros", "/cadastros/os", "/usuarios", "/fazenda", "/mapa", "/agenda",
-        "/perda", "/historico", "/bula", "/relatorios",
-    ]  # F3 acrescentou "Ordens de serviço" (operador) e "Usuários" (gerente); a ordem do brief segue
+        "/visao-geral", "/campo", "/mapa", "/agenda", "/historico", "/bula", "/relatorios",
+        "/fazenda", "/perda", "/cadastros", "/cadastros/os", "/usuarios",
+    ]  # conceito 2 do Figma: Hoje, Mapa, Semana, Acertos, Bula, Relatórios e o bloco Gestão
 
 
 @pytest.mark.parametrize("rota", ["/visao-geral", "/bula", "/agenda", "/perda", "/relatorios"])
@@ -162,7 +162,7 @@ def test_404_com_banco_fora_registra_o_erro(cliente, monkeypatch, caplog):
 
 def test_visao_geral_mantem_os_blocos(cliente):
     html = cliente.get("/visao-geral").text
-    assert 'hx-get="/parcial/os"' in html and 'hx-get="/parcial/alertas"' in html
+    assert 'hx-get="/parcial/pendentes"' in html and 'hx-get="/parcial/alertas"' in html
     assert 'id="kpi-perda"' in html
 
 

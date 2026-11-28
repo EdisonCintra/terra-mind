@@ -2,6 +2,6 @@
 <div class="alerta-vermelho">
   <strong>Incidente #{{ m.id }} · {{ m.talhao }} aguarda decisão manual.</strong>
   {% if m.alerta %}<div>{{ m.alerta }}</div>{% endif %}
-  <a href="/visao-geral?incidente={{ m.id }}">Ver linha do tempo</a>
+  <a href="/incidente/{{ m.id }}">Ver o incidente</a>
 </div>
 {% endfor %}

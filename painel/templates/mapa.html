@@ -1,34 +1,53 @@
 {% extends "layout.html" %}
 {% import "componentes.html" as c %}
 {% block titulo %}Mapa · TerraMind{% endblock %}
+{% block classe_body %}tela-mapa{% endblock %}
+{% block topo %}{% endblock %}
 {% block conteudo %}
-  {# Cada talhão é colorido pelo risco das próximas 48 h (/api/risco); o clique carrega o detalhe em #detalhe. Leaflet e mapa.js são locais; só os tiles vêm de fora (URL no mapa.js). #}
+  {# Cada talhão é colorido pelo risco das próximas 48 h (/api/risco) e leva uma etiqueta com o motivo e as OS.
+     O clique abre o detalhe no painel à direita. Leaflet e mapa.js são locais; só os tiles vêm de fora (mapa.js). #}
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
   <script type="application/json" id="talhoes">{{ talhoes | tojson }}</script>
-  <div class="pagina-interna">
-    <header class="cabecalho-pagina">
-      <h1>Mapa de risco</h1>
-      <p class="nota">Cada talhão com a cor do risco das próximas 48 h. Toque em um talhão para ver os motivos e as ordens.</p>
-    </header>
-    {# mapa.js põe aqui o aviso de Monitor fora do ar ou de talhões sem previsão #}
-    <div id="mapa-aviso" aria-live="polite"></div>
-    <div class="grade">
-      <section class="painel">
-        <div class="titulo-bloco"><h2>Risco das próximas 48 h</h2><span id="mapa-nota" class="nota"></span></div>
-        {% if not talhoes %}{{ c.faixa("aviso", "Nenhum talhão cadastrado ainda: o mapa fica vazio.") }}{% endif %}
-        <div id="mapa" class="mapa" data-fazenda="{{ fazenda_id if fazenda_id is not none else '' }}" aria-label="Mapa dos talhões"></div>
-        <p class="legenda-mapa">
-          <span><span class="chave bom"></span>baixo</span>
-          <span><span class="chave atencao"></span>atenção</span>
-          <span><span class="chave risco"></span>alto</span>
-          <span><span class="chave suave"></span>sem previsão</span>
-        </p>
-      </section>
-      <aside class="painel lateral">
-        <div class="titulo-bloco"><h2 id="detalhe-titulo">Talhão</h2></div>
-        <div id="detalhe" aria-live="polite">{{ c.vazio("Clique em um talhão no mapa.") }}</div>
-      </aside>
+  <h1 class="so-leitor">Mapa de risco</h1>
+  <div class="mapa-tela">
+    <div id="mapa" class="mapa" data-fazenda="{{ fazenda_id if fazenda_id is not none else '' }}"
+         data-talhao-padrao="{{ talhao_padrao if talhao_padrao is not none else '' }}" aria-label="Mapa dos talhões"></div>
+
+    <div class="sobre-mapa topo-esquerda">
+      {% if fazendas %}
+      <form class="seletor-fazenda" method="post" action="/fazenda/selecionar">
+        <input type="hidden" name="voltar" value="/mapa">
+        <label for="fazenda_id" class="so-leitor">Fazenda</label>
+        <select id="fazenda_id" name="fazenda_id" onchange="this.form.submit()">
+          {% if not usuario %}<option value="0"{% if fazenda_id is none %} selected{% endif %}>Todas as fazendas</option>{% endif %}
+          {% for f in fazendas %}<option value="{{ f.id }}"{% if f.id == fazenda_id %} selected{% endif %}>{{ f.nome }}</option>{% endfor %}
+        </select>
+      </form>
+      {% endif %}
+      <ul class="contagem-risco" id="mapa-contagem" aria-live="polite">
+        {% if contagem.risco %}<li><span class="ponto risco"></span>{{ contagem.risco }} fora do limite</li>{% endif %}
+        {% if contagem.atencao %}<li><span class="ponto atencao"></span>{{ contagem.atencao }} em atenção</li>{% endif %}
+        {% if contagem.bom %}<li><span class="ponto bom"></span>{{ contagem.bom }} {{ "liberado" if contagem.bom == 1 else "liberados" }}</li>{% endif %}
+        {% if contagem.neutro %}<li><span class="ponto neutro"></span>{{ contagem.neutro }} sem previsão</li>{% endif %}
+      </ul>
     </div>
+
+    <div class="sobre-mapa topo-direita vento-agora" id="vento-agora" hidden>
+      <span class="icone" style="--icone: url(/static/icones/vento.svg)" aria-hidden="true"></span>
+      <div><small id="vento-hora">Vento agora</small><strong id="vento-texto"></strong></div>
+    </div>
+
+    {# mapa.js põe aqui o aviso de Monitor fora do ar ou de talhões sem previsão #}
+    <div id="mapa-aviso" class="sobre-mapa aviso-mapa" aria-live="polite"></div>
+    {% if not talhoes %}<div class="sobre-mapa aviso-mapa">{{ c.faixa("aviso", "Nenhum talhão cadastrado ainda: o mapa fica vazio.") }}</div>{% endif %}
+
+    <aside class="sobre-mapa detalhe-mapa" id="painel-detalhe" hidden aria-labelledby="detalhe-titulo">
+      <div class="titulo-bloco">
+        <h2 id="detalhe-titulo">Talhão</h2>
+        <button type="button" class="fechar" aria-label="Fechar" onclick="document.getElementById('painel-detalhe').hidden = true">×</button>
+      </div>
+      <div id="detalhe" aria-live="polite">{{ c.vazio("Clique em um talhão no mapa.") }}</div>
+    </aside>
   </div>
   <script src="/static/vendor/leaflet/leaflet.js"></script>
   <script src="/static/mapa.js"></script>

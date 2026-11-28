@@ -16,9 +16,9 @@ def test_health(cliente):
     assert cliente.get("/health").json() == {"ok": True}
 
 
-def test_tela_os_atualiza_a_cada_2s_com_htmx_local(cliente):
+def test_hoje_rele_os_planos_com_htmx_local(cliente):
     html = cliente.get("/visao-geral").text
-    assert 'hx-get="/parcial/os"' in html and 'hx-trigger="every 2s"' in html
+    assert 'hx-get="/parcial/pendentes"' in html and 'hx-trigger="every 10s"' in html
     assert 'src="/static/htmx.min.js"' in html and "://" not in html  # sem CDN
     assert cliente.get("/static/htmx.min.js").status_code == 200
 

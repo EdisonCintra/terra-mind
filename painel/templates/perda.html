@@ -2,66 +2,47 @@
 {% import "componentes.html" as c %}
 {% block titulo %}Perda evitada · TerraMind{% endblock %}
 {% block conteudo %}
+{% set SITUACAO = {'evitada': 'bom', 'suspensa': 'atencao', 'recusada': 'neutro', 'mantida': 'neutro'} %}
 <div class="pagina-interna">
-<header class="cabecalho-pagina">
-  <h1>Perda evitada</h1>
-  <p class="nota">Quanto as suspensões e remarcações protegeram na safra. Todo valor sai de código, com a fonte do fator.</p>
+<header class="cabecalho-pagina cabecalho-com-filtro">
+  <div>
+    <h1>Perda evitada na safra</h1>
+    <p>Quanto as remarcações aprovadas evitaram de perder. Cada valor mostra de onde veio o fator de perda.</p>
+  </div>
+  <form class="filtros" method="get" action="/perda">
+    <label>De <input type="date" name="inicio" value="{{ p.inicio.isoformat() }}"></label>
+    <label>Até <input type="date" name="fim" value="{{ p.fim.isoformat() }}"></label>
+    <label class="marcar"><input type="checkbox" name="replay" value="1"{% if replay %} checked{% endif %}> Incluir simulações</label>
+    <button type="submit" class="secundario">Atualizar</button>
+  </form>
 </header>
-<form class="filtros" method="get" action="/perda">
-  <label>De <input type="date" name="inicio" value="{{ p.inicio.isoformat() }}"></label>
-  <label>Até <input type="date" name="fim" value="{{ p.fim.isoformat() }}"></label>
-  <label class="marcar"><input type="checkbox" name="replay" value="1"{% if replay %} checked{% endif %}> Incluir simulações (demonstração)</label>
-  <button type="submit" class="grande">Atualizar</button>
-</form>
 
 {# Cor só para estado: o tom vem do valor (sem perda evitada ou nada em aberto = neutro). #}
 <section class="kpis quatro" aria-label="Resumo da safra">
-  {% call c.kpi("Perda evitada", p.total, p.os_protegidas ~ " OS remarcada(s) com plano aprovado" ~ (" · inclui estimativa" if p.estimativa else ""), "bom" if p.total_rs > 0 else "neutro") %}
+  {% call c.kpi("Perda evitada", p.total, p.os_protegidas ~ " OS remarcada(s) com o seu SIM" ~ (" · inclui estimativa" if p.estimativa else ""), "bom" if p.total_rs > 0 else "neutro") %}
     {% if p.sem_fator %}<small>{{ p.sem_fator }} OS sem fator de perda cadastrado: não entram no total</small>{% endif %}
   {% endcall %}
-  {{ c.kpi("Em aberto", p.em_aberto, "OS suspensas esperando a decisão", "atencao" if p.em_aberto_rs > 0 else "neutro") }}
+  {{ c.kpi("Em aberto", p.em_aberto, "OS suspensa(s) esperando a decisão", "atencao" if p.em_aberto_rs > 0 else "neutro") }}
   {% set aprovados %}{{ p.planos.aprovados }} <span class="unidade">aprovados</span>{% endset %}
   {{ c.kpi("Planos", aprovados, p.planos.nao_aprovados ~ " recusado(s) ou trocado(s) · " ~ p.planos.pendentes ~ " sem resposta · " ~ p.planos.manuais ~ " em decisão manual") }}
   {{ c.kpi("Tempo até a resposta", p.planos.tempo_resposta or "—", "média dos planos respondidos") }}
 </section>
 
-{% if p.retorno %}
-<p class="retorno">Retorno na safra: <strong>{{ p.retorno.vezes }}×</strong> o valor da assinatura
-  ({{ p.total }} evitados para {{ p.retorno.custo }} de assinatura: {{ p.retorno.area }} ha a {{ p.retorno.preco }}/ha).</p>
-{% endif %}
-
-<div class="duas-colunas">
-  {% for titulo, linhas in [("Por talhão", p.por_talhao), ("Por produto", p.por_produto)] %}
-  <section class="painel">
-    <div class="titulo-bloco"><h2>{{ titulo }}</h2></div>
-    {% for linha in linhas %}
-    <div class="barra-linha">
-      <span class="forte">{{ linha.nome }}</span>
-      <span class="mono">{{ linha.valor }}</span>
-      <div class="trilho" aria-hidden="true"><div style="width: {{ linha.largura }}%"></div></div>
-    </div>
-    {% else %}
-    <p class="vazio">Nenhuma perda evitada no período.</p>
-    {% endfor %}
-  </section>
-  {% endfor %}
-</div>
-
-<section class="painel">
-  <div class="titulo-bloco"><h2>Ordens protegidas</h2><span class="nota">{{ p.linhas|length }} no período</span></div>
+<section class="painel" aria-labelledby="t-protegidas">
+  <div class="titulo-bloco"><h2 id="t-protegidas">Ordens protegidas</h2><span class="nota">{{ p.linhas|length }} {{ "plano" if p.linhas|length == 1 else "planos" }} no período</span></div>
   <div class="tabela empilha">
     <table>
-      <thead><tr><th>Data</th><th>Talhão</th><th>Produto</th><th>Motivo</th><th>Perda</th><th>Fonte do fator</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Data</th><th>Talhão</th><th>Produto</th><th>Motivo</th><th>Perda evitada</th><th>Fonte do fator</th><th>Situação</th></tr></thead>
       <tbody>
         {% for l in p.linhas %}
         <tr>
-          <td class="mono" data-rotulo="Data">{{ l.criado_em|hora }}</td>
-          <td class="forte" data-rotulo="Talhão"><div>{{ l.talhao }}<small>OS {{ l.os_id }} · <a href="/visao-geral?incidente={{ l.incidente_id }}">incidente {{ l.incidente_id }}</a>{% if l.origem == "replay" %} · simulação{% endif %}</small></div></td>
+          <td class="mono" data-rotulo="Data">{{ l.criado_em.strftime("%d/%m") if l.criado_em else "—" }}</td>
+          <td class="forte" data-rotulo="Talhão"><div>{{ l.talhao }}<small>OS {{ l.os_id }} · <a href="/incidente/{{ l.incidente_id }}">INC-{{ "%04d"|format(l.incidente_id) }}</a>{% if l.origem == "replay" %} · simulação{% endif %}</small></div></td>
           <td data-rotulo="Produto">{{ l.produto or "—" }}</td>
           <td data-rotulo="Motivo">{{ l.condicao }}</td>
           <td class="mono" data-rotulo="Perda"><div>{{ l.perda }}{% if l.estimativa and l.perda_rs is not none %}<small>estimativa</small>{% endif %}</div></td>
           <td class="fonte" data-rotulo="Fonte do fator">{{ l.fonte }}</td>
-          <td data-rotulo="Situação"><span class="status {{ {'evitada': 'agendada', 'suspensa': 'suspensa', 'recusada': 'cancelada', 'mantida': 'cancelada'}.get(l.situacao, 'executada') }}">{{ l.situacao_rotulo }}</span></td>
+          <td data-rotulo="Situação"><span class="selo {{ SITUACAO.get(l.situacao, 'neutro') }}">{{ l.situacao_rotulo }}</span></td>
         </tr>
         {% else %}
         <tr><td colspan="7" class="vazio">Nenhuma OS foi suspensa no período.{% if not replay %} As simulações ficam de fora: marque "Incluir simulações" para vê-las.{% endif %}</td></tr>
@@ -69,6 +50,15 @@
       </tbody>
     </table>
   </div>
+</section>
+
+<section class="painel" aria-labelledby="t-calculo">
+  <h2 id="t-calculo" class="titulo-cartao">Como calculamos</h2>
+  <p class="texto-calculo">Perda evitada = área × dose × preço do produto × fator de perda da fonte citada. Só entra a OS remarcada com o seu SIM; a recusada e a que ainda espera decisão ficam fora do total.</p>
+  {% if p.retorno %}
+  <p class="texto-calculo">Retorno na safra: <strong class="bom">{{ p.retorno.vezes }}×</strong> o valor da assinatura
+    ({{ p.total }} evitados para {{ p.retorno.custo }} de assinatura: {{ p.retorno.area }} ha a {{ p.retorno.preco }}/ha).</p>
+  {% endif %}
 </section>
 </div>
 {% endblock %}

@@ -1,29 +1,38 @@
-"""Menu lateral do painel: uma lista só, usada pelo `layout.html` em todas as telas."""
+"""Menu lateral do painel: uma lista só, usada pelo `layout.html` em todas as telas.
+
+Os rótulos seguem o conceito 2 do Figma (Hoje, Mapa, Semana, Acertos, Bula, Relatórios e o grupo Gestão);
+as rotas continuam as de antes, para não quebrar links (Telegram, favoritos).
+"""
 
 from typing import NamedTuple
 
 TODOS = frozenset({"gerente", "operador"})  # contrato 23: papel é gerente ou operador
+GERENTE = frozenset({"gerente"})
+OPERADOR = frozenset({"operador"})
 
 
 class ItemMenu(NamedTuple):
     rota: str
     rotulo: str
     papeis: frozenset[str]
+    icone: str = "hoje"  # arquivo em static/icones (sem .svg)
+    grupo: str = ""  # "" = menu principal; "gestao" = bloco "Gestão" abaixo dele
 
 
 MENU: list[ItemMenu] = [
-    ItemMenu("/visao-geral", "Visão geral", TODOS),
-    ItemMenu("/campo", "Executar OS", TODOS),  # F6: tela do operador no celular
-    ItemMenu("/cadastros", "Cadastros", frozenset({"gerente"})),
-    ItemMenu("/cadastros/os", "Ordens de serviço", frozenset({"operador"})),  # o operador cria e edita OS (F3)
-    ItemMenu("/usuarios", "Usuários", frozenset({"gerente"})),
-    ItemMenu("/fazenda", "Fazenda", TODOS),
-    ItemMenu("/mapa", "Mapa", TODOS),
-    ItemMenu("/agenda", "Agenda", TODOS),
-    ItemMenu("/perda", "Perda evitada", TODOS),
-    ItemMenu("/historico", "Histórico", TODOS),
-    ItemMenu("/bula", "Pergunte à bula", TODOS),
-    ItemMenu("/relatorios", "Relatórios", TODOS),
+    ItemMenu("/visao-geral", "Hoje", TODOS, "hoje"),
+    ItemMenu("/campo", "Executar OS", OPERADOR, "campo"),  # F6: tela do operador no celular
+    ItemMenu("/mapa", "Mapa", TODOS, "mapa"),
+    ItemMenu("/agenda", "Semana", TODOS, "semana"),
+    ItemMenu("/historico", "Acertos", TODOS, "acertos"),
+    ItemMenu("/bula", "Bula", TODOS, "bula"),
+    ItemMenu("/relatorios", "Relatórios", TODOS, "relatorios"),
+    ItemMenu("/fazenda", "Fazenda", TODOS, "fazenda", "gestao"),
+    ItemMenu("/perda", "Perda evitada", TODOS, "perda", "gestao"),
+    ItemMenu("/cadastros", "Cadastros", GERENTE, "cadastros", "gestao"),
+    # o operador cria e edita OS (F3)
+    ItemMenu("/cadastros/os", "Ordens de serviço", OPERADOR, "ordens", "gestao"),
+    ItemMenu("/usuarios", "Usuários", GERENTE, "usuarios", "gestao"),
 ]
 
 VAGAS_BARRA = 5  # barra inferior do celular

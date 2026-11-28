@@ -1,13 +1,14 @@
 {% extends "layout.html" %}
-{% block titulo %}Relatórios de aplicação · TerraMind{% endblock %}
+{% block titulo %}Relatórios · TerraMind{% endblock %}
 {% block conteudo %}
+{% set com_relatorio = relatorios|selectattr("relatorio_id")|list|length %}
 <div class="pagina-interna">
 <header class="cabecalho-pagina">
   <h1>Relatórios de aplicação</h1>
-  <p class="nota">Ao concluir a OS, o PDF sai com os dados reais, o clima da aplicação e a conferência com a bula.</p>
+  <p>{% if relatorios %}{{ com_relatorio }} de {{ relatorios|length }} {{ "aplicação já tem" if relatorios|length == 1 else "aplicações já têm" }} relatório. {% endif %}Cada PDF guarda o clima da hora, a bula conferida e uma assinatura dos dados.</p>
 </header>
 <div id="resultado" aria-live="polite"></div>
-<div id="relatorios" hx-get="/parcial/relatorios" hx-trigger="relatorios-mudou from:body" hx-swap="innerHTML">
+<div id="relatorios" class="pilha" hx-get="/parcial/relatorios" hx-trigger="relatorios-mudou from:body" hx-swap="innerHTML">
   {% include "_relatorios.html" %}
 </div>
 </div>

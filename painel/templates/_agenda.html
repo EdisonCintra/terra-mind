@@ -1,11 +1,9 @@
 {% if falha %}
 <div class="mensagem-erro">Não consegui montar a agenda: {{ falha }}</div>
 {% else %}
-<section class="painel limites">
-  <div class="titulo-bloco">
-    <h2>Limites de {{ agenda.produto }}</h2>
-    <span class="nota">previsão: {{ agenda.fonte_previsao }}</span>
-  </div>
+{% for erro in agenda.erros %}<div class="mensagem-aviso">{{ erro }}</div>{% endfor %}
+<div class="limites">
+  <span class="nota">Limites de {{ agenda.produto }} ({{ agenda.fonte_previsao }}):</span>
   <div class="selos">
     {% for l in agenda.limites %}
     <span class="{{ 'citacao generico' if l.generico else 'citacao' }}"{% if l.trecho %} title="{{ l.trecho }}"{% endif %}>
@@ -18,34 +16,31 @@
   <form class="ler-bula" hx-post="/agenda/limites" hx-target="#aviso-agenda" hx-swap="innerHTML" hx-disabled-elt="find button" hx-indicator="find .htmx-indicator">
     <input type="hidden" name="produto" value="{{ agenda.produto }}">
     <p class="mensagem-aviso">A bula de {{ agenda.produto }} ainda não foi lida: a agenda está usando só a referência genérica.</p>
-    <button type="submit" class="grande">Ler os limites da bula</button>
+    <button type="submit" class="secundario">Ler os limites da bula</button>
     <span class="htmx-indicator nota">Lendo a bula e conferindo cada trecho… pode levar um minuto.</span>
   </form>
   {% endif %}
-</section>
+</div>
 
-{% for erro in agenda.erros %}<div class="mensagem-aviso">{{ erro }}</div>{% endfor %}
-
-{% for t in agenda.talhoes %}
-<section class="painel">
-  <div class="titulo-bloco"><h2>{{ t.talhao }}</h2><span class="nota">{{ t.cultura or "" }} · aplicação de {{ "%g"|format(agenda.duracao_horas) }} h</span></div>
-  <div class="semana" role="table" aria-label="Horas boas e ruins de {{ t.talhao }}">
-    <div class="dia cabecalho-horas" role="row" aria-hidden="true">
-      <span></span><span></span>
-      <div class="horas">{% for h in horas %}<span>{{ h }}</span>{% endfor %}</div>
+{% if agenda.dias %}
+<div class="dias-semana">
+  {% for d in agenda.dias %}
+  <article class="dia-cartao" aria-label="{{ d.nome }} {{ d.data }}">
+    <header><strong>{{ d.nome }}</strong><span>{{ d.data }}</span></header>
+    {% for t in d.talhoes %}
+    <div class="talhao-dia">
+      <span class="nome-talhao-dia">{{ t.talhao }}</span>
+      <div class="horas" role="img" aria-label="{{ t.talhao }}: {{ t.horas_boas if t.horas_boas is not none else '—' }} h boas">
+        {% for c in t.celulas %}<span class="hora {{ c.classe }}" title="{{ c.titulo }}"></span>{% endfor %}
+      </div>
+      <span class="resumo-talhao-dia"{% if t.motivos %} title="{{ t.motivos|join(' · ') }}"{% endif %}>{{ t.resumo }}</span>
     </div>
-    {% for d in t.dias %}
-    <div class="dia" role="row">
-      <span class="forte">{{ d.data|dia }}</span>
-      <span class="mono {{ 'bom' if d.horas_boas else 'quente' }}">{{ d.horas_boas }} h</span>
-      <div class="horas">{% for c in d.celulas %}<span class="hora {{ c.classe }}" title="{{ c.titulo }}"></span>{% endfor %}</div>
-      {% if d.motivos %}<ul class="motivos">{% for m in d.motivos %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
-    </div>
-    {% else %}
-    <p class="vazio">Sem previsão para este talhão no período.</p>
     {% endfor %}
-  </div>
-</section>
-{% endfor %}
+  </article>
+  {% endfor %}
+</div>
 <p class="legenda"><span class="hora boa"></span> boa para começar <span class="hora ruim"></span> fora de um limite <span class="hora passou"></span> já passou <span class="hora sem"></span> sem previsão</p>
+{% else %}
+<p class="vazio">Sem previsão para os talhões no período.</p>
+{% endif %}
 {% endif %}

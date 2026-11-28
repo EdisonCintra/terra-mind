@@ -1,0 +1,73 @@
+{# Parcial da Hoje que depende do Monitor (/parcial/hoje): entra em #aplicacoes-conteudo; o subtítulo do dia e o
+   minimapa vão para os seus lugares por hx-swap-oob. #}
+{% if aplicacoes %}
+<div class="eixo-regua">
+  <ul class="legenda-regua" aria-label="Legenda">
+    <li><span class="chave-fora"></span>fora do limite</li>
+    <li><span class="chave-marca"></span>horário agendado</li>
+    <li><span class="chave-chuva"></span>chuva</li>
+  </ul>
+  <div class="horas-regua" aria-hidden="true">
+    <span class="dia-regua" style="left: 0">hoje</span>
+    <span class="dia-regua" style="left: {{ divisor }}%">amanhã</span>
+    {% for e in eixo %}<span class="hora-regua" style="left: {{ e.esq }}%">{{ e.hora }}</span>{% endfor %}
+  </div>
+</div>
+<ul class="linhas-aplicacao">
+  {% for a in aplicacoes %}
+  <li class="linha-aplicacao">
+    <div class="linha">
+      <div class="estado">
+        {% if a.selo %}<span class="selo aplicacao {{ a.selo[1] }}">{{ a.selo[0] }}</span>
+        {% else %}<span class="selo aplicacao neutro">{{ STATUS_OS.get(a.status, (a.status,))[0] }}</span>{% endif %}
+      </div>
+      <div class="talhao-aplicacao">
+        <strong>{{ a.talhao }}</strong>
+        <span>{{ [a.produto, a.maquina]|select|join(", ") or "—" }}</span>
+      </div>
+      <div class="hora-aplicacao">{{ a.quando }}</div>
+      <div class="regua" aria-hidden="true">
+        <span class="base"></span>
+        <span class="divisor" style="left: {{ a.regua.divisor }}%"></span>
+        {% for f in a.regua.foras %}<span class="fora {{ f.tom }}" style="left: {{ f.esq }}%; width: {{ f.larg }}%" title="{{ f.titulo }}"></span>{% endfor %}
+        {% for c in a.regua.chuva %}<span class="chuva" style="left: {{ c.esq }}%; width: {{ c.larg }}%" title="{{ c.hora }}: {{ c.mm }} mm"></span>{% endfor %}
+        {% if a.regua.marca %}<span class="agendado {{ a.regua.marca.tom }}" style="left: {{ a.regua.marca.esq }}%"></span>{% endif %}
+      </div>
+    </div>
+    <div class="motivo">
+      <p>{{ a.motivo }}</p>
+      {% if a.incidente_id %}<a class="link-acao" href="/incidente/{{ a.incidente_id }}">Ver plano de remarcação</a>
+      {% elif a.selo and a.selo[1] == "atencao" %}<a class="link-acao" href="/agenda">Ver outras janelas</a>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="vazio">Nenhuma aplicação marcada entre hoje 06h e amanhã 18h. <a href="/agenda">Agendar na semana</a></p>
+{% endif %}
+{% if not risco_ok %}<p class="nota aviso-monitor">O Monitor não respondeu: os horários e os talhões não foram conferidos com a previsão. O painel tenta de novo a cada minuto.</p>{% endif %}
+
+<span id="subtitulo-dia" hx-swap-oob="innerHTML">{{ subtitulo_dia }}</span>
+
+<div id="talhoes-conteudo" hx-swap-oob="innerHTML">
+  {% if mini.formas %}
+  <svg class="mini-mapa" viewBox="0 0 {{ mini.largura }} {{ mini.altura }}" role="img" aria-label="Talhões coloridos pelo risco das próximas 48 h">
+    {% for f in mini.formas %}
+    <a href="/mapa#talhao-{{ f.id }}">
+      <title>{{ f.nome }}</title>
+      {% if f.caminho %}<path class="talhao-mini {{ f.tom }}" d="{{ f.caminho }}"/>
+      {% else %}<circle class="talhao-mini {{ f.tom }}" cx="{{ f.x }}" cy="{{ f.y }}" r="14"/>{% endif %}
+      <text x="{{ f.x }}" y="{{ f.y }}" dy="4" text-anchor="middle">{{ f.rotulo }}</text>
+    </a>
+    {% endfor %}
+  </svg>
+  <ul class="contagem-risco">
+    {% if contagem.risco %}<li><span class="ponto risco"></span>{{ contagem.risco }} em risco</li>{% endif %}
+    {% if contagem.atencao %}<li><span class="ponto atencao"></span>{{ contagem.atencao }} em atenção</li>{% endif %}
+    {% if contagem.bom %}<li><span class="ponto bom"></span>{{ contagem.bom }} {{ "liberado" if contagem.bom == 1 else "liberados" }}</li>{% endif %}
+    {% if contagem.neutro %}<li><span class="ponto neutro"></span>{{ contagem.neutro }} sem previsão</li>{% endif %}
+  </ul>
+  {% else %}
+  <p class="vazio">{{ "Nenhum talhão cadastrado ainda." if not tem_talhoes else "Os talhões ainda não têm localização." }}</p>
+  {% endif %}
+</div>

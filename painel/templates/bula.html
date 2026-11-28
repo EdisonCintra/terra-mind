@@ -1,24 +1,34 @@
 {% extends "layout.html" %}
-{% block titulo %}Pergunte à bula · TerraMind{% endblock %}
+{% block titulo %}Bula · TerraMind{% endblock %}
+{% block topo %}{% endblock %}
 {% block conteudo %}
   <section class="bula">
-    <div class="cabecalho-bula">
-      <h1>Pergunte à bula</h1>
-      <p>Toda resposta mostra o trecho, a bula e a página. Sem trecho, não há resposta.</p>
-    </div>
-    <form class="pergunta-bula" hx-post="/bula/perguntar" hx-target="#conversa" hx-swap="afterbegin"
-          hx-disabled-elt="find button" hx-indicator="#pensando">
-      <label for="produto">Produto</label>
-      <select id="produto" name="produto">
-        <option value="">Qualquer produto</option>
-        {% for p in produtos %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-      </select>
-      <label for="pergunta">Pergunta</label>
-      <textarea id="pergunta" name="pergunta" rows="3" maxlength="500" required
-                placeholder="Ex.: posso aplicar Abacus HC com vento de 12 km/h?"></textarea>
-      <button type="submit" class="grande">Perguntar</button>
+    <header class="cabecalho-bula">
+      <h1>O que diz a bula?</h1>
+      <p>Resposta tirada do texto oficial, sempre com a página. Sem trecho, não há resposta.</p>
+    </header>
+    <form class="pergunta-bula" id="form-bula" hx-post="/bula/perguntar" hx-target="#conversa" hx-swap="afterbegin"
+          hx-disabled-elt="find button[type=submit]" hx-indicator="#pensando">
+      <div class="campo-busca">
+        <span class="icone" style="--icone: url(/static/icones/busca.svg)" aria-hidden="true"></span>
+        <label for="pergunta" class="so-leitor">Pergunta</label>
+        <textarea id="pergunta" name="pergunta" rows="1" maxlength="500" required
+                  placeholder="Quanto tempo sem chuva depois de aplicar?"
+                  onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"></textarea>
+        <button type="submit" class="grande">Perguntar</button>
+      </div>
+      <fieldset class="produtos-bula">
+        <legend class="so-leitor">Produto</legend>
+        <label class="chip"><input type="radio" name="produto" value="" checked><span>Qualquer produto</span></label>
+        {% for p in produtos %}<label class="chip"><input type="radio" name="produto" value="{{ p }}"><span>{{ p }}</span></label>{% endfor %}
+      </fieldset>
       <span id="pensando" class="htmx-indicator nota">Consultando as bulas…</span>
     </form>
     <section id="conversa" class="conversa" aria-live="polite"></section>
+    <div class="sugestoes-bula" aria-label="Perguntas comuns">
+      {% for s in ["Qual o vento máximo?", "Quanto tempo sem chuva depois de aplicar?", "Intervalo de segurança", "Qual a dose para soja?"] %}
+      <button type="button" class="chip" onclick="var f = document.getElementById('form-bula'); f.pergunta.value = this.textContent; f.requestSubmit();">{{ s }}</button>
+      {% endfor %}
+    </div>
   </section>
 {% endblock %}

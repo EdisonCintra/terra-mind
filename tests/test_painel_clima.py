@@ -1,12 +1,14 @@
 """Cartões de clima por talhão na Visão geral (E3): Delta T, inversão, vento, última leitura e 7 dias."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
 from painel import dados, main
+from tests.conftest import DATABASE_URL
 
 
 @pytest.fixture
@@ -15,7 +17,7 @@ def cliente():
 
 
 def horas(n=60, **sobre):
-    base = datetime(2026, 11, 17, 15, 0, tzinfo=timezone.utc)  # 12h em São Paulo
+    base = datetime(2026, 11, 17, 15, 0, tzinfo=UTC)  # 12h em São Paulo
     saida = []
     for i in range(n):
         h = {
@@ -119,14 +121,14 @@ def test_reanalise_avisa_que_nao_e_estacao(cliente, monkeypatch):
     assert "11:00" in corpo  # 14h UTC em São Paulo
 
 
-def test_seletor_de_talhao(cliente, monkeypatch):
-    """Um seletor só, na Visão geral (fora do parcial): manda nos cartões e no gráfico (A2)."""
+def test_clima_do_talhao_na_tela_do_incidente(cliente, monkeypatch):
+    """Conceito 2: os cartões de clima saíram da Hoje e ficam no incidente, do talhão dele."""
     monitor_falso(monkeypatch, horas(), dias(), OBS_ESTACAO)
-    monkeypatch.setattr(dados, "listar_talhoes", lambda *_: [{"id": 1, "nome": "Talhão 1"}, {"id": 2, "nome": "Talhão 2"}])
-    tela = cliente.get("/visao-geral").text
-    assert tela.count('name="talhao_id"') == 1 and '<option value="1" selected>Talhão 1</option>' in tela
-    assert 'hx-get="/parcial/clima"' in tela and 'hx-include="#talhao-previsao"' in tela
-    assert "change from:#talhao-previsao" in tela
+    with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
+        inc = conn.execute("INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status)"
+                           " VALUES (2, '[]', '[]', 'aberto') RETURNING id").fetchone()[0]
+    tela = cliente.get(f"/incidente/{inc}").text
+    assert 'hx-get="/parcial/clima?talhao_id=2"' in tela
     corpo = cliente.get("/parcial/clima?talhao_id=2").text
     assert "<select" not in corpo and "Delta T" in corpo
 

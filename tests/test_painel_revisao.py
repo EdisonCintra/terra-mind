@@ -49,33 +49,7 @@ def test_todo_hx_include_aponta_para_elemento_da_pagina(cliente, rota):
         assert f'id="{alvo[1:]}"' in html, f"{rota}: hx-include={alvo} sem elemento na página"
 
 
-def test_cartoes_de_clima_carregam_na_primeira_visita(cliente):
-    html = cliente.get("/visao-geral").text
-    clima = re.search(r'<div id="clima"[^>]*>', html).group(0)
-    assert 'hx-get="/parcial/clima"' in clima and re.search(r'hx-trigger="load\b', clima)
-    alvo = re.search(r'hx-include="#([^"]+)"', clima).group(1)
-    seletor = re.search(rf'<select id="{alvo}" name="talhao_id">.*?</select>', html, re.S).group(0)
-    escolhido = re.search(r'<option value="(\d+)" selected>', seletor).group(1)
-    r = cliente.get(f"/parcial/clima?talhao_id={escolhido}")
-    assert r.status_code == 200
-
-
 # --- A2: um seletor de talhão só, levado pelo incidente --------------------------------------------
-def test_seletor_comeca_no_talhao_do_incidente_e_titulo_mostra_o_nome(cliente):
-    inc = novo_incidente(talhao_id=2)
-    html = cliente.get("/visao-geral").text
-    assert html.count('name="talhao_id"') == 1
-    assert '<option value="2" selected>Talhão 2 - Baixada</option>' in html
-    assert '<span id="previsao-talhao">Talhão 2 - Baixada</span>' in html
-    outro = novo_incidente(talhao_id=1)
-    assert '<option value="1" selected>' in cliente.get(f"/visao-geral?incidente={outro}").text
-    assert '<option value="2" selected>' in cliente.get(f"/visao-geral?incidente={inc}").text
-
-
-def test_sem_incidente_o_seletor_fica_no_primeiro_talhao(cliente):
-    assert '<option value="1" selected>Talhão 1 - Sede</option>' in cliente.get("/visao-geral").text
-
-
 # DOM mínimo da Visão geral: #previsao (data-incidente do servidor), o seletor de talhão e o link ativo da
 # linha do tempo. `trocar(...)` simula o swap do HTMX; `escolher(...)` simula o usuário mudando o select.
 HARNESS_SELETOR = r"""
@@ -136,48 +110,12 @@ def rodar_seletor(tmp_path, incidente_inicial, talhao_inicial, passos):
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node não instalado")
-def test_primeiro_incidente_leva_o_seletor_ao_talhao_dele(tmp_path):
-    """A página abriu sem incidente (seletor no talhão 1); o primeiro incidente aparece no talhão 2."""
-    r = rodar_seletor(tmp_path, "", "1", [{}, {"incidente": 1, "talhao": 2}, {}])
-    assert r["valores"] == ["1", "2", "2"] and r["trocas"] == ["2"]
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="node não instalado")
 def test_incidente_que_o_servidor_ja_escolheu_nao_mexe_no_seletor(tmp_path):
     r = rodar_seletor(tmp_path, "5", "2", [{"incidente": 5, "talhao": 2}, {}])
     assert r["valores"] == ["2", "2"] and r["trocas"] == []
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node não instalado")
-def test_escolha_manual_nao_e_desfeita_enquanto_o_incidente_e_o_mesmo(tmp_path):
-    r = rodar_seletor(tmp_path, "", "1", [
-        {"incidente": 1, "talhao": 2},  # seletor segue o incidente
-        {"escolher": 1},                # usuário volta para o talhão 1
-        {}, {},                         # atualizações de 2 s com o mesmo incidente
-        {"incidente": 2, "talhao": 2},  # incidente novo: segue de novo
-    ])
-    assert r["valores"] == ["2", "1", "1", "1", "2"]
-
-
-def test_visao_geral_informa_o_incidente_que_escolheu_o_talhao(cliente):
-    assert 'data-incidente=""' in cliente.get("/visao-geral").text
-    inc = novo_incidente(talhao_id=2)
-    assert f'data-incidente="{inc}"' in cliente.get("/visao-geral").text
-
-
 # --- A3 / H2: cor só para estado ---------------------------------------------------------------
-def test_kpis_da_visao_geral_comecam_neutros(cliente):
-    html = cliente.get("/visao-geral").text
-    for id_ in ("kpi-chuva", "kpi-suspensas", "kpi-reagendadas", "kpi-perda", "kpi-seco"):
-        assert "class=" not in valor_kpi(html, id_), id_
-
-
-def test_painel_js_colore_kpi_pelo_dado(cliente):
-    js = cliente.get("/static/painel.js").text
-    assert 'tom("kpi-chuva", acima ? "quente" : "")' in js and "chuva48 >= LIMIAR_PADRAO" in js
-    assert 'tom("kpi-suspensas", suspensas > 0 ? "atencao" : "")' in js
-
-
 @pytest.mark.parametrize(
     "pct,tom", [(None, "neutro"), (100.0, "bom"), (80.0, "bom"), (66.7, "atencao"), (20.0, "risco")]
 )
@@ -187,9 +125,9 @@ def test_tom_do_acerto_do_historico(pct, tom):
 
 def test_historico_sem_conferencia_tem_kpi_neutro(cliente):
     html = cliente.get("/historico").text
-    acerto = re.search(r'Suspensões corretas</span><strong([^>]*)>', html).group(1)
-    assert "class=" not in acerto
-    assert 'class="pagina-interna"' in html and 'class="painel"' in html
+    acerto = re.search(r'<dt>acerto</dt><dd([^>]*)>', html).group(1)
+    assert acerto == ' class=""' and "Nenhuma suspensão conferida ainda." in html
+    assert 'class="pagina-interna acertos"' in html and 'class="painel"' in html
 
 
 # --- A5: incidente sem passos -------------------------------------------------------------------
@@ -236,12 +174,14 @@ def test_telas_antigas_redirecionam(cliente, rota, destino):
     assert r.status_code == 307 and r.headers["location"] == destino
 
 
-def test_seletor_de_incidentes_vem_do_parcial_e_aponta_para_a_visao_geral(cliente):
+def test_seletor_de_incidentes_aponta_para_a_tela_do_incidente(cliente):
     inc = novo_incidente(talhao_id=2)
     html = cliente.get("/parcial/seletor").text
-    assert f'href="/visao-geral?incidente={inc}"' in html and 'data-talhao="2"' in html
-    tela = cliente.get(f"/visao-geral?incidente={inc}").text
-    assert f'hx-get="/parcial/seletor?incidente={inc}"' in tela and f'data-id="{inc}"' in tela
+    assert f'href="/incidente/{inc}"' in html and 'data-talhao="2"' in html
+    r = cliente.get(f"/visao-geral?incidente={inc}", follow_redirects=False)  # links antigos do Telegram
+    assert r.status_code == 307 and r.headers["location"] == f"/incidente/{inc}"
+    tela = cliente.get(f"/incidente/{inc}").text
+    assert f'hx-get="/parcial/timeline?incidente={inc}"' in tela
     assert not list((RAIZ / "painel" / "templates").glob("timeline.html"))
 
 
@@ -350,7 +290,7 @@ def test_detalhe_do_mapa_usa_selo_e_mono(cliente, monkeypatch):
 
 # --- A4 / A8 / A9 ---------------------------------------------------------------------------------
 def test_tabela_de_os_vira_cartoes_no_celular(cliente):
-    html = cliente.get("/visao-geral").text
+    html = cliente.get("/relatorios").text
     assert '<div class="tabela empilha">' in html
     assert 'data-rotulo="Status"' in cliente.get("/parcial/os").text
 
@@ -358,7 +298,7 @@ def test_tabela_de_os_vira_cartoes_no_celular(cliente):
 @pytest.mark.parametrize("rota", TELAS)
 def test_layout_tem_favicon_sem_url_externa(cliente, rota):
     html = cliente.get(rota).text
-    assert '<link rel="icon" href="data:,">' in html
+    assert '<link rel="icon" href="/static/icones/logo.svg">' in html  # local: nada de URL externa
 
 
 # --- M5: a linha do KPI de perda marca a simulação -----------------------------------------------
@@ -368,8 +308,7 @@ def test_seletor_marca_a_origem_do_incidente_e_o_js_prefixa_simulacao(cliente):
         simulado = conn.execute(
             "INSERT INTO agente.incidentes (talhao_id, gatilho, previsao_snapshot, status, origem)"
             " VALUES (2, '[]', '[]', 'aberto', 'replay') RETURNING id").fetchone()[0]
-    html = cliente.get("/visao-geral").text
+    html = cliente.get("/parcial/seletor").text
     assert re.search(rf'data-id="{live}"[^>]*data-origem="live"', html)
     assert re.search(rf'data-id="{simulado}"[^>]*data-origem="replay"', html)
-    js = cliente.get("/static/painel.js").text
-    assert 'dataset.origem === "replay"' in js and '"simulação · "' in js
+    assert "· simulação" in cliente.get(f"/incidente/{simulado}").text

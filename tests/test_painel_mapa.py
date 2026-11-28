@@ -71,7 +71,10 @@ def test_menu_habilita_mapa(cliente):
 def test_api_risco_repassa_o_monitor(cliente, monkeypatch):
     chamadas = monitor_falso(monkeypatch, RISCO)
     r = cliente.get("/api/risco?fazenda_id=3")
-    assert r.status_code == 200 and r.json() == RISCO
+    assert r.status_code == 200
+    # o painel só acrescenta `motivo` (a frase da etiqueta do mapa); o resto é o que o Monitor mandou
+    assert [{k: v for k, v in x.items() if k != "motivo"} for x in r.json()] == RISCO
+    assert all("motivo" in x for x in r.json())
     assert chamadas[0].url.path == "/risco" and chamadas[0].url.params["fazenda_id"] == "3"
 
 

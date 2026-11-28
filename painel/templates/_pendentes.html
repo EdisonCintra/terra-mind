@@ -1,25 +1,52 @@
+{# Cartão "Plano para aprovar" (Figma, tela Hoje). Os valores vêm do plano gravado pelo `agents`: perda se aplicar
+   no horário (auditoria, `suspender_os`) e custo de perder a janela proposta (G5, `custos_atraso`). #}
 {% for p in planos %}
-<section class="plano" data-incidente="{{ p.incidente_id }}" data-plano="{{ p.id }}">
-  <div class="cabecalho">
-    <span class="selo-aguardando">Aguardando aprovação</span>
-    <span class="codigo">INC-{{ "%04d"|format(p.incidente_id) }} · {{ p.talhao }} · plano #{{ p.id }}</span>
-    {% if p.escalado_em %}<span class="selo-escalado">escalado</span>{% endif %}
+<article class="painel plano-aprovar{{ ' vencido' if p.vencido }}" data-incidente="{{ p.incidente_id }}" data-plano="{{ p.id }}">
+  <div class="topo-plano">
+    <div>
+      <h3><a href="/incidente/{{ p.incidente_id }}">{{ p.titulo }}</a></h3>
+      <p class="nota">{{ p.resumo }}{% if p.escalado %} <span class="selo atencao">escalado</span>{% endif %}</p>
+    </div>
+    {% if p.prazo %}<span class="prazo">{{ p.prazo }}</span>{% endif %}
   </div>
-  {# painel.js monta a versão em cartões a partir deste texto; se o formato mudar, o texto continua visível. #}
-  <pre class="mensagem">{{ p.mensagem or "(plano sem mensagem)" }}</pre>
-  {% for linha in p.atraso or [] %}<p class="atraso">{{ linha }}</p>{% endfor %}
-  {% set quem = request.state.usuario %}
-  {% if quem and quem.papel != "gerente" %}
-  <p class="nota">Só o gerente responde o plano.</p>
-  {% else %}
+  {% for i in p.itens %}
+  <div class="comparacao">
+    <div class="opcao-custo">
+      <span class="rotulo">Se remarcar para {{ i.novo }}</span>
+      {% if i.custo_janela %}
+      <strong>{{ i.custo_janela }}</strong>
+      <small>custo de perder esta janela{{ " (estimativa)" if i.estimativa }}{% if i.proxima %}: a próxima boa é {{ i.proxima }}{% else %}: não há outra boa na previsão{% endif %}</small>
+      {% else %}
+      <strong>{{ i.maquina or "Mesma máquina" }}</strong>
+      <small>{{ i.justificativa or "janela dentro dos limites da bula na previsão" }}</small>
+      {% endif %}
+    </div>
+    <div class="opcao-custo">
+      <span class="rotulo">Se aplicar {{ i.original }}</span>
+      {% if i.perda %}
+      <strong class="quente">{{ i.perda }} em risco</strong>
+      <small>perda estimada de aplicar no horário original{% if i.fonte_perda %} · fator: {{ i.fonte_perda }}{% endif %}</small>
+      {% else %}
+      <strong class="quente">Fora do limite</strong>
+      <small>o horário original passa de um limite da bula (veja o plano)</small>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% if pode_decidir %}
   <div class="botoes">
-    {% for resposta, rotulo, classe in [("SIM", "Aceitar Proposta", "sim"), ("OPCOES", "Ver próxima opção", "opcoes"), ("NAO", "Manter data original", "nao")] %}
-    <button class="{{ classe }}" hx-post="/aprovacao/{{ p.incidente_id }}/{{ p.id }}/{{ resposta }}"
-            hx-target="#resultado" hx-swap="innerHTML">{{ rotulo }}</button>
-    {% endfor %}
+    <button class="primario" hx-post="/aprovacao/{{ p.incidente_id }}/{{ p.id }}/SIM" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Aprovar remarcação</button>
+    <button class="secundario" hx-post="/aprovacao/{{ p.incidente_id }}/{{ p.id }}/OPCOES" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Ver outras janelas</button>
+    <button class="fantasma" hx-post="/aprovacao/{{ p.incidente_id }}/{{ p.id }}/NAO" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Recusar</button>
   </div>
+  {% else %}
+  <p class="nota">Só o gerente responde o plano.</p>
   {% endif %}
-</section>
+  <details class="mensagem-enviada">
+    <summary>Mensagem enviada ao gerente</summary>
+    <pre>{{ p.mensagem or "(plano sem mensagem)" }}</pre>
+  </details>
+</article>
 {% else %}
-<p class="vazio">Nenhuma aprovação pendente.</p>
+<p class="so-leitor">Nenhuma aprovação pendente.</p>
 {% endfor %}

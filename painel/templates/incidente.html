@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+{% block titulo %}INC-{{ "%04d"|format(inc.id) }} · TerraMind{% endblock %}
+{% block topo_inicio %}<a class="voltar-topo" href="/visao-geral"><span class="icone" style="--icone: url(/static/icones/voltar.svg); width: 16px; height: 16px" aria-hidden="true"></span>Voltar para Hoje</a>{% endblock %}
+{% block conteudo %}
+{% set primeiro = plano.itens[0] if plano and plano.itens else none %}
+{% set os1 = ordens.get(primeiro.os_id) if primeiro else none %}
+<div class="pagina-interna incidente">
+  <header class="cabecalho-pagina">
+    <p class="nota">Plano INC-{{ "%04d"|format(inc.id) }}{% if aberto %}, aberto às {{ aberto.strftime("%H:%M") }}{% endif %}{% if inc.origem == "replay" %} · simulação{% endif %}</p>
+    <h1>{{ plano.titulo if plano else "Incidente no " ~ inc.talhao }}</h1>
+    <div class="estado-incidente">
+      {% if pendente %}<span class="selo atencao" id="status-incidente">Aguardando sua decisão{% if plano.vence and not plano.vencido %} até {{ plano.vence.strftime("%H:%M") }}{% endif %}</span>
+      {% elif inc.status == "aguardando_decisao_manual" %}<span class="selo risco" id="status-incidente">Decisão manual</span>
+      {% elif inc.status == "encerrado" %}<span class="selo bom" id="status-incidente">Encerrado</span>
+      {% else %}<span class="selo neutro" id="status-incidente">{{ STATUS_INCIDENTE.get(inc.status, inc.status) }}</span>{% endif %}
+      {% if os1 %}<span class="nota">{{ [os1.produto, "OS #" ~ os1.id, os1.maquina, ((os1.area_ha|numero(0)) ~ " ha de " ~ os1.cultura) if os1.cultura else none]|select|join(", ") }}</span>{% endif %}
+    </div>
+  </header>
+  <div id="resultado" aria-live="polite"></div>
+
+  <div class="grade">
+    <div class="coluna">
+      {% if primeiro %}
+      <section class="painel" aria-labelledby="t-porque">
+        <h2 id="t-porque" class="titulo-cartao">Por que {{ primeiro.original }} não serve</h2>
+        {% if regua %}
+        <div class="regua-incidente" role="img" aria-label="Chuva, vento e Delta T hora a hora, com o horário original e o proposto">
+          <div class="rotulos-regua" aria-hidden="true"><span></span><span>Chuva</span><span>Vento</span><span>Delta T</span><span>Aplicação</span></div>
+          <div class="trilhos">
+            <div class="cabeca-regua">
+              {% for d in regua.dias %}<span class="dia-regua" style="left: {{ d.esq }}%">{{ d.nome }}</span>{% endfor %}
+              {% for e in regua.eixo %}<span class="hora-regua" style="left: {{ e.esq }}%">{{ e.hora }}</span>{% endfor %}
+            </div>
+            <div class="faixa-chuva">
+              {% for c in regua.celulas %}<span title="{{ c.hora }}: {{ c.mm or 'sem chuva' }}"><i style="height: {{ c.chuva }}%"></i></span>{% endfor %}
+            </div>
+            <div class="faixa-celulas">{% for c in regua.celulas %}<span class="{{ c.vento }}" title="{{ c.hora }}: vento {{ c.vento_txt }}"></span>{% endfor %}</div>
+            <div class="faixa-celulas">{% for c in regua.celulas %}<span class="{{ c.dt }}" title="{{ c.hora }}: Delta T {{ c.dt_txt }}"></span>{% endfor %}</div>
+            <div class="faixa-aplicacao">
+              {% for a in regua.aplicacoes %}<span class="bloco-aplicacao {{ a.tom }}" style="left: {{ a.esq }}%; width: {{ a.larg }}%"><small>{{ a.rotulo }}</small></span>{% endfor %}
+            </div>
+            {% if regua.divisor %}<span class="divisor-incidente" style="left: {{ regua.divisor }}%"></span>{% endif %}
+          </div>
+        </div>
+        <p class="nota legenda-incidente">Vento comparado com {{ regua.vento_max }} e Delta T com a faixa de 2 a 8 °C. Verde dentro, amarelo perto e vermelho fora do limite.</p>
+        {% else %}
+        <p class="vazio">Sem previsão guardada para o talhão: não dá para desenhar as horas.</p>
+        {% endif %}
+        {% for e in eventos if e.acao == "avaliar_risco" and e.texto %}{% if loop.last %}<p class="explicacao">{{ e.texto }}</p>{% endif %}{% endfor %}
+      </section>
+      {% endif %}
+
+      {% if citacoes %}
+      <section class="painel" aria-labelledby="t-bula">
+        <h2 id="t-bula" class="titulo-cartao">O que a bula diz</h2>
+        {% for v in citacoes %}
+        <blockquote class="citacao-bula">
+          <p>{{ v.trecho }}</p>
+          <cite>{{ v.fonte_doc }}{% if v.pagina %}, p. {{ v.pagina }}{% endif %}</cite>
+        </blockquote>
+        {% endfor %}
+        <a class="link-acao" href="/bula">Perguntar à bula</a>
+      </section>
+      {% endif %}
+
+      <section class="painel" aria-labelledby="t-clima">
+        <h2 id="t-clima" class="titulo-cartao">Clima no {{ inc.talhao }}</h2>
+        <div id="clima" hx-get="/parcial/clima?talhao_id={{ inc.talhao_id }}" hx-trigger="load, every 60s" hx-swap="innerHTML">
+          <p class="vazio">Buscando a previsão…</p>
+        </div>
+      </section>
+
+      {% if plano %}
+      <section class="painel" aria-labelledby="t-janela">
+        <h2 id="t-janela" class="titulo-cartao">{{ "Escolha a janela" if pendente else "Janela proposta" }}</h2>
+        <ul class="opcoes-janela">
+          {% for i in plano.itens %}
+          <li class="opcao-janela recomendada">
+            <div>
+              <strong>{{ i.novo|capitalize }}{% if i.maquina %}, {{ i.maquina }}{% endif %}</strong> <span class="selo bom">Recomendada</span>
+              <p class="nota">{{ i.talhao }}{% if plano.itens|length > 1 %} · OS #{{ i.os_id }}{% endif %}. {{ i.justificativa }}</p>
+            </div>
+            {% if i.custo_janela %}<div class="valor-opcao"><strong>{{ i.custo_janela }}</strong><small>custo de perder a janela{{ " (estimativa)" if i.estimativa }}</small></div>{% endif %}
+          </li>
+          <li class="opcao-janela">
+            <div>
+              <strong>Manter {{ i.original }}</strong>
+              <p class="nota">O horário original passa de um limite da bula.</p>
+            </div>
+            {% if i.perda %}<div class="valor-opcao"><strong class="quente">{{ i.perda }}</strong><small>em risco</small></div>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if pendente and pode_decidir %}
+        <div class="decisao">
+          <button class="primario" hx-post="/aprovacao/{{ inc.id }}/{{ plano.id }}/SIM" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Aprovar remarcação</button>
+          <button class="secundario" hx-post="/aprovacao/{{ inc.id }}/{{ plano.id }}/OPCOES" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Pedir outra janela</button>
+          <button class="fantasma" hx-post="/aprovacao/{{ inc.id }}/{{ plano.id }}/NAO" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Manter o horário original</button>
+          <p class="nota">O operador recebe a OS remarcada assim que você aprovar.</p>
+        </div>
+        {% elif pendente %}
+        <p class="nota">Só o gerente responde o plano.</p>
+        {% elif plano_cru and plano_cru.respondido_em %}
+        <p class="nota">Respondido{% if plano_cru.aprovado_por %} por {{ plano_cru.aprovado_por }}{% endif %} em {{ plano_cru.respondido_em|hora }}.</p>
+        {% endif %}
+      </section>
+      {% endif %}
+    </div>
+
+    <aside class="coluna">
+      <section class="painel" aria-labelledby="t-como">
+        <h2 id="t-como" class="titulo-cartao">Como chegamos a este plano</h2>
+        <div id="eventos" class="eventos" hx-get="/parcial/timeline?incidente={{ inc.id }}" hx-trigger="every 5s" hx-swap="innerHTML">
+          {% include "_eventos.html" %}
+        </div>
+        {% if pendente %}
+        <article class="evento agora"><div class="linha-evento"><span class="quando">agora</span><span class="no">Você</span></div><div class="acao">Sua decisão</div></article>
+        {% endif %}
+      </section>
+      {% if talhao %}
+      <section class="painel" aria-labelledby="t-talhao">
+        <h2 id="t-talhao" class="titulo-cartao">{{ talhao.nome }}</h2>
+        <p>{% if talhao.cultura %}{{ talhao.cultura|capitalize }}{% if talhao.estagio_fenologico %} em {{ talhao.estagio_fenologico }}{% endif %}, {% endif %}{{ talhao.area_ha|numero(0) }} ha.</p>
+        {% if talhao.data_plantio %}<p class="nota">Plantado em {{ talhao.data_plantio.strftime("%d/%m/%Y") }}.</p>{% endif %}
+        <a class="link-acao" href="/mapa">Ver o talhão no mapa</a>
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}

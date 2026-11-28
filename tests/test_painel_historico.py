@@ -65,17 +65,17 @@ def test_tela_mostra_numeros_e_itens(cliente):
     _quatro()
     html = cliente.get("/historico").text
     assert "66,7%" in html and "8,7 mm" in html
-    assert "Correta" in html and "Falso alarme" in html and "Sem dado" in html
-    assert "20 mm (bula-abacus-hc:p.7)" in html
+    assert "✓ correta" in html and "× falso alarme" in html and "aguardando" in html
+    assert "20 mm (bula-abacus-hc:p.7)" in html  # no rótulo acessível do gráfico
     assert "10/11 12:00–10/11 18:00" in html
     assert "Só incidentes ao vivo; simulações ficam fora." in html
-    assert "reanálise" not in html and "&lt;" not in html and "class=\"selo risco\"" in html
+    assert "reanálise" not in html and "&lt;" not in html and 'class="classe-acerto risco"' in html
 
 
 def test_tela_marca_reanalise(cliente):
     _inserir(1, "correta", 30, 28, fonte="reanalise")
     html = cliente.get("/historico").text
-    assert "reanálise, não estação" in html
+    assert "reanálise, não de estação" in html
     assert 'class="faixa' in html
 
 

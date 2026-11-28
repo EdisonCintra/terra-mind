@@ -71,7 +71,7 @@ def test_resumo_mostra_so_o_que_mudou():
 
 # --- tela 2: linha do tempo --------------------------------------------------------------------
 def test_timeline_sem_incidentes(cliente):
-    assert "Nenhum incidente" in cliente.get("/visao-geral").text
+    assert "Nenhum incidente" in cliente.get("/parcial/timeline").text
 
 
 def test_timeline_mostra_citacao_e_mudanca_de_status(cliente):
@@ -119,8 +119,8 @@ def test_timeline_usa_o_incidente_mais_recente_por_padrao(cliente):
     insere = "INSERT INTO agente.auditoria (incidente_id, no, acao) VALUES (%s, %s, 'a')"
     sql(insere, (novo_incidente("encerrado"), "no_antigo"))
     sql(insere, (novo_incidente(), "no_novo"))
-    html = cliente.get("/visao-geral").text
-    assert "no_novo" in html and "no_antigo" not in html
+    html = cliente.get("/parcial/timeline").text
+    assert "No_novo" in html and "No_antigo" not in html
 
 
 # --- tela 3: aprovação -------------------------------------------------------------------------
@@ -264,21 +264,22 @@ def test_api_previsao_monitor_fora_503(cliente, monkeypatch):
     assert cliente.get("/api/previsao/3").status_code == 503
 
 
-def test_visao_geral_expoe_o_talhao_padrao_e_o_seletor_o_talhao_do_incidente(cliente):
-    assert 'data-talhao-padrao="1"' in cliente.get("/visao-geral").text
-    inc = novo_incidente("aberto")
-    seletor = cliente.get("/parcial/seletor").text
-    assert f'data-id="{inc}"' in seletor and "data-talhao=" in seletor
+def test_hoje_e_incidente_tem_a_decisao_do_plano(cliente):
+    inc = novo_incidente("aguardando_aprovacao")
+    plano = novo_plano(inc, "Remarcar OS 1 para sexta")
+    hoje = cliente.get("/visao-geral").text
+    assert f'hx-post="/aprovacao/{inc}/{plano}/SIM"' in hoje and "Remarcar OS 1 para sexta" in hoje
+    assert 'hx-post="/simular/chuva"' in hoje
+    tela = cliente.get(f"/incidente/{inc}").text
+    assert f'hx-post="/aprovacao/{inc}/{plano}/NAO"' in tela and 'id="status-incidente"' in tela
 
 
-def test_tela_e_so_de_acompanhamento_sem_botoes_de_decisao(cliente):
+def test_operador_ve_o_plano_sem_os_botoes(cliente, monkeypatch):
     inc = novo_incidente("aguardando_aprovacao")
     novo_plano(inc, "Remarcar OS 1 para sexta")
-    for rota in ("/visao-geral", f"/visao-geral?incidente={inc}"):
-        html = cliente.get(rota).text
-        assert "Remarcar OS 1 para sexta" not in html and 'hx-post="/aprovacao/' not in html
-        assert "Decisão" not in html and 'id="status-incidente"' in html
-        assert 'hx-post="/simular/chuva"' in html
+    monkeypatch.setattr(main, "_pode_decidir", lambda request: False)
+    html = cliente.get("/parcial/pendentes").text
+    assert 'hx-post="/aprovacao/' not in html and "Só o gerente responde o plano." in html
 
 
 # --- G5: custo da demora na decisão ------------------------------------------------------------
@@ -313,10 +314,13 @@ def test_pendente_mostra_quanto_custa_perder_a_janela(cliente):
     inc = novo_incidente("aguardando_aprovacao")
     sql(
         "INSERT INTO agente.planos (incidente_id, opcoes_json) VALUES (%s, %s)",
-        (inc, json.dumps({"opcoes": [], "mensagem": "Remarcar", "custos_atraso": [CUSTO_ATRASO]})),
+        (inc, json.dumps({"opcoes": [{"os_id": 1, "novo_inicio": "2099-11-05T06:00:00-03:00", "maquina_id": 1,
+                                       "justificativa": "x"}],
+                          "mensagem": "Remarcar", "custos_atraso": [CUSTO_ATRASO]})),
     )
     html = cliente.get("/parcial/pendentes").text
-    assert 'class="atraso"' in html and "perdê-la custa R$ 133,20 (estimativa)" in html
+    assert "R$ 133" in html and "custo de perder esta janela (estimativa)" in html
+    assert "Decida até" in html
 
 
 def test_timeline_mostra_o_custo_so_enquanto_espera_o_gerente(cliente):

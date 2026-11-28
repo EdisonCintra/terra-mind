@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Entrar · TerraMind</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="/static/icones/logo.svg">
   <link rel="stylesheet" href="/static/painel.css">
 </head>
 <body class="tela-login">
   <main class="cartao-login">
-    <h1>TerraMind</h1>
+    <h1 class="marca"><span class="logo" aria-hidden="true"><img src="/static/icones/logo.svg" width="16" height="16" alt=""></span><strong>terramind</strong></h1>
     <p class="nota">Entre com o seu e-mail e a sua senha.</p>
     {% if erro %}<div class="faixa mensagem-erro" role="alert">{{ erro }}</div>{% endif %}
     <form method="post" action="/login" class="formulario-login">

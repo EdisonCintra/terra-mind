@@ -20,12 +20,13 @@
   "notificar_operador": "Operador avisado",
   "encerrar_incidente": "Incidente encerrado",
 } %}
+{% set NOS = {"supervisor": "Supervisor", "avaliador": "Avaliador de risco", "operacional": "Operacional", "agronomico": "Agronômico", "validador": "Validador", "acao_preventiva": "Ação preventiva", "executor": "Executor", "aprovacao": "Aprovação", "contexto": "Contexto", "decisao_manual": "Decisão manual", "encerrar": "Encerramento", "manter_data": "Manter data"} %}
 {% set ALERTAS = ["avaliacao_falhou", "pedir_decisao_manual", "execucao_falhou", "revalidacao_falhou", "falha_interna", "enviar_alerta"] %}
 {% set ESPERAS = ["pedir_aprovacao", "escalonar_aprovacao"] %}
 {% for e in eventos %}
 {% set reprovado = e.depois is mapping and e.depois.get("aprovado") is false %}
 <article class="evento {{ 'alerta' if e.acao in ALERTAS or reprovado else 'espera' if e.acao in ESPERAS else 'ok' }}" data-acao="{{ e.acao }}"{% if e.acao == "suspender_os" and e.depois %} data-depois='{{ e.depois|tojson }}'{% endif %}{% if e.acao == "propor_plano" and e.depois is mapping and e.depois.get("opcoes") %} data-proposta='{{ {"plano": e.depois.plano_id, "inicio": e.depois.opcoes[0].novo_inicio}|tojson }}'{% endif %}>
-  <div class="linha-evento"><span class="no">{{ e.no }}</span><span class="quando">{{ e.ts|hms }}</span></div>
+  <div class="linha-evento"><span class="no">{{ NOS.get(e.no, e.no|capitalize) }}</span><span class="quando" title="{{ e.ts|hms }}">{{ (e.ts|hms)[:5] }}</span></div>
   <div class="acao">{{ "Perda calculada" if e.depois and e.depois.impactos else ACOES.get(e.acao, e.acao) }}</div>
   {% if e.texto %}<div class="texto">{{ e.texto }}</div>{% endif %}
   {% for linha in e.atraso or [] %}<div class="texto atraso">{{ linha }}</div>{% endfor %}

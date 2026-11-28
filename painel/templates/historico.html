@@ -1,29 +1,60 @@
 {% extends "layout.html" %}
 {% import "componentes.html" as c %}
-{% block titulo %}Histórico · TerraMind{% endblock %}
+{% block titulo %}Acertos · TerraMind{% endblock %}
 {% block conteudo %}
-  <div class="pagina-interna">
-    <header class="cabecalho-pagina">
-      <h1>Histórico</h1>
-      <p class="nota">Previsto × observado. Só incidentes ao vivo; simulações ficam fora.</p>
-    </header>
-    {% if usa_reanalise %}{{ c.faixa("aviso", "Alguns itens usam chuva de reanálise, não de estação: o observado é aproximado.") }}{% endif %}
-    <section class="kpis kpis-3" aria-label="Resumo">
-      {{ c.kpi("Suspensões corretas", pct_texto, resumo.corretas ~ " de " ~ (resumo.corretas + resumo.falsos_alarmes) ~ " conferidas", pct_tom) }}
-      {{ c.kpi("Erro médio da previsão", erro_texto, "|prevista − observada|") }}
-      {{ c.kpi("Suspensões", resumo.total, resumo.falsos_alarmes ~ " falsos alarmes · " ~ resumo.sem_dado ~ " sem dado") }}
-    </section>
-    {% set linhas = [] %}
-    {% for i in resumo.itens %}
-      {% set observada %}<span class="mono">{{ i.observada }}</span>{% if i.reanalise %} <small>(reanálise, não estação)</small>{% endif %}{% endset %}
-      {% set janela %}<span class="mono">{{ i.janela }}</span>{% endset %}
-      {% set prevista %}<span class="mono">{{ i.prevista }}</span>{% endset %}
-      {% set classe %}{{ c.selo(i.rotulo_classe, {"correta": "bom", "falso_alarme": "risco", "sem_dado": "neutro"}[i.classe]) }}{% endset %}
-      {% set _ = linhas.append([i.talhao, "OS " ~ i.os_id, janela, prevista, observada, i.limite, classe]) %}
-    {% endfor %}
-    <section class="painel">
-      <div class="titulo-bloco"><h2>Suspensões conferidas</h2>{% if resumo.itens %}<span class="nota">{{ resumo.itens | length }} itens</span>{% endif %}</div>
-      {{ c.tabela(["Talhão", "OS", "Janela", "Prevista", "Observada", "Limite", "Classe"], linhas, "Nenhuma suspensão conferida ainda.") }}
-    </section>
-  </div>
+{% set CLASSE = {"correta": ("✓ correta", "bom"), "falso_alarme": ("× falso alarme", "risco"), "sem_dado": ("aguardando", "neutro")} %}
+<div class="pagina-interna acertos">
+  <header class="cabecalho-acertos">
+    <div>
+      <p class="nota">{{ safra_txt }} · suspensões por chuva conferidas com a chuva observada. Só incidentes ao vivo; simulações ficam fora.</p>
+      <h1>{% if conferidas %}{{ resumo.corretas }} de {{ conferidas }} {{ "suspensão estava certa" if conferidas == 1 and resumo.corretas == 1 else "suspensões estavam certas" }}.{% else %}Nenhuma suspensão conferida ainda.{% endif %}</h1>
+    </div>
+    <dl class="numeros-acertos" aria-label="Resumo">
+      <div><dt>acerto</dt><dd class="{{ {'bom': 'bom', 'atencao': 'atencao', 'risco': 'quente'}.get(pct_tom, '') }}">{{ pct_texto }}</dd></div>
+      <div><dt>{{ "falso alarme" if resumo.falsos_alarmes == 1 else "falsos alarmes" }}</dt><dd>{{ resumo.falsos_alarmes }}</dd></div>
+      <div><dt>aguardando dado</dt><dd>{{ resumo.sem_dado }}</dd></div>
+      <div><dt>erro médio da previsão</dt><dd>{{ erro_texto }}</dd></div>
+    </dl>
+  </header>
+  {% if usa_reanalise %}{{ c.faixa("aviso", "Alguns itens usam chuva de reanálise, não de estação: o observado é aproximado.") }}{% endif %}
+
+  <section class="painel" aria-labelledby="t-conf">
+    <div class="titulo-bloco">
+      <h2 id="t-conf">Previsto × choveu de fato</h2>
+      <ul class="legenda-acertos" aria-hidden="true">
+        <li><span class="bolinha vazada"></span>previsto</li>
+        <li><span class="bolinha cheia"></span>observado</li>
+        <li><span class="traco-limite"></span>limite da bula</li>
+      </ul>
+    </div>
+    {% if resumo.itens %}
+    <ul class="linhas-acerto">
+      {% for i in resumo.itens %}
+      {% set cl = CLASSE[i.classe] %}
+      <li class="linha-acerto">
+        <div class="id-acerto">
+          <a class="mono" href="/incidente/{{ i.incidente_id }}">{{ i.codigo }}</a>
+          <span>{{ i.talhao }} · OS {{ i.os_id }} · {{ i.janela }}</span>
+        </div>
+        <div class="trilho-acerto" role="img" aria-label="Previsto {{ i.prevista }}, observado {{ i.observada }}, limite {{ i.limite }}">
+          <span class="base"></span>
+          {% if i.pos.limite is not none %}<span class="limite" style="left: {{ i.pos.limite }}%" title="limite {{ i.limite }}"></span>{% endif %}
+          {% if i.pos.prevista is not none and i.pos.observada is not none %}
+          <span class="ligacao" style="left: {{ [i.pos.prevista, i.pos.observada]|min }}%; width: {{ ([i.pos.prevista, i.pos.observada]|max) - ([i.pos.prevista, i.pos.observada]|min) }}%"></span>
+          {% endif %}
+          {% if i.pos.observada is not none %}<span class="bolinha cheia" style="left: {{ i.pos.observada }}%" title="observado {{ i.observada }}"></span>{% endif %}
+          {% if i.pos.prevista is not none %}<span class="bolinha vazada" style="left: {{ i.pos.prevista }}%" title="previsto {{ i.prevista }}"></span>{% endif %}
+        </div>
+        <span class="classe-acerto {{ cl[1] }}" title="{{ i.motivo or '' }}">{{ cl[0] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="eixo-acertos" aria-hidden="true">
+      {% for m in marcas %}<span style="left: {{ m.esq }}%">{{ m.texto }}</span>{% endfor %}
+    </div>
+    {% else %}
+    <p class="vazio">Nenhuma suspensão conferida ainda. A conferência roda depois que a janela da suspensão passa.</p>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}

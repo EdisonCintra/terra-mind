@@ -5,8 +5,9 @@
   {% else %}
   <p class="texto">{{ resultado.resposta }}</p>
   {% for c in resultado.citacoes %}
-  <blockquote class="trecho">“{{ c.trecho }}”
-    <span class="citacao">{{ c.fonte_doc }}, p. {{ c.pagina }}</span>
+  <blockquote class="trecho">
+    <p>“{{ c.trecho }}”</p>
+    <footer><span class="citacao">{{ c.fonte_doc }}, p. {{ c.pagina }}</span></footer>
   </blockquote>
   {% endfor %}
   {% endif %}

@@ -25,6 +25,16 @@ def sem_login_por_padrao(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def monitor_sem_memoria():
+    """O painel guarda o risco e pausa depois de uma falha do Monitor; cada teste começa do zero."""
+    from painel import main
+
+    main.limpar_cache_monitor()
+    yield
+    main.limpar_cache_monitor()
+
+
+@pytest.fixture(autouse=True)
 def banco_limpo():
     with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
         conn.execute(

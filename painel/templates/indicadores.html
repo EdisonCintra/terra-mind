@@ -3,38 +3,43 @@
 {% block titulo %}Fazenda · TerraMind{% endblock %}
 {% block conteudo %}
 {% set os = i.os_por_status %}
+{% set prox_agendadas = i.os_proximas|selectattr("status", "equalto", "agendada")|list|length %}
+{% set prox_reagendadas = i.os_proximas|selectattr("status", "equalto", "reagendada")|list|length %}
+{% set maior = (os.values()|max) if os else 0 %}
 <div class="pagina-interna">
   <header class="cabecalho-pagina">
-    <h1>Fazenda</h1>
-    <p class="nota">{{ fazenda or "Todas as fazendas" }}: talhões, ordens de serviço, estoque, máquinas e o que está (e vai ser) plantado. Todos os números saem do banco.</p>
+    <h1>{{ fazenda or "Todas as fazendas" }}</h1>
+    <p>Talhões, ordens de serviço, máquinas e estoque para as próximas operações. Todos os números saem do banco.</p>
   </header>
 
   <section class="kpis quatro" aria-label="Resumo da fazenda">
     {{ c.kpi("Talhões", i.talhoes, (i.area_ha|numero(1)) ~ " ha no total", id="ind-talhoes") }}
-    {{ c.kpi("OS nos próximos " ~ i.dias_proximas ~ " dias", i.os_proximas|length, "agendadas ou reagendadas", "azul", id="ind-proximas") }}
+    {{ c.kpi("OS nos próximos " ~ i.dias_proximas ~ " dias", i.os_proximas|length, prox_agendadas ~ " agendada(s) · " ~ prox_reagendadas ~ " reagendada(s)", id="ind-proximas") }}
     {{ c.kpi("Máquinas em manutenção", i.maquinas.manutencao,
-             "de " ~ i.maquinas.total ~ " máquina(s)" ~ (": " ~ i.maquinas.nomes if i.maquinas.nomes else ""),
+             (i.maquinas.nomes if i.maquinas.nomes else "nenhuma") ~ " · de " ~ i.maquinas.total ~ " máquina(s)",
              "atencao" if i.maquinas.manutencao else "neutro", id="ind-manutencao") }}
-    {{ c.kpi("Estoque que não cobre as OS", i.insumos_sem_cobertura|length,
+    {{ c.kpi("Estoque que não cobre as OS",
+             ((i.insumos_sem_cobertura|length) ~ (" produto" if i.insumos_sem_cobertura|length == 1 else " produtos")) if i.insumos_sem_cobertura else "0",
              "produto(s) com OS agendadas acima do estoque" if i.insumos_sem_cobertura else "todas as OS agendadas têm estoque",
              "risco" if i.insumos_sem_cobertura else "neutro", id="ind-sem-cobertura") }}
   </section>
 
-  <section class="painel">
-    <div class="titulo-bloco"><h2>Ordens de serviço por status</h2><span class="nota">{{ os.values()|sum }} no total</span></div>
-    <div class="numeros" id="ind-os">
-      {% for status, rotulo in [("agendada", "Agendadas"), ("suspensa_preventiva", "Suspensas"), ("reagendada", "Reagendadas"), ("executada", "Executadas"), ("cancelada", "Canceladas")] %}
-      <div>
-        <span class="rotulo"><span class="status {{ STATUS_OS[status][1] }}">{{ rotulo }}</span></span>
-        <strong id="ind-os-{{ status }}">{{ os[status] }}</strong>
-      </div>
-      {% endfor %}
-    </div>
-  </section>
-
   <div class="duas-colunas">
-    <section class="painel">
-      <div class="titulo-bloco"><h2>Insumos e estoque</h2><span class="nota">{{ i.insumos|length }} produto(s)</span></div>
+    <section class="painel" aria-labelledby="t-status">
+      <div class="titulo-bloco"><h2 id="t-status">OS por status</h2><span class="nota">{{ os.values()|sum }} no total</span></div>
+      <ul class="barras-status" id="ind-os">
+        {% for status, rotulo, tom in [("agendada", "Agendada", "bom"), ("suspensa_preventiva", "Suspensa", "atencao"), ("reagendada", "Reagendada", "azul"), ("executada", "Executada", "neutro"), ("cancelada", "Cancelada", "risco")] %}
+        <li>
+          <span class="rotulo-status">{{ rotulo }}</span>
+          <span class="trilho-status"><span class="{{ tom }}" style="width: {{ (100 * (os[status] or 0) / maior)|round(1) if maior else 0 }}%"></span></span>
+          <strong id="ind-os-{{ status }}">{{ os[status] }}</strong>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="painel" aria-labelledby="t-insumos">
+      <div class="titulo-bloco"><h2 id="t-insumos">Insumos e estoque</h2><span class="nota">{{ i.insumos|length }} produto(s)</span></div>
       {% if i.insumos %}
       <div class="tabela empilha">
         <table>
@@ -57,31 +62,10 @@
       </div>
       {% else %}{{ c.vazio("Nenhum insumo cadastrado.", "Cadastrar insumo", "/cadastros/insumos") }}{% endif %}
     </section>
-
-    <section class="painel">
-      <div class="titulo-bloco"><h2>OS dos próximos {{ i.dias_proximas }} dias</h2><span class="nota">{{ i.os_proximas|length }} OS</span></div>
-      {% if i.os_proximas %}
-      <div class="tabela empilha">
-        <table>
-          <thead><tr><th>Início</th><th>Talhão</th><th>Produto</th><th>Máquina</th></tr></thead>
-          <tbody>
-            {% for o in i.os_proximas %}
-            <tr>
-              <td data-rotulo="Início" class="mono">{{ o.inicio_previsto|hora }}</td>
-              <td data-rotulo="Talhão" class="forte">{{ o.talhao }}<small>OS {{ o.id }}</small></td>
-              <td data-rotulo="Produto">{{ o.produto or "—" }}</td>
-              <td data-rotulo="Máquina">{{ o.maquina or "—" }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}<p class="vazio">Nenhuma OS agendada para os próximos {{ i.dias_proximas }} dias.</p>{% endif %}
-    </section>
   </div>
 
-  <section class="painel">
-    <div class="titulo-bloco"><h2>Plantado e próximo plantio</h2><span class="nota">{{ i.plantio|length }} talhão(ões)</span></div>
+  <section class="painel" aria-labelledby="t-plantio">
+    <div class="titulo-bloco"><h2 id="t-plantio">Plantado e próximo plantio</h2><span class="nota">{{ i.plantio|length }} talhão(ões)</span></div>
     {% if i.plantio %}
     <div class="tabela empilha">
       <table>
@@ -91,10 +75,10 @@
           <tr>
             {% if not fazenda %}<td data-rotulo="Fazenda">{{ t.fazenda }}</td>{% endif %}
             <td data-rotulo="Talhão" class="forte">{{ t.nome }}<small>{{ t.area_ha|numero(1) }} ha</small></td>
-            <td data-rotulo="Plantado agora">{{ t.cultura|capitalize }}<small>plantado em {{ t.data_plantio.strftime("%d/%m/%Y") }} · há {{ t.dias_de_plantio }} dias</small></td>
-            <td data-rotulo="Estágio" class="mono">{{ t.estagio_fenologico }}</td>
+            <td data-rotulo="Plantado agora">{% if t.cultura %}{{ t.cultura|capitalize }}{% if t.data_plantio %}<small>plantado em {{ t.data_plantio.strftime("%d/%m/%Y") }} · há {{ t.dias_de_plantio }} dias</small>{% endif %}{% else %}—<small>em pousio</small>{% endif %}</td>
+            <td data-rotulo="Estágio" class="mono">{{ t.estagio_fenologico or "—" }}</td>
             <td data-rotulo="Próximo plantio">
-              {% if t.plantio_previsto %}{{ t.proxima_cultura|capitalize }}<small>safra {{ t.proxima_safra }} · {{ t.plantio_previsto.strftime("%d/%m/%Y") }} (em {{ t.dias_ate_plantar }} dias)</small>
+              {% if t.plantio_previsto %}{{ t.proxima_cultura|capitalize }}<small>safra {{ t.proxima_safra }} · a partir de {{ t.plantio_previsto.strftime("%d/%m/%Y") }} (em {{ t.dias_ate_plantar }} dias)</small>
               {% else %}<span class="vazio">Nada planejado</span>{% endif %}
             </td>
           </tr>

@@ -77,8 +77,8 @@ def listar_ordens(fazenda_id: int | None = None) -> list[dict]:
     with conectar() as conn:
         return conn.execute(
             """
-            SELECT os.id, os.tipo_operacao, os.inicio_previsto, os.status,
-                   t.nome AS talhao, i.produto, m.nome AS maquina, o.nome AS operador
+            SELECT os.id, os.tipo_operacao, os.inicio_previsto, os.duracao_horas, os.status, os.talhao_id,
+                   t.nome AS talhao, t.area_ha, i.produto, m.nome AS maquina, o.nome AS operador
             FROM erp.ordens_servico os
             JOIN erp.talhoes t ON t.id = os.talhao_id
             LEFT JOIN erp.insumos i ON i.id = os.insumo_id
@@ -236,7 +236,8 @@ def planos_pendentes(fazenda_id: int | None = None) -> list[dict]:
             """
             SELECT p.id, p.incidente_id, p.criado_em, p.escalado_em,
                    p.opcoes_json->>'mensagem' AS mensagem, t.nome AS talhao,
-                   p.opcoes_json->'custos_atraso' AS custos_atraso
+                   p.opcoes_json->'custos_atraso' AS custos_atraso, p.opcoes_json->'opcoes' AS opcoes,
+                   i.talhao_id
             FROM agente.planos p
             JOIN agente.incidentes i ON i.id = p.incidente_id
             JOIN erp.talhoes t ON t.id = i.talhao_id
@@ -245,6 +246,68 @@ def planos_pendentes(fazenda_id: int | None = None) -> list[dict]:
             """,
             {"faz": fazenda_id},
         ).fetchall()
+
+
+def plano_do_incidente(incidente_id: int) -> dict | None:
+    """O plano mais recente do incidente (respondido ou não), para a tela do incidente."""
+    with conectar() as conn:
+        return conn.execute(
+            """
+            SELECT id, incidente_id, criado_em, escalado_em, respondido_em, aprovado_por,
+                   opcoes_json->>'mensagem' AS mensagem, opcoes_json->'custos_atraso' AS custos_atraso,
+                   opcoes_json->'opcoes' AS opcoes
+            FROM agente.planos WHERE incidente_id = %s ORDER BY criado_em DESC, id DESC LIMIT 1
+            """,
+            (incidente_id,),
+        ).fetchone()
+
+
+def incidente(incidente_id: int) -> dict | None:
+    with conectar() as conn:
+        return conn.execute(
+            """
+            SELECT i.id, i.status, i.criado_em, i.talhao_id, i.origem, t.nome AS talhao
+            FROM agente.incidentes i JOIN erp.talhoes t ON t.id = i.talhao_id WHERE i.id = %s
+            """,
+            (incidente_id,),
+        ).fetchone()
+
+
+def ordens_por_id(ids: list[int]) -> dict[int, dict]:
+    """id → OS com talhão, produto e máquina (planos e incidente: as OS que o plano remarca)."""
+    if not ids:
+        return {}
+    with conectar() as conn:
+        linhas = conn.execute(
+            """
+            SELECT os.id, os.inicio_previsto, os.duracao_horas, os.status, os.talhao_id, os.tipo_operacao,
+                   t.nome AS talhao, t.area_ha, t.cultura, t.estagio_fenologico, i.produto, m.nome AS maquina
+            FROM erp.ordens_servico os
+            JOIN erp.talhoes t ON t.id = os.talhao_id
+            LEFT JOIN erp.insumos i ON i.id = os.insumo_id
+            LEFT JOIN erp.maquinas m ON m.id = os.maquina_id
+            WHERE os.id = ANY(%s)
+            """,
+            (list(ids),),
+        ).fetchall()
+    return {linha["id"]: linha for linha in linhas}
+
+
+def nomes_maquinas(ids: list[int]) -> dict[int, str]:
+    if not ids:
+        return {}
+    with conectar() as conn:
+        linhas = conn.execute("SELECT id, nome FROM erp.maquinas WHERE id = ANY(%s)", (list(ids),)).fetchall()
+    return {linha["id"]: linha["nome"] for linha in linhas}
+
+
+def talhao(talhao_id: int) -> dict | None:
+    with conectar() as conn:
+        return conn.execute(
+            "SELECT id, nome, area_ha, cultura, estagio_fenologico, data_plantio"
+            " FROM erp.talhoes WHERE id = %s",
+            (talhao_id,),
+        ).fetchone()
 
 
 def listar_produtos(fazenda_id: int | None = None) -> list[str]:

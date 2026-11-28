@@ -1,17 +1,20 @@
-<section class="painel">
-  <div class="titulo-bloco"><h2>Ordens a concluir</h2><span class="nota">{{ abertas|length }} agendada(s)</span></div>
-  <div class="tabela">
+<section class="painel" aria-labelledby="t-concluir">
+  <div class="titulo-bloco">
+    <h2 id="t-concluir">Ordens a concluir</h2>
+    {% if abertas %}<span class="selo atencao">{{ abertas|length }} {{ "agendada" if abertas|length == 1 else "agendadas" }}</span>{% endif %}
+  </div>
+  <div class="tabela empilha">
     <table>
       <thead><tr><th>OS</th><th>Talhão</th><th>Produto</th><th>Início previsto</th><th>Máquina</th><th></th></tr></thead>
       <tbody>
         {% for os in abertas %}
         <tr>
-          <td class="mono">{{ os.id }}</td>
-          <td class="forte">{{ os.talhao }}<small>{{ os.area_ha }} ha</small></td>
-          <td>{{ os.produto or "—" }}</td>
-          <td class="mono">{{ os.inicio_previsto|hora }}</td>
-          <td>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</td>
-          <td><a class="botao" href="/os/{{ os.id }}/concluir">Concluir</a></td>
+          <td class="numero-os" data-rotulo="OS">#{{ os.id }}</td>
+          <td class="forte" data-rotulo="Talhão"><div>{{ os.talhao }}<small>{{ os.area_ha|numero(0) }} ha</small></div></td>
+          <td data-rotulo="Produto">{{ os.produto or "—" }}</td>
+          <td class="mono" data-rotulo="Início previsto">{{ os.inicio_previsto|quando }}</td>
+          <td data-rotulo="Máquina"><div>{{ os.maquina or "—" }}{% if os.operador %}<small>{{ os.operador }}</small>{% endif %}</div></td>
+          <td class="acao-celula"><a class="botao{{ ' primario' if loop.first }}" href="/os/{{ os.id }}/concluir">Concluir</a></td>
         </tr>
         {% else %}
         <tr><td colspan="6" class="vazio">Nenhuma OS agendada.</td></tr>
@@ -21,30 +24,34 @@
   </div>
 </section>
 
-<section class="painel">
-  <div class="titulo-bloco"><h2>Aplicações concluídas</h2><span class="nota">{{ relatorios|length }} no total</span></div>
-  <div class="tabela">
+<section class="painel" aria-labelledby="t-concluidas">
+  <div class="titulo-bloco"><h2 id="t-concluidas">Aplicações concluídas</h2><span class="nota">{{ relatorios|length }} no total</span></div>
+  <div class="tabela empilha">
     <table>
       <thead><tr><th>OS</th><th>Talhão</th><th>Produto</th><th>Aplicação</th><th>Bula</th><th>Relatório</th></tr></thead>
       <tbody>
         {% for r in relatorios %}
         <tr>
-          <td class="mono">{{ r.os_id }}</td>
-          <td class="forte">{{ r.talhao }}<small>{{ r.area_aplicada_ha }} ha · {{ r.modalidade }}</small></td>
-          <td>{{ r.produto or "—" }}</td>
-          <td class="mono">{{ r.inicio_real|hora }}<small>até {{ r.fim_real|hora }}</small></td>
-          <td>
+          <td class="numero-os" data-rotulo="OS">#{{ r.os_id }}</td>
+          <td class="forte" data-rotulo="Talhão"><div>{{ r.talhao }}<small>{{ r.area_aplicada_ha|numero(0) }} ha · {{ r.modalidade }}</small></div></td>
+          <td data-rotulo="Produto">{{ r.produto or "—" }}</td>
+          <td class="mono" data-rotulo="Aplicação"><div>{{ r.inicio_real|quando }}<small>até {{ r.fim_real|hh }}</small></div></td>
+          <td data-rotulo="Bula">
             {% if r.relatorio_id is none %}<span class="status executada">Sem relatório</span>
             {% elif r.conforme is true %}<span class="status agendada">Conforme</span>
             {% elif r.conforme is false %}<span class="status cancelada">Fora do limite</span>
             {% else %}<span class="status executada">Não conferida</span>{% endif %}
           </td>
-          <td>
+          <td data-rotulo="Relatório">
+            <div class="relatorio-celula">
             {% if r.relatorio_id is not none %}
-            <a class="link-pdf" href="/relatorios/{{ r.relatorio_id }}/pdf" target="_blank" rel="noopener">PDF v{{ r.versao }}</a>
-            <small class="mono" title="SHA-256 dos dados: {{ r.sha256 }}">{{ r.sha256[:12] }}…</small>
+              <a class="link-pdf" href="/relatorios/{{ r.relatorio_id }}/pdf" target="_blank" rel="noopener">PDF v{{ r.versao }}</a>
+              <small class="mono" title="SHA-256 dos dados: {{ r.sha256 }}">{{ r.sha256[:12] }}…</small>
+              <button class="discreto" hx-post="/relatorios/os/{{ r.os_id }}/gerar" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Gerar de novo</button>
+            {% else %}
+              <button class="primario" hx-post="/relatorios/os/{{ r.os_id }}/gerar" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Gerar relatório</button>
             {% endif %}
-            <button class="discreto" hx-post="/relatorios/os/{{ r.os_id }}/gerar" hx-target="#resultado" hx-swap="innerHTML" hx-disabled-elt="this">Gerar de novo</button>
+            </div>
           </td>
         </tr>
         {% else %}
@@ -54,3 +61,4 @@
     </table>
   </div>
 </section>
+<p class="nota">"Fora do limite" quer dizer que o clima registrado durante a aplicação passou de um limite da bula. O relatório mostra qual e em que hora.</p>

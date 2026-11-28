@@ -191,7 +191,7 @@ def test_tela_avisa_quando_o_estoque_nao_cobre(cliente):
     sql("UPDATE erp.insumos SET estoque = 40 WHERE produto = 'Abacus HC' AND fazenda_id = 1")
     cliente.cookies.set("fazenda_id", "1")
     r = cliente.get("/fazenda")
-    assert valor(r.text, "ind-sem-cobertura") == "1" and "Faltam 21,65 L" in r.text
+    assert valor(r.text, "ind-sem-cobertura") == "1 produto" and "Faltam 21,65 L" in r.text
 
 
 def test_menu_leva_a_tela_de_indicadores(cliente):
